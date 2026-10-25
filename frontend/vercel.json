@@ -1,0 +1,16 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "http://localhost:5000/api/$1"
+    },
+    {
+      "source": "/uploads/(.*)",
+      "destination": "http://localhost:5000/uploads/$1"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

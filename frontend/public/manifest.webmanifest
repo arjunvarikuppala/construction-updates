@@ -1,0 +1,31 @@
+{
+  "name": "SiteTrack Construction Management",
+  "short_name": "SiteTrack",
+  "description": "Unified Construction Project, Daily Report, and Expense Management System",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F6F8FB",
+  "theme_color": "#142B4A",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "productivity"],
+  "shortcuts": [
+    {
+      "name": "New Daily Report",
+      "url": "/reports/new",
+      "description": "Quickly submit today's site report"
+    },
+    {
+      "name": "Submit Expense",
+      "url": "/expenses/new",
+      "description": "Record an on-site expense with receipt"
+    }
+  ]
+}
