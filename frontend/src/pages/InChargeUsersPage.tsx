@@ -1,12 +1,26 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Users, UserPlus, Mail, Phone, Building2, CheckCircle2, Link as LinkIcon, Copy, Check, Send } from 'lucide-react';
+import {
+  Users,
+  UserPlus,
+  Mail,
+  Phone,
+  Building2,
+  CheckCircle2,
+  Link as LinkIcon,
+  Copy,
+  Check,
+  Send,
+  Edit3,
+  DollarSign,
+} from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/common/Card.js';
 import { Button } from '../components/common/Button.js';
-import { Input } from '../components/common/Input.js';
+import { Input, Select } from '../components/common/Input.js';
 import { Modal } from '../components/common/Modal.js';
 import { LoadingSkeleton } from '../components/common/LoadingSkeleton.js';
 import { User } from '../types/index.js';
+import { formatINR } from '../utils/currency.js';
 import { useToast } from '../context/ToastContext.js';
 import { api } from '../api/client.js';
 
@@ -20,8 +34,15 @@ export const InChargeUsersPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [salary, setSalary] = useState('');
+  const [salaryFrequency, setSalaryFrequency] = useState<'MONTHLY' | 'DAILY' | 'PER_PROJECT'>('MONTHLY');
   const [generatedInviteLink, setGeneratedInviteLink] = useState('');
   const [hasCopied, setHasCopied] = useState(false);
+
+  // Edit Salary State
+  const [editUser, setEditUser] = useState<User | null>(null);
+  const [editSalary, setEditSalary] = useState('');
+  const [editSalaryFrequency, setEditSalaryFrequency] = useState<'MONTHLY' | 'DAILY' | 'PER_PROJECT'>('MONTHLY');
 
   const { data, isLoading } = useQuery({
     queryKey: ['in-charge-users'],
@@ -38,6 +59,8 @@ export const InChargeUsersPage: React.FC = () => {
       setEmail('');
       setPhone('');
       setPassword('');
+      setSalary('');
+      setSalaryFrequency('MONTHLY');
       queryClient.invalidateQueries({ queryKey: ['in-charge-users'] });
     },
     onError: (err: any) => toastError(err.message || 'Failed to create user account'),
@@ -54,6 +77,19 @@ export const InChargeUsersPage: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['in-charge-users'] });
     },
     onError: (err: any) => toastError(err.message || 'Failed to generate invitation'),
+  });
+
+  // Update salary mutation
+  const updateSalaryMutation = useMutation({
+    mutationFn: async ({ id, salary, salaryFrequency }: { id: string; salary?: number; salaryFrequency?: string }) => {
+      return api.put(`/users/in-charge/${id}`, { salary, salaryFrequency });
+    },
+    onSuccess: () => {
+      success('In-charge salary updated successfully!');
+      setEditUser(null);
+      queryClient.invalidateQueries({ queryKey: ['in-charge-users'] });
+    },
+    onError: (err: any) => toastError(err.message || 'Failed to update salary'),
   });
 
   const users = data?.users || [];
@@ -75,7 +111,14 @@ export const InChargeUsersPage: React.FC = () => {
         toastError('Password must be at least 6 characters');
         return;
       }
-      createMutation.mutate({ name: name.trim(), email: email.trim(), phone: phone.trim() || undefined, password });
+      createMutation.mutate({
+        name: name.trim(),
+        email: email.trim(),
+        phone: phone.trim() || undefined,
+        password,
+        salary: salary ? Number(salary) : undefined,
+        salaryFrequency,
+      });
     }
   };
 
@@ -88,6 +131,15 @@ export const InChargeUsersPage: React.FC = () => {
     }
   };
 
+  const handleOpenEditSalary = (user: User) => {
+    setEditUser(user);
+    // User salary is returned in paise from backend, convert to rupees for the input
+    setEditSalary(
+      user.salary !== undefined && user.salary !== null ? String(user.salary / 100) : ''
+    );
+    setEditSalaryFrequency(user.salaryFrequency || 'MONTHLY');
+  };
+
   return (
     <div className="space-y-6">
       {/* Top Header */}
@@ -97,7 +149,7 @@ export const InChargeUsersPage: React.FC = () => {
             Site In-Charge Engineers
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-            Manage site engineers authorized to submit daily construction reports and on-site expenses.
+            Manage site engineers authorized to submit daily construction reports, on-site expenses, and track confidential compensation.
           </p>
         </div>
 
@@ -146,6 +198,29 @@ export const InChargeUsersPage: React.FC = () => {
                     <span>{user.phone}</span>
                   </div>
                 )}
+              </div>
+
+              {/* MD-Only Salary Compensation View & Edit */}
+              <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                    Salary (MD View Only)
+                  </span>
+                  <span className="text-xs font-bold text-emerald-700">
+                    {user.salary !== undefined && user.salary !== null
+                      ? `${formatINR(user.salary)} / ${(user.salaryFrequency || 'monthly').toLowerCase().replace('_', ' ')}`
+                      : 'Not specified'}
+                  </span>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleOpenEditSalary(user)}
+                  leftIcon={<Edit3 className="w-3.5 h-3.5 text-navy-800" />}
+                  className="text-xs py-1 px-2.5 h-7"
+                >
+                  Edit Salary
+                </Button>
               </div>
 
               {/* Assigned Projects */}
@@ -245,6 +320,28 @@ export const InChargeUsersPage: React.FC = () => {
                   onChange={(e) => setPhone(e.target.value)}
                 />
 
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-slate-100">
+                  <Input
+                    label="Salary (₹ Rupees)"
+                    type="number"
+                    placeholder="e.g. 50000"
+                    value={salary}
+                    onChange={(e) => setSalary(e.target.value)}
+                    helperText="MD view only"
+                  />
+
+                  <Select
+                    label="Salary Frequency"
+                    value={salaryFrequency}
+                    onChange={(e) => setSalaryFrequency(e.target.value as any)}
+                    options={[
+                      { value: 'MONTHLY', label: 'Monthly' },
+                      { value: 'DAILY', label: 'Daily' },
+                      { value: 'PER_PROJECT', label: 'Per Project' },
+                    ]}
+                  />
+                </div>
+
                 <Button
                   type="submit"
                   variant="primary"
@@ -294,6 +391,68 @@ export const InChargeUsersPage: React.FC = () => {
             </div>
           )}
         </div>
+      </Modal>
+
+      {/* Edit Salary Modal */}
+      <Modal
+        isOpen={Boolean(editUser)}
+        onClose={() => setEditUser(null)}
+        title="Update In-Charge Compensation"
+        description={`Set or modify the confidential salary compensation for ${editUser?.name || 'In-Charge'}. Only the MD can view this.`}
+        size="sm"
+      >
+        {editUser && (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              updateSalaryMutation.mutate({
+                id: editUser.id || (editUser as any)._id,
+                salary: editSalary ? Number(editSalary) : undefined,
+                salaryFrequency: editSalaryFrequency,
+              });
+            }}
+            className="space-y-4"
+          >
+            <Input
+              label="Salary Amount (₹ Rupees)"
+              type="number"
+              placeholder="e.g. 50000"
+              value={editSalary}
+              onChange={(e) => setEditSalary(e.target.value)}
+              helperText="Enter full amount in rupees (e.g. 50000 for ₹50,000)"
+              required
+            />
+
+            <Select
+              label="Salary Frequency"
+              value={editSalaryFrequency}
+              onChange={(e) => setEditSalaryFrequency(e.target.value as any)}
+              options={[
+                { value: 'MONTHLY', label: 'Monthly (per month)' },
+                { value: 'DAILY', label: 'Daily (per day)' },
+                { value: 'PER_PROJECT', label: 'Per Project (milestone)' },
+              ]}
+            />
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setEditUser(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="primary"
+                className="font-bold"
+                isLoading={updateSalaryMutation.isPending}
+              >
+                Save Compensation
+              </Button>
+            </div>
+          </form>
+        )}
       </Modal>
     </div>
   );

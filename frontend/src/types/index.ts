@@ -23,6 +23,8 @@ export interface User {
   email: string;
   role: UserRole;
   phone?: string;
+  salary?: number;
+  salaryFrequency?: 'MONTHLY' | 'DAILY' | 'PER_PROJECT';
   assignedProjects?: any[];
 }
 
@@ -36,6 +38,8 @@ export interface ProjectAssignment {
     email: string;
     phone?: string;
     role: string;
+    salary?: number;
+    salaryFrequency?: 'MONTHLY' | 'DAILY' | 'PER_PROJECT';
     isActive?: boolean;
   };
   assignmentStatus: 'ACTIVE' | 'REVOKED';
@@ -256,11 +260,11 @@ export interface InChargeDashboardData {
     name: string;
     code: string;
     location: string;
-    budget: number;
+    budget?: number;
     approved: number;
     pending: number;
     rejected: number;
-    remaining: number;
+    remaining?: number;
   }>;
   todayReportStatus: 'SUBMITTED' | 'DRAFT' | 'NOT_SUBMITTED' | 'NO_PROJECT_ASSIGNED';
   todayReportId?: string | null;

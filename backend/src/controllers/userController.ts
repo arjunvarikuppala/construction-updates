@@ -3,11 +3,13 @@ import crypto from 'crypto';
 import { User } from '../models/User.js';
 import { Project } from '../models/Project.js';
 import { Invitation } from '../models/Invitation.js';
-import { AuthenticatedRequest } from '../types/index.js';
+import { AuthenticatedRequest, isMD } from '../types/index.js';
 import { logAudit } from '../services/auditService.js';
+import { rupeesToPaise } from '../utils/currency.js';
 
 export async function listInChargeUsers(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
+    const isCallerMD = isMD(req.user?.role);
     const query: any = { role: { $in: ['SITE_INCHARGE', 'IN_CHARGE'] } };
 
     if (req.query.q) {
@@ -19,8 +21,9 @@ export async function listInChargeUsers(req: AuthenticatedRequest, res: Response
       ];
     }
 
+    // Only MD can see salaries; other users never see salary data
     const users = await User.find(query)
-      .select('-password')
+      .select(isCallerMD ? '-password' : '-password -salary -salaryFrequency')
       .populate('assignedProjects', 'name code location status')
       .sort({ name: 1 });
 
@@ -32,7 +35,7 @@ export async function listInChargeUsers(req: AuthenticatedRequest, res: Response
 
 export async function createInChargeUser(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
-    const { name, email, password, phone } = req.body;
+    const { name, email, password, phone, salary, salaryFrequency } = req.body;
 
     if (!name || !email || !password) {
       res.status(400).json({ success: false, message: 'Name, email, and password are required' });
@@ -50,12 +53,20 @@ export async function createInChargeUser(req: AuthenticatedRequest, res: Respons
       return;
     }
 
+    // Parse salary: if user passed rupees e.g. 50000, convert to integer paise (5000000)
+    let salaryPaise = 0;
+    if (salary !== undefined && salary !== null && salary !== '') {
+      salaryPaise = rupeesToPaise(Number(salary) || 0);
+    }
+
     const newUser = await User.create({
       name: name.trim(),
       email: email.toLowerCase().trim(),
       password,
       role: 'SITE_INCHARGE',
       phone: phone?.trim(),
+      salary: salaryPaise,
+      salaryFrequency: salaryFrequency || 'MONTHLY',
       assignedProjects: [],
       isActive: true,
     });
@@ -64,6 +75,7 @@ export async function createInChargeUser(req: AuthenticatedRequest, res: Respons
       name: newUser.name,
       email: newUser.email,
       role: newUser.role,
+      salaryPaise,
     });
 
     res.status(201).json({
@@ -75,11 +87,68 @@ export async function createInChargeUser(req: AuthenticatedRequest, res: Respons
         email: newUser.email,
         role: newUser.role,
         phone: newUser.phone,
+        salary: newUser.salary,
+        salaryFrequency: newUser.salaryFrequency,
         assignedProjects: newUser.assignedProjects,
       },
     });
   } catch (error: any) {
     res.status(500).json({ success: false, message: 'Failed to create user', error: error.message });
+  }
+}
+
+export async function updateInChargeUser(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    if (!isMD(req.user?.role)) {
+      res.status(403).json({ success: false, message: 'Forbidden: Only the Managing Director can view or update in-charge salaries.' });
+      return;
+    }
+
+    const { id } = req.params;
+    const { name, phone, salary, salaryFrequency, isActive } = req.body;
+
+    const user = await User.findById(id);
+    if (!user) {
+      res.status(404).json({ success: false, message: 'In-charge user not found' });
+      return;
+    }
+
+    if (name) user.name = name.trim();
+    if (phone !== undefined) user.phone = phone ? phone.trim() : undefined;
+    if (isActive !== undefined) user.isActive = Boolean(isActive);
+
+    if (salary !== undefined && salary !== null && salary !== '') {
+      user.salary = rupeesToPaise(Number(salary) || 0);
+    }
+    if (salaryFrequency) {
+      user.salaryFrequency = salaryFrequency;
+    }
+
+    await user.save();
+
+    await logAudit('USER_SALARY_UPDATED', req.user!.userId, 'USER', user._id, {
+      updatedUserId: user._id,
+      name: user.name,
+      salaryPaise: user.salary,
+      salaryFrequency: user.salaryFrequency,
+    });
+
+    res.json({
+      success: true,
+      message: 'In-charge salary and details updated successfully',
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        phone: user.phone,
+        salary: user.salary,
+        salaryFrequency: user.salaryFrequency,
+        isActive: user.isActive,
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Failed to update in-charge user', error: error.message });
   }
 }
 

@@ -111,8 +111,10 @@ export async function listProjects(req: AuthenticatedRequest, res: Response): Pr
           if (s._id === 'REJECTED') rejectedPaise = s.totalAmount;
         });
 
-        const budget = project.budget || 0;
-        const remainingPaise = Math.max(0, budget - approvedPaise);
+        const isCallerMD = isMD(user.role);
+        const budget = isCallerMD ? (project.budget || 0) : undefined;
+        const remainingPaise = isCallerMD ? Math.max(0, (project.budget || 0) - approvedPaise) : undefined;
+        const burnPercentage = isCallerMD && (project.budget || 0) > 0 ? Math.round((approvedPaise / (project.budget || 1)) * 100) : undefined;
         const latestReport = await DailyReport.findOne({ project: project._id, status: 'SUBMITTED' })
           .sort({ workDate: -1 })
           .select('workDate');
@@ -121,23 +123,29 @@ export async function listProjects(req: AuthenticatedRequest, res: Response): Pr
         const activeAssignment = await ProjectAssignment.findOne({
           project: project._id,
           assignmentStatus: 'ACTIVE',
-        }).populate('siteInCharge', 'name email phone');
+        }).populate('siteInCharge', isCallerMD ? 'name email phone role salary salaryFrequency' : 'name email phone role');
 
         const assignedUser = project.assignedInCharge || activeAssignment?.siteInCharge;
 
+        const projectObj = project.toObject();
+        // Hide project budget from non-MD users
+        if (!isCallerMD) {
+          delete (projectObj as any).budget;
+        }
+
         return {
-          ...project.toObject(),
+          ...projectObj,
           assignedInCharge: assignedUser || null,
           hasInCharge: !!assignedUser,
-          financials: {
+          financials: isCallerMD ? {
             budget,
             approvedPaise,
             pendingPaise,
             rejectedPaise,
             pendingCount,
             remainingPaise,
-            burnPercentage: budget > 0 ? Math.round((approvedPaise / budget) * 100) : 0,
-          },
+            burnPercentage,
+          } : undefined,
           latestReportDate: latestReport ? latestReport.workDate : null,
         };
       })
@@ -164,7 +172,12 @@ export async function getProjectById(req: AuthenticatedRequest, res: Response): 
       return;
     }
 
-    const project = await Project.findById(id).populate('assignedInCharge', 'name email phone role');
+    const isCallerMD = isMD(req.user!.role);
+    const populateFields = isCallerMD
+      ? 'name email phone role salary salaryFrequency'
+      : 'name email phone role';
+
+    const project = await Project.findById(id).populate('assignedInCharge', populateFields);
     if (!project) {
       res.status(404).json({ success: false, message: 'Project not found' });
       return;
@@ -202,14 +215,19 @@ export async function getProjectById(req: AuthenticatedRequest, res: Response): 
     const activeAssignments = await ProjectAssignment.find({
       project: project._id,
       assignmentStatus: 'ACTIVE',
-    }).populate('siteInCharge', 'name email phone role');
+    }).populate('siteInCharge', populateFields);
+
+    const projectObj = project.toObject();
+    if (!isCallerMD) {
+      delete (projectObj as any).budget;
+    }
 
     res.json({
       success: true,
       project: {
-        ...project.toObject(),
+        ...projectObj,
         activeAssignments,
-        financials: {
+        financials: isCallerMD ? {
           budget,
           approvedPaise,
           pendingPaise,
@@ -217,7 +235,7 @@ export async function getProjectById(req: AuthenticatedRequest, res: Response): 
           pendingCount,
           remainingPaise: Math.max(0, budget - approvedPaise),
           burnPercentage: budget > 0 ? Math.round((approvedPaise / budget) * 100) : 0,
-        },
+        } : undefined,
         reportCount,
       },
     });

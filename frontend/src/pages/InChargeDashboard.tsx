@@ -159,33 +159,22 @@ export const InChargeDashboard: React.FC = () => {
               </Button>
             </div>
 
-            {/* Budget progress bar */}
+            {/* Operational Site Claims & Approvals */}
             <div className="space-y-1.5 pt-2 border-t border-navy-800/80">
               <div className="flex items-center justify-between text-xs">
-                <span className="text-navy-300">Site Budget: {formatCompactINR(activeProject.budget)}</span>
+                <span className="text-navy-300">Approved Claims:</span>
                 <span className="font-bold text-emerald-400">
-                  Approved Spend: {formatCompactINR(activeProject.approved)}
+                  {formatCompactINR(activeProject.approved)}
                 </span>
               </div>
-              <div className="w-full bg-navy-800 rounded-full h-2 overflow-hidden">
-                <div
-                  className="bg-amber-500 h-full rounded-full transition-all duration-500"
-                  style={{
-                    width: `${Math.min(
-                      100,
-                      activeProject.budget > 0
-                        ? Math.round((activeProject.approved / activeProject.budget) * 100)
-                        : 0
-                    )}%`,
-                  }}
-                />
-              </div>
               <div className="flex items-center justify-between text-[11px] text-navy-300 pt-0.5">
-                <span>Remaining: {formatCompactINR(activeProject.remaining)}</span>
-                {activeProject.pending > 0 && (
+                <span>Active Project Workspace</span>
+                {activeProject.pending > 0 ? (
                   <span className="text-amber-400 font-semibold">
-                    {formatCompactINR(activeProject.pending)} pending review
+                    {formatCompactINR(activeProject.pending)} pending MD review
                   </span>
+                ) : (
+                  <span className="text-slate-400">No pending claim reviews</span>
                 )}
               </div>
             </div>

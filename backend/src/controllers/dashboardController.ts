@@ -376,18 +376,14 @@ export async function getInChargeDashboard(req: AuthenticatedRequest, res: Respo
           if (s._id === 'REJECTED') rejected = s.totalAmount;
         });
 
-        const budget = p.budget || 0;
-
         return {
           id: p._id,
           name: p.name,
           code: p.code,
           location: p.location,
-          budget,
           approved,
           pending,
           rejected,
-          remaining: Math.max(0, budget - approved),
         };
       })
     );

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { MapPin, User, Calendar, ArrowRight } from 'lucide-react';
 import { Project } from '../../types/index.js';
 import { Badge } from '../common/Badge.js';
+import { useAuth } from '../../context/AuthContext.js';
 import { formatCompactINR, formatINR } from '../../utils/currency.js';
 import { formatDate } from '../../utils/dates.js';
 
@@ -12,6 +13,7 @@ interface ProjectCardProps {
 
 export const ProjectCard: React.FC<ProjectCardProps> = ({ project }) => {
   const navigate = useNavigate();
+  const { isMD } = useAuth();
   const id = project._id || project.id;
   const financials = project.financials;
 
@@ -66,40 +68,47 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project }) => {
         </div>
       </div>
 
-      {/* Budget & Progress Bar */}
-      <div className="space-y-2">
-        <div className="flex items-baseline justify-between text-xs">
-          <div>
-            <span className="text-[11px] text-slate-500">Budget: </span>
-            <span className="font-bold text-navy-950">{formatCompactINR(project.budget)}</span>
+      {/* Budget & Progress Bar - Only visible to MD / Owner */}
+      {isMD ? (
+        <div className="space-y-2">
+          <div className="flex items-baseline justify-between text-xs">
+            <div>
+              <span className="text-[11px] text-slate-500">Budget: </span>
+              <span className="font-bold text-navy-950">{formatCompactINR(project.budget)}</span>
+            </div>
+            <div>
+              <span className="text-[11px] text-slate-500">Spent: </span>
+              <span className="font-bold text-emerald-700">
+                {financials ? formatCompactINR(financials.approvedPaise) : '₹0'}
+              </span>
+            </div>
           </div>
-          <div>
-            <span className="text-[11px] text-slate-500">Spent: </span>
-            <span className="font-bold text-emerald-700">
-              {financials ? formatCompactINR(financials.approvedPaise) : '₹0'}
-            </span>
+
+          {/* Progress Bar */}
+          <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+            <div
+              className={`h-full ${burnColor} transition-all duration-500 rounded-full`}
+              style={{ width: `${Math.min(100, burnRate)}%` }}
+            />
+          </div>
+
+          <div className="flex items-center justify-between text-[11px] text-slate-500 pt-0.5">
+            <span>{burnRate}% utilized</span>
+            {financials?.pendingPaise ? (
+              <span className="text-amber-700 font-semibold">
+                {formatCompactINR(financials.pendingPaise)} pending
+              </span>
+            ) : (
+              <span className="text-slate-400">All cleared</span>
+            )}
           </div>
         </div>
-
-        {/* Progress Bar */}
-        <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-          <div
-            className={`h-full ${burnColor} transition-all duration-500 rounded-full`}
-            style={{ width: `${Math.min(100, burnRate)}%` }}
-          />
+      ) : (
+        <div className="text-xs text-slate-500 bg-slate-50 rounded-xl p-2.5 flex items-center justify-between">
+          <span className="font-medium text-navy-900">Site Workspace</span>
+          <span className="text-[11px] text-slate-600">Daily logs & site updates</span>
         </div>
-
-        <div className="flex items-center justify-between text-[11px] text-slate-500 pt-0.5">
-          <span>{burnRate}% utilized</span>
-          {financials?.pendingPaise ? (
-            <span className="text-amber-700 font-semibold">
-              {formatCompactINR(financials.pendingPaise)} pending
-            </span>
-          ) : (
-            <span className="text-slate-400">All cleared</span>
-          )}
-        </div>
-      </div>
+      )}
 
       {/* Footer View Link */}
       <div className="flex items-center justify-end text-xs font-semibold text-navy-900 group-hover:text-amber-600 transition-colors pt-1">

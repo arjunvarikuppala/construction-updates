@@ -262,52 +262,87 @@ export const ProjectDetailPage: React.FC = () => {
         </div>
       )}
 
-      {/* Financial Health & KPI Strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-card">
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-            Total Budget
-          </span>
-          <span className="text-xl sm:text-2xl font-extrabold text-navy-950 block mt-1">
-            {formatCompactINR(project.budget)}
-          </span>
-          <span className="text-[11px] text-slate-500 mt-0.5 block">{formatINR(project.budget)}</span>
-        </div>
+      {/* Financial Health & KPI Strip - Strictly visible to MD only */}
+      {isMD ? (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-card">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+              Total Budget
+            </span>
+            <span className="text-xl sm:text-2xl font-extrabold text-navy-950 block mt-1">
+              {formatCompactINR(project.budget)}
+            </span>
+            <span className="text-[11px] text-slate-500 mt-0.5 block">{formatINR(project.budget)}</span>
+          </div>
 
-        <div className="bg-white p-4 rounded-2xl border border-emerald-200 shadow-card bg-emerald-50/20">
-          <span className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider block">
-            Approved Spend
-          </span>
-          <span className="text-xl sm:text-2xl font-extrabold text-emerald-700 block mt-1">
-            {financials ? formatCompactINR(financials.approvedPaise) : '₹0'}
-          </span>
-          <span className="text-[11px] text-emerald-600 mt-0.5 block">
-            {financials?.burnPercentage || 0}% budget utilized
-          </span>
-        </div>
+          <div className="bg-white p-4 rounded-2xl border border-emerald-200 shadow-card bg-emerald-50/20">
+            <span className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider block">
+              Approved Spend
+            </span>
+            <span className="text-xl sm:text-2xl font-extrabold text-emerald-700 block mt-1">
+              {financials ? formatCompactINR(financials.approvedPaise) : '₹0'}
+            </span>
+            <span className="text-[11px] text-emerald-600 mt-0.5 block">
+              {financials?.burnPercentage || 0}% budget utilized
+            </span>
+          </div>
 
-        <div className="bg-white p-4 rounded-2xl border border-amber-200 shadow-card bg-amber-50/20">
-          <span className="text-[11px] font-bold text-amber-800 uppercase tracking-wider block">
-            Pending Approval
-          </span>
-          <span className="text-xl sm:text-2xl font-extrabold text-amber-700 block mt-1">
-            {financials ? formatCompactINR(financials.pendingPaise) : '₹0'}
-          </span>
-          <span className="text-[11px] text-amber-600 mt-0.5 block">
-            {financials?.pendingCount || 0} bills pending review
-          </span>
-        </div>
+          <div className="bg-white p-4 rounded-2xl border border-amber-200 shadow-card bg-amber-50/20">
+            <span className="text-[11px] font-bold text-amber-800 uppercase tracking-wider block">
+              Pending Approval
+            </span>
+            <span className="text-xl sm:text-2xl font-extrabold text-amber-700 block mt-1">
+              {financials ? formatCompactINR(financials.pendingPaise) : '₹0'}
+            </span>
+            <span className="text-[11px] text-amber-600 mt-0.5 block">
+              {financials?.pendingCount || 0} bills pending review
+            </span>
+          </div>
 
-        <div className="bg-white p-4 rounded-2xl border border-sky-200 shadow-card bg-sky-50/20">
-          <span className="text-[11px] font-bold text-sky-800 uppercase tracking-wider block">
-            Remaining Budget
-          </span>
-          <span className="text-xl sm:text-2xl font-extrabold text-sky-800 block mt-1">
-            {financials ? formatCompactINR(financials.remainingPaise) : '₹0'}
-          </span>
-          <span className="text-[11px] text-sky-600 mt-0.5 block">Available uncommitted</span>
+          <div className="bg-white p-4 rounded-2xl border border-sky-200 shadow-card bg-sky-50/20">
+            <span className="text-[11px] font-bold text-sky-800 uppercase tracking-wider block">
+              Remaining Budget
+            </span>
+            <span className="text-xl sm:text-2xl font-extrabold text-sky-800 block mt-1">
+              {financials ? formatCompactINR(financials.remainingPaise) : '₹0'}
+            </span>
+            <span className="text-[11px] text-sky-600 mt-0.5 block">Available uncommitted</span>
+          </div>
         </div>
-      </div>
+      ) : (
+        /* Operational Strip for Site In-Charge */
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-card">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+              Daily Construction Logs
+            </span>
+            <span className="text-xl sm:text-2xl font-extrabold text-navy-950 block mt-1">
+              {reports.length}
+            </span>
+            <span className="text-[11px] text-slate-500 mt-0.5 block">Logged site entries</span>
+          </div>
+
+          <div className="bg-white p-4 rounded-2xl border border-emerald-200 shadow-card bg-emerald-50/20">
+            <span className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider block">
+              Site Expense Claims
+            </span>
+            <span className="text-xl sm:text-2xl font-extrabold text-emerald-700 block mt-1">
+              {expenses.length}
+            </span>
+            <span className="text-[11px] text-emerald-600 mt-0.5 block">Total recorded vouchers</span>
+          </div>
+
+          <div className="bg-white p-4 rounded-2xl border border-amber-200 shadow-card bg-amber-50/20 col-span-2 sm:col-span-1">
+            <span className="text-[11px] font-bold text-amber-800 uppercase tracking-wider block">
+              Pending Verification
+            </span>
+            <span className="text-xl sm:text-2xl font-extrabold text-amber-700 block mt-1">
+              {expenses.filter(e => e.status === 'PENDING').length}
+            </span>
+            <span className="text-[11px] text-amber-600 mt-0.5 block">Under MD review</span>
+          </div>
+        </div>
+      )}
 
       {/* Project Workspace Module Navigation Bar */}
       <div className="flex items-center gap-1.5 overflow-x-auto pb-2 border-b border-slate-200 scrollbar-none">
@@ -532,6 +567,16 @@ export const ProjectDetailPage: React.FC = () => {
                               <div className="flex justify-between">
                                 <span className="text-slate-400">Phone:</span>
                                 <span className="font-semibold text-slate-700 ml-2">{engineer.phone}</span>
+                              </div>
+                            )}
+                            {isMD && (
+                              <div className="flex justify-between pt-1 border-t border-slate-200/60">
+                                <span className="text-slate-500 font-medium">Salary (MD View):</span>
+                                <span className="font-bold text-emerald-700 ml-2">
+                                  {engineer.salary !== undefined && engineer.salary !== null
+                                    ? `${formatINR(engineer.salary)} / ${(engineer.salaryFrequency || 'monthly').toLowerCase().replace('_', ' ')}`
+                                    : 'Not set'}
+                                </span>
                               </div>
                             )}
                           </div>

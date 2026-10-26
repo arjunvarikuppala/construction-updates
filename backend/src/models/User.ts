@@ -8,6 +8,8 @@ export interface IUser extends Document {
   password: string;
   role: UserRole;
   phone?: string;
+  salary?: number; // Integer paise (₹50,000 = 5000000 paise)
+  salaryFrequency?: 'MONTHLY' | 'DAILY' | 'PER_PROJECT';
   assignedProjects: mongoose.Types.ObjectId[];
   isActive: boolean;
   createdAt: Date;
@@ -48,6 +50,16 @@ const UserSchema = new Schema<IUser>(
     phone: {
       type: String,
       trim: true,
+    },
+    salary: {
+      type: Number,
+      default: 0,
+      min: [0, 'Salary must be non-negative'],
+    },
+    salaryFrequency: {
+      type: String,
+      enum: ['MONTHLY', 'DAILY', 'PER_PROJECT'],
+      default: 'MONTHLY',
     },
     assignedProjects: [
       {

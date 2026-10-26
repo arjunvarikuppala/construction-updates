@@ -49,7 +49,11 @@ export function exportProjectExpensesPdf(project: Project, expenses: Expense[]) 
     .filter((e) => e.status === 'PENDING')
     .reduce((sum, e) => sum + e.amount, 0);
 
-  doc.text(`Allocated Budget: ${formatINR(project.budget)}`, 115, 57);
+  if (project.budget !== undefined && project.budget !== null) {
+    doc.text(`Allocated Budget: ${formatINR(project.budget)}`, 115, 57);
+  } else {
+    doc.text(`Project Code: ${project.code}`, 115, 57);
+  }
   doc.setTextColor(21, 128, 61); // Green
   doc.setFont('helvetica', 'bold');
   doc.text(`Verified Approved: ${formatINR(approvedTotal)}`, 115, 64);
