@@ -8,12 +8,13 @@ const router = Router();
 
 router.use(authenticate);
 
-// Get current storage backend status (Cloudflare R2 vs Local)
+// Get current storage backend status (Cloudinary vs R2 vs Local)
 router.get('/storage-status', (_req: AuthenticatedRequest, res: Response) => {
   res.json({
     success: true,
+    provider: storageService.getActiveProvider(),
+    cloudinaryEnabled: storageService.isCloudinaryEnabled(),
     r2Enabled: storageService.isR2Enabled(),
-    storageProvider: storageService.isR2Enabled() ? 'Cloudflare R2 Cloud Storage (S3-compatible)' : 'Local Disk Storage (/uploads)',
   });
 });
 
