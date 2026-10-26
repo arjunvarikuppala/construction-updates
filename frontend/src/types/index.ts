@@ -174,6 +174,9 @@ export interface Expense {
   vendor: string;
   receiptUrl?: string;
   status: ExpenseStatus;
+  paymentStatus?: 'UNPAID' | 'PAYMENT_REQUESTED' | 'PAID';
+  paymentRequestId?: string;
+  paidAt?: string;
   reviewedBy?: {
     _id: string;
     name: string;
@@ -252,6 +255,126 @@ export interface OwnerDashboardData {
   recentReports?: DailyReport[];
   recentExpenses?: Expense[];
   recentActivity: any[];
+}
+
+export type PayeeType = 'CONTRACTOR' | 'SUPPLIER' | 'LABOUR';
+export type BeneficiaryVerificationStatus = 'UNVERIFIED' | 'VERIFIED' | 'FAILED';
+
+export interface Beneficiary {
+  _id: string;
+  id?: string;
+  name: string;
+  payeeType: PayeeType;
+  accountNumberMasked: string;
+  ifsc: string;
+  bankName: string;
+  branchName?: string;
+  phone?: string;
+  email?: string;
+  verificationStatus: BeneficiaryVerificationStatus;
+  verifiedName?: string;
+  verificationDetails?: {
+    accountExists?: boolean;
+    providerRef?: string;
+    verifiedAt?: string;
+    failureReason?: string;
+  };
+  isActive: boolean;
+  createdAt: string;
+}
+
+export type PaymentMethod = 'NEFT' | 'RTGS';
+export type PaymentRequestStatus =
+  | 'DRAFT'
+  | 'AWAITING_AUTHORIZATION'
+  | 'SUBMITTED'
+  | 'PROCESSING'
+  | 'PAID'
+  | 'FAILED'
+  | 'UNKNOWN';
+
+export interface PaymentAuditEntry {
+  timestamp: string;
+  action: string;
+  performedBy: {
+    _id?: string;
+    name?: string;
+    email?: string;
+    role?: string;
+  } | string;
+  note?: string;
+  ip?: string;
+}
+
+export interface PaymentRequest {
+  _id: string;
+  id?: string;
+  paymentReference: string;
+  idempotencyKey: string;
+  project: {
+    _id: string;
+    name: string;
+    code: string;
+    location?: string;
+    budget?: number;
+  };
+  expense?: {
+    _id: string;
+    category: ExpenseCategory;
+    description: string;
+    amount: number;
+    vendor: string;
+    date: string;
+  };
+  beneficiary: Beneficiary | string;
+  payeeNameSnapshot: string;
+  accountNumberMaskedSnapshot: string;
+  ifscSnapshot: string;
+  bankNameSnapshot: string;
+  payeeType: PayeeType;
+  amount: number; // integer paise
+  paymentMethod: PaymentMethod;
+  invoiceNumber?: string;
+  purpose: string;
+  status: PaymentRequestStatus;
+  requiresHighValueAuth: boolean;
+  authorizedBy?: {
+    _id: string;
+    name: string;
+    email: string;
+    role: string;
+  };
+  authorizedAt?: string;
+  authorizationNotes?: string;
+  initiatedBy?: {
+    _id: string;
+    name: string;
+    email: string;
+  };
+  initiatedAt?: string;
+  providerName?: string;
+  providerTransactionId?: string;
+  providerUtr?: string;
+  providerStatus?: string;
+  failureReason?: string;
+  reconciledAt?: string;
+  createdBy: {
+    _id: string;
+    name: string;
+    email: string;
+    role?: string;
+  };
+  auditTrail: PaymentAuditEntry[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PaymentSummary {
+  totalDisbursedPaise: number;
+  awaitingAuthCount: number;
+  awaitingAuthPaise: number;
+  processingPaise: number;
+  highValueThresholdPaise: number;
 }
 
 export interface InChargeDashboardData {

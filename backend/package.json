@@ -9,6 +9,7 @@
     "start": "node dist/server.js",
     "dev": "tsx watch src/server.ts",
     "seed": "tsx src/scripts/seed.ts",
+    "test:payments": "tsx src/scripts/verify-payments.ts",
     "test": "tsx src/scripts/verify-md-linking.ts"
   },
   "keywords": [

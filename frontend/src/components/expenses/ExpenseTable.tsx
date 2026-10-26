@@ -1,5 +1,5 @@
 import React from 'react';
-import { ExternalLink, CheckCircle2, XCircle, RefreshCw, Eye } from 'lucide-react';
+import { ExternalLink, CheckCircle2, XCircle, RefreshCw, Eye, Banknote } from 'lucide-react';
 import { Expense } from '../../types/index.js';
 import { Badge } from '../common/Badge.js';
 import { Button } from '../common/Button.js';
@@ -13,6 +13,7 @@ interface ExpenseTableProps {
   onReject?: (expense: Expense) => void;
   onResubmit?: (expense: Expense) => void;
   onView?: (expense: Expense) => void;
+  onPay?: (expense: Expense) => void;
 }
 
 export const ExpenseTable: React.FC<ExpenseTableProps> = ({
@@ -22,6 +23,7 @@ export const ExpenseTable: React.FC<ExpenseTableProps> = ({
   onReject,
   onResubmit,
   onView,
+  onPay,
 }) => {
   return (
     <div className="overflow-x-auto">
@@ -70,7 +72,19 @@ export const ExpenseTable: React.FC<ExpenseTableProps> = ({
                   {formatINR(expense.amount)}
                 </td>
                 <td className="py-3.5 px-4 text-center whitespace-nowrap">
-                  <Badge status={expense.status} size="sm" />
+                  <div className="flex flex-col items-center gap-1">
+                    <Badge status={expense.status} size="sm" />
+                    {expense.paymentStatus === 'PAID' && (
+                      <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.2 rounded border border-emerald-300">
+                        Paid
+                      </span>
+                    )}
+                    {expense.paymentStatus === 'PAYMENT_REQUESTED' && (
+                      <span className="text-[10px] font-bold text-sky-800 bg-sky-100 px-1.5 py-0.2 rounded border border-sky-300">
+                        Payout In-Flight
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className="py-3.5 px-4 text-center whitespace-nowrap">
                   {expense.receiptUrl ? (
@@ -111,6 +125,20 @@ export const ExpenseTable: React.FC<ExpenseTableProps> = ({
                         </Button>
                       </>
                     )}
+
+                    {expense.status === 'APPROVED' &&
+                      (!expense.paymentStatus || expense.paymentStatus === 'UNPAID') &&
+                      onPay && (
+                        <Button
+                          size="sm"
+                          variant="amber"
+                          className="py-1 px-2 text-xs font-semibold"
+                          onClick={() => onPay(expense)}
+                          leftIcon={<Banknote className="w-3.5 h-3.5 text-navy-950" />}
+                        >
+                          Pay
+                        </Button>
+                      )}
 
                     {!isOwner && expense.status === 'REJECTED' && (
                       <Button

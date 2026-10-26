@@ -17,6 +17,7 @@ import exportRoutes from './routes/exportRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import uploadRoutes from './routes/uploadRoutes.js';
 import auditRoutes from './routes/auditRoutes.js';
+import paymentRoutes from './routes/paymentRoutes.js';
 import { seedInitialData } from './scripts/seed.js';
 
 dotenv.config();
@@ -81,6 +82,7 @@ app.use('/api/v1/export', exportRoutes);
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/uploads', uploadRoutes);
 app.use('/api/v1/audit-logs', auditRoutes);
+app.use('/api/v1/payments', paymentRoutes);
 
 // Global Error Handler
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

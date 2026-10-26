@@ -11,6 +11,7 @@ import {
   LogOut,
   RefreshCw,
   HardHat,
+  Banknote,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.js';
 import { useSync } from '../../hooks/useSync.js';
@@ -42,6 +43,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ pendingApprovalsCount = 0 }) =
     },
     { to: '/reports', label: 'Daily Reports', icon: ClipboardList },
     { to: '/expenses', label: 'Expenses Register', icon: Receipt },
+    { to: '/payments', label: 'Vendor Payouts', icon: Banknote },
     { to: '/team', label: 'In-Charge Accounts', icon: Users },
     { to: '/audit-logs', label: 'Activity Audit Log', icon: History },
   ];
@@ -51,6 +53,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ pendingApprovalsCount = 0 }) =
     { to: '/projects', label: 'My Projects', icon: Building2 },
     { to: '/reports', label: 'Daily Reports', icon: ClipboardList },
     { to: '/expenses', label: 'My Expenses', icon: Receipt },
+    { to: '/payments', label: 'Payment Requests', icon: Banknote },
   ];
 
   const links = isOwner ? ownerLinks : inChargeLinks;

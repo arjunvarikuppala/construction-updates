@@ -4,7 +4,7 @@ import { AuditLog } from '../models/AuditLog.js';
 export async function logAudit(
   action: string,
   performedBy: string | Types.ObjectId,
-  entityType: 'PROJECT' | 'DAILY_REPORT' | 'EXPENSE' | 'USER',
+  entityType: 'PROJECT' | 'DAILY_REPORT' | 'EXPENSE' | 'USER' | 'PAYMENT_REQUEST' | 'BENEFICIARY',
   entityId: string | Types.ObjectId,
   details?: Record<string, any>,
   ip?: string

@@ -16,6 +16,7 @@ import { ExpenseFormPage } from './pages/ExpenseFormPage.js';
 import { ApprovalsPage } from './pages/ApprovalsPage.js';
 import { InChargeUsersPage } from './pages/InChargeUsersPage.js';
 import { AuditLogsPage } from './pages/AuditLogsPage.js';
+import { PaymentsPage } from './pages/PaymentsPage.js';
 
 // Protected Route Guard
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -79,6 +80,9 @@ export const App: React.FC = () => {
         {/* Expenses */}
         <Route path="expenses" element={<ExpensesPage />} />
         <Route path="expenses/new" element={<ExpenseFormPage />} />
+
+        {/* Vendor & Contractor Payouts */}
+        <Route path="payments" element={<PaymentsPage />} />
 
         {/* Owner Executive Approvals */}
         <Route
