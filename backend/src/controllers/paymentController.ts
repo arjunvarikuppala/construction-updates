@@ -6,11 +6,11 @@ import { Beneficiary } from '../models/Beneficiary.js';
 import { Project } from '../models/Project.js';
 import { Expense } from '../models/Expense.js';
 import { WebhookEvent } from '../models/WebhookEvent.js';
-import { getPaymentProvider } from '../services/payments/providerFactory.js';
+import { razorpayXService } from '../services/payments/razorpayXService.js';
 import { logAudit } from '../services/auditService.js';
 import { rupeesToPaise } from '../utils/currency.js';
 
-// Configurable high-value payment authorization threshold: default ₹1,00,000 (10,000,000 paise)
+// Configurable high-value authorization threshold: default ₹1,00,000 (10,000,000 paise)
 const HIGH_VALUE_THRESHOLD_PAISE =
   Number(process.env.PAYMENT_HIGH_VALUE_THRESHOLD_PAISE) || 10000000;
 
@@ -36,7 +36,7 @@ export async function createPaymentRequest(req: AuthenticatedRequest, res: Respo
       return;
     }
 
-    // 1. Resolve & validate monetary amount in paise
+    // 1. Resolve & validate monetary amount in integer paise
     let finalAmountPaise: number;
     if (inputPaise !== undefined && inputPaise !== null) {
       finalAmountPaise = Number(inputPaise);
@@ -111,9 +111,9 @@ export async function createPaymentRequest(req: AuthenticatedRequest, res: Respo
       }
     }
 
-    // 6. Check Idempotency
+    // 6. Check Idempotency Key
     const idempotencyKey =
-      clientKey || `IDEM-${Date.now()}-${crypto.randomBytes(6).toString('hex')}`;
+      clientKey || `IDEM-RZPX-${Date.now()}-${crypto.randomBytes(6).toString('hex')}`;
     const existingPayment = await PaymentRequest.findOne({ idempotencyKey });
     if (existingPayment) {
       res.status(409).json({
@@ -130,7 +130,7 @@ export async function createPaymentRequest(req: AuthenticatedRequest, res: Respo
       ? 'AWAITING_AUTHORIZATION'
       : 'DRAFT';
 
-    const referenceNumber = `PAY-${Date.now().toString().slice(-8)}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
+    const referenceNumber = `PAY-RZPX-${Date.now().toString().slice(-8)}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
 
     const paymentRequest = await PaymentRequest.create({
       paymentReference: referenceNumber,
@@ -149,6 +149,7 @@ export async function createPaymentRequest(req: AuthenticatedRequest, res: Respo
       purpose: purpose.trim(),
       status: initialStatus,
       requiresHighValueAuth,
+      providerName: 'RAZORPAYX',
       createdBy: req.user!.userId,
       auditTrail: [
         {
@@ -156,8 +157,8 @@ export async function createPaymentRequest(req: AuthenticatedRequest, res: Respo
           action: 'PAYMENT_CREATED',
           performedBy: req.user!.userId,
           note: requiresHighValueAuth
-            ? `High-value payment exceeding ₹${HIGH_VALUE_THRESHOLD_PAISE / 100}. Placed in AWAITING_AUTHORIZATION queue.`
-            : 'Payment request created in DRAFT state ready for review.',
+            ? `High-value payout exceeding ₹${HIGH_VALUE_THRESHOLD_PAISE / 100}. Enqueued for independent MD authorization.`
+            : 'Payout request created in DRAFT ready for RazorpayX submission.',
           ip: req.ip,
         },
       ],
@@ -175,13 +176,14 @@ export async function createPaymentRequest(req: AuthenticatedRequest, res: Respo
       payee: paymentRequest.payeeNameSnapshot,
       requiresHighValueAuth,
       status: paymentRequest.status,
+      provider: 'RAZORPAYX',
     });
 
     res.status(201).json({
       success: true,
       message: requiresHighValueAuth
-        ? 'High-value payment request submitted. Awaiting executive MD authorization.'
-        : 'Payment request created successfully in Draft.',
+        ? 'High-value payment request submitted. Awaiting independent MD authorization.'
+        : 'RazorpayX payment request created successfully in Draft.',
       payment: paymentRequest,
     });
   } catch (err: any) {
@@ -191,7 +193,7 @@ export async function createPaymentRequest(req: AuthenticatedRequest, res: Respo
 
 export async function listPaymentRequests(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
-    const { projectId, status, payeeType, search, page = '1', limit = '50' } = req.query;
+    const { projectId, status, payeeType, provider, search, page = '1', limit = '50' } = req.query;
 
     const query: any = {};
 
@@ -207,6 +209,10 @@ export async function listPaymentRequests(req: AuthenticatedRequest, res: Respon
       query.payeeType = payeeType;
     }
 
+    if (provider && provider !== 'ALL') {
+      query.providerName = provider;
+    }
+
     if (search) {
       const s = String(search).trim();
       query.$or = [
@@ -215,6 +221,7 @@ export async function listPaymentRequests(req: AuthenticatedRequest, res: Respon
         { purpose: { $regex: s, $options: 'i' } },
         { invoiceNumber: { $regex: s, $options: 'i' } },
         { providerUtr: { $regex: s, $options: 'i' } },
+        { razorpayxPayoutId: { $regex: s, $options: 'i' } },
       ];
     }
 
@@ -250,6 +257,7 @@ export async function listPaymentRequests(req: AuthenticatedRequest, res: Respon
     let awaitingAuthCount = 0;
     let awaitingAuthPaise = 0;
     let processingPaise = 0;
+    let reversedPaise = 0;
 
     stats.forEach((s) => {
       if (s._id === 'PAID') totalDisbursedPaise = s.totalAmount;
@@ -259,6 +267,9 @@ export async function listPaymentRequests(req: AuthenticatedRequest, res: Respon
       }
       if (s._id === 'PROCESSING' || s._id === 'SUBMITTED') {
         processingPaise += s.totalAmount;
+      }
+      if (s._id === 'REVERSED') {
+        reversedPaise += s.totalAmount;
       }
     });
 
@@ -273,6 +284,7 @@ export async function listPaymentRequests(req: AuthenticatedRequest, res: Respon
         awaitingAuthCount,
         awaitingAuthPaise,
         processingPaise,
+        reversedPaise,
         highValueThresholdPaise: HIGH_VALUE_THRESHOLD_PAISE,
       },
     });
@@ -326,7 +338,18 @@ export async function authorizePaymentRequest(req: AuthenticatedRequest, res: Re
     if (payment.status !== 'AWAITING_AUTHORIZATION') {
       res.status(400).json({
         success: false,
-        message: `Payment request cannot be authorized because its status is ${payment.status}.`,
+        message: `Payment request cannot be authorized because its status is '${payment.status}'.`,
+      });
+      return;
+    }
+
+    // CRITICAL ENFORCEMENT: Independent Dual-Authorization Rule
+    // The user who created a high-value payment cannot approve their own payment
+    if (payment.requiresHighValueAuth && String(payment.createdBy) === String(req.user!.userId)) {
+      res.status(403).json({
+        success: false,
+        message:
+          'Security Policy Block: Independent authorization is mandatory. The creator of a high-value payment cannot approve their own request. Dual-authorization by another authorized Managing Director is required.',
       });
       return;
     }
@@ -334,13 +357,13 @@ export async function authorizePaymentRequest(req: AuthenticatedRequest, res: Re
     payment.authorizedBy = req.user!.userId as any;
     payment.authorizedAt = new Date();
     payment.authorizationNotes = notes?.trim();
-    payment.status = 'DRAFT'; // Authorized and ready to be dispatched
+    payment.status = 'AUTHORIZED'; // Transition to AUTHORIZED state
 
     payment.auditTrail.push({
       timestamp: new Date(),
-      action: 'PAYMENT_AUTHORIZED',
+      action: 'PAYMENT_AUTHORIZED_BY_MD',
       performedBy: req.user!.userId as any,
-      note: notes ? `Authorized by MD: ${notes}` : 'Authorized by Managing Director.',
+      note: notes ? `Authorized by MD: ${notes}` : 'Independent authorization granted by Managing Director.',
       ip: req.ip,
     });
 
@@ -350,11 +373,12 @@ export async function authorizePaymentRequest(req: AuthenticatedRequest, res: Re
       reference: payment.paymentReference,
       amountPaise: payment.amount,
       authorizedBy: req.user!.userId,
+      provider: payment.providerName,
     });
 
     res.json({
       success: true,
-      message: 'Payment request authorized successfully. It can now be initiated with the bank.',
+      message: 'Payment request authorized successfully. It is now ready for RazorpayX transfer initiation.',
       payment,
     });
   } catch (err: any) {
@@ -369,7 +393,7 @@ export async function initiatePaymentTransfer(req: AuthenticatedRequest, res: Re
     if (!isMD(req.user?.role)) {
       res.status(403).json({
         success: false,
-        message: 'Forbidden: Only the Managing Director can execute corporate bank payouts.',
+        message: 'Forbidden: Only the Managing Director can execute bank payouts.',
       });
       return;
     }
@@ -380,17 +404,26 @@ export async function initiatePaymentTransfer(req: AuthenticatedRequest, res: Re
       return;
     }
 
-    // 1. Enforce High-Value Authorization Guard
-    if (payment.requiresHighValueAuth && !payment.authorizedBy) {
+    // 1. Guard against executing legacy non-RazorpayX payouts through RazorpayX
+    if (payment.providerName && payment.providerName !== 'RAZORPAYX') {
       res.status(400).json({
         success: false,
-        message:
-          'Security Block: This payment exceeds ₹1,00,000 and requires explicit executive authorization before transfer can be executed.',
+        message: `Historical record protection: Payment was created with legacy provider '${payment.providerName}'. Old provider transactions cannot be re-executed.`,
       });
       return;
     }
 
-    // 2. Enforce Terminal / In-Flight Status Guards ("Never retry potentially completed transfer")
+    // 2. Enforce High-Value Authorization Guard
+    if (payment.requiresHighValueAuth && payment.status !== 'AUTHORIZED') {
+      res.status(400).json({
+        success: false,
+        message:
+          'Security Block: This payment exceeds ₹1,00,000 and requires explicit independent authorization (status must be AUTHORIZED) before payout can be submitted.',
+      });
+      return;
+    }
+
+    // 3. Enforce Terminal / In-Flight Status Guards ("Never retry potentially completed transfer")
     if (payment.status === 'PAID') {
       res.status(400).json({ success: false, message: 'This payment has already been settled and paid.' });
       return;
@@ -404,7 +437,7 @@ export async function initiatePaymentTransfer(req: AuthenticatedRequest, res: Re
       res.status(400).json({
         success: false,
         message:
-          `Payment is currently in '${payment.status}' state. To prevent duplicate fund debit, transfers must not be re-initiated without first querying bank reconciliation.`,
+          `Payment is currently in '${payment.status}' state. To prevent duplicate fund debit, transfers must not be re-initiated without first querying RazorpayX status reconciliation.`,
       });
       return;
     }
@@ -415,57 +448,58 @@ export async function initiatePaymentTransfer(req: AuthenticatedRequest, res: Re
       return;
     }
 
-    const provider = getPaymentProvider();
-
-    // Mark as SUBMITTED immediately before outbound call to prevent race condition double-execution
+    // Mark as SUBMITTED immediately to prevent race conditions
     payment.status = 'SUBMITTED';
     payment.initiatedBy = req.user!.userId as any;
     payment.initiatedAt = new Date();
-    payment.providerName = provider.name;
+    payment.providerName = 'RAZORPAYX';
     payment.auditTrail.push({
       timestamp: new Date(),
-      action: 'PAYMENT_SUBMITTED_TO_GATEWAY',
+      action: 'PAYMENT_SUBMITTED_TO_RAZORPAYX',
       performedBy: req.user!.userId as any,
-      note: `Dispatching ${payment.paymentMethod} transfer via ${provider.name}`,
+      note: `Dispatching ${payment.paymentMethod} transfer via RazorpayX Payouts API`,
       ip: req.ip,
     });
     await payment.save();
 
-    // Execute through provider abstraction
-    const transferResult = await provider.initiateTransfer({
+    // 4. Execute through official RazorpayX service
+    const payoutResult = await razorpayXService.createPayout({
       paymentReference: payment.paymentReference,
       idempotencyKey: payment.idempotencyKey,
       amountPaise: payment.amount,
-      paymentMethod: payment.paymentMethod,
+      mode: payment.paymentMethod,
       purpose: payment.purpose,
-      beneficiary: {
-        id: beneficiary._id.toString(),
-        name: payment.payeeNameSnapshot,
-        accountNumber: beneficiary.accountNumber,
-        ifsc: payment.ifscSnapshot,
-        providerBeneficiaryId: beneficiary.providerBeneficiaryId,
-      },
+      narration: payment.purpose,
+      beneficiary,
+      projectId: payment.project.toString(),
+      expenseId: payment.expense ? payment.expense.toString() : undefined,
     });
 
-    payment.providerTransactionId = transferResult.providerTransactionId;
-    payment.providerStatus = transferResult.providerStatus;
-    payment.status = transferResult.status;
-    if (transferResult.utr) payment.providerUtr = transferResult.utr;
-    if (transferResult.failureReason) payment.failureReason = transferResult.failureReason;
+    payment.providerTransactionId = payoutResult.payoutId;
+    payment.razorpayxPayoutId = payoutResult.payoutId;
+    payment.razorpayxStatus = payoutResult.razorpayxStatus;
+    payment.providerStatus = payoutResult.razorpayxStatus;
+    payment.status = payoutResult.status;
+    if (payoutResult.contactId) payment.razorpayxContactId = payoutResult.contactId;
+    if (payoutResult.fundAccountId) payment.razorpayxFundAccountId = payoutResult.fundAccountId;
+    if (payoutResult.utr) payment.providerUtr = payoutResult.utr;
+    if (payoutResult.fees !== undefined) payment.fees = payoutResult.fees;
+    if (payoutResult.tax !== undefined) payment.tax = payoutResult.tax;
+    if (payoutResult.failureReason) payment.failureReason = payoutResult.failureReason;
 
     payment.auditTrail.push({
       timestamp: new Date(),
-      action: `GATEWAY_RESPONSE_${transferResult.status}`,
+      action: `RAZORPAYX_OUTCOME_${payoutResult.status}`,
       performedBy: req.user!.userId as any,
-      note: transferResult.utr
-        ? `Settled with UTR: ${transferResult.utr}`
-        : transferResult.failureReason || 'Response recorded from provider.',
+      note: payoutResult.utr
+        ? `Settled via RazorpayX. UTR: ${payoutResult.utr} (Fee: ₹${(payoutResult.fees || 0) / 100})`
+        : payoutResult.failureReason || `RazorpayX status: ${payoutResult.razorpayxStatus}`,
       ip: req.ip,
     });
 
     await payment.save();
 
-    // If paid, update linked expense
+    // If paid, settle linked expense
     if (payment.status === 'PAID' && payment.expense) {
       await Expense.findByIdAndUpdate(payment.expense, {
         paymentStatus: 'PAID',
@@ -478,21 +512,22 @@ export async function initiatePaymentTransfer(req: AuthenticatedRequest, res: Re
       status: payment.status,
       utr: payment.providerUtr,
       amountPaise: payment.amount,
-      provider: provider.name,
+      provider: 'RAZORPAYX',
+      razorpayxPayoutId: payment.razorpayxPayoutId,
     });
 
     res.json({
       success: payment.status !== 'FAILED',
       message:
         payment.status === 'PAID'
-          ? `Payout completed successfully. UTR: ${payment.providerUtr || 'N/A'}`
+          ? `RazorpayX payout settled successfully. UTR: ${payment.providerUtr || 'N/A'}`
           : payment.status === 'UNKNOWN'
-          ? 'Transfer submitted but status unknown from gateway. Reconcile to verify settlement.'
-          : `Payout status: ${payment.status}. Provider ref: ${payment.providerTransactionId}`,
+          ? 'Payout submitted but status is indeterminate. Run reconciliation to query RazorpayX ledger.'
+          : `Payout in progress with RazorpayX (Status: ${payment.status}). Ref: ${payment.razorpayxPayoutId}`,
       payment,
     });
   } catch (err: any) {
-    res.status(500).json({ success: false, message: 'Transfer execution failed', error: err.message });
+    res.status(500).json({ success: false, message: 'RazorpayX payout execution failed', error: err.message });
   }
 }
 
@@ -506,42 +541,59 @@ export async function reconcilePaymentStatus(req: AuthenticatedRequest, res: Res
       return;
     }
 
-    if (!payment.providerTransactionId && !payment.paymentReference) {
-      res.status(400).json({
-        success: false,
-        message: 'Payment has not been submitted to a provider yet.',
+    // Historical legacy provider check
+    if (payment.providerName && payment.providerName !== 'RAZORPAYX') {
+      res.json({
+        success: true,
+        message: `Historical record from provider '${payment.providerName}'. Preserved for audit without RazorpayX mutation.`,
+        payment,
       });
       return;
     }
 
-    const provider = getPaymentProvider();
-    const result = await provider.reconcilePayment(
-      payment.providerTransactionId || '',
-      payment.paymentReference
-    );
+    if (!payment.razorpayxPayoutId && !payment.providerTransactionId && !payment.paymentReference) {
+      res.status(400).json({
+        success: false,
+        message: 'Payment has not been submitted to RazorpayX yet.',
+      });
+      return;
+    }
+
+    const payoutId = payment.razorpayxPayoutId || payment.providerTransactionId || '';
+    const result = await razorpayXService.getPayout(payoutId, payment.paymentReference);
 
     const oldStatus = payment.status;
     payment.status = result.status;
-    payment.providerStatus = result.providerStatus;
+    payment.razorpayxStatus = result.razorpayxStatus;
+    payment.providerStatus = result.razorpayxStatus;
     if (result.utr) payment.providerUtr = result.utr;
+    if (result.fees !== undefined) payment.fees = result.fees;
+    if (result.tax !== undefined) payment.tax = result.tax;
     if (result.failureReason) payment.failureReason = result.failureReason;
     payment.reconciledAt = new Date();
 
     payment.auditTrail.push({
       timestamp: new Date(),
-      action: 'PAYMENT_RECONCILED',
+      action: 'PAYMENT_RECONCILED_WITH_RAZORPAYX',
       performedBy: req.user!.userId as any,
-      note: `Reconciled with provider. Status transition: ${oldStatus} -> ${result.status}. UTR: ${result.utr || 'N/A'}`,
+      note: `Reconciled with RazorpayX. Status transition: ${oldStatus} -> ${result.status}. UTR: ${result.utr || 'N/A'}`,
       ip: req.ip,
     });
 
     await payment.save();
 
-    // If reconciled to PAID, update linked expense
+    // If reconciled to PAID, settle linked expense
     if (payment.status === 'PAID' && payment.expense) {
       await Expense.findByIdAndUpdate(payment.expense, {
         paymentStatus: 'PAID',
-        paidAt: result.settledAt || new Date(),
+        paidAt: new Date(),
+      });
+    }
+
+    // If reconciled to REVERSED, release linked expense
+    if (payment.status === 'REVERSED' && payment.expense) {
+      await Expense.findByIdAndUpdate(payment.expense, {
+        paymentStatus: 'UNPAID',
       });
     }
 
@@ -550,15 +602,16 @@ export async function reconcilePaymentStatus(req: AuthenticatedRequest, res: Res
       oldStatus,
       newStatus: payment.status,
       utr: payment.providerUtr,
+      provider: 'RAZORPAYX',
     });
 
     res.json({
       success: true,
-      message: `Reconciliation complete. Status is ${payment.status}.`,
+      message: `RazorpayX reconciliation complete. Current status is ${payment.status}.`,
       payment,
     });
   } catch (err: any) {
-    res.status(500).json({ success: false, message: 'Reconciliation failed', error: err.message });
+    res.status(500).json({ success: false, message: 'RazorpayX reconciliation failed', error: err.message });
   }
 }
 
@@ -573,10 +626,14 @@ export async function cancelPaymentRequest(req: AuthenticatedRequest, res: Respo
       return;
     }
 
-    if (payment.status !== 'DRAFT' && payment.status !== 'AWAITING_AUTHORIZATION') {
+    if (
+      payment.status !== 'DRAFT' &&
+      payment.status !== 'AWAITING_AUTHORIZATION' &&
+      payment.status !== 'AUTHORIZED'
+    ) {
       res.status(400).json({
         success: false,
-        message: `Cannot cancel a payment with status '${payment.status}'. Once submitted to bank, reconciliation is required.`,
+        message: `Cannot cancel a payment with status '${payment.status}'. Once submitted to RazorpayX or bank, reconciliation is required.`,
       });
       return;
     }
@@ -587,7 +644,7 @@ export async function cancelPaymentRequest(req: AuthenticatedRequest, res: Respo
       timestamp: new Date(),
       action: 'PAYMENT_CANCELLED',
       performedBy: req.user!.userId as any,
-      note: `Payment cancelled: ${reason || 'N/A'}`,
+      note: `Payment cancelled before bank submission: ${reason || 'N/A'}`,
       ip: req.ip,
     });
 
@@ -604,6 +661,7 @@ export async function cancelPaymentRequest(req: AuthenticatedRequest, res: Respo
     await logAudit('PAYMENT_CANCELLED', req.user!.userId, 'PAYMENT_REQUEST', payment._id, {
       reference: payment.paymentReference,
       reason,
+      provider: payment.providerName,
     });
 
     res.json({ success: true, message: 'Payment request cancelled successfully.', payment });
@@ -614,82 +672,100 @@ export async function cancelPaymentRequest(req: AuthenticatedRequest, res: Respo
 
 export async function handlePaymentWebhook(req: any, res: Response): Promise<void> {
   try {
+    // 1. Extract exact raw request body and signature
     const signature = (req.headers['x-razorpay-signature'] ||
       req.headers['x-webhook-signature'] ||
       req.headers['x-signature'] ||
       '') as string;
 
-    const provider = getPaymentProvider();
+    const rawBody = req.rawBody || (typeof req.body === 'string' ? req.body : JSON.stringify(req.body));
 
-    // 1. Verify Webhook Signature
-    const isValid = provider.verifyWebhookSignature(req.body, signature);
+    // 2. Verify Cryptographic HMAC-SHA256 Signature
+    const isValid = razorpayXService.verifyWebhookSignature(rawBody, signature);
     if (!isValid) {
-      res.status(401).json({ success: false, message: 'Invalid webhook signature.' });
+      res.status(401).json({ success: false, message: 'Invalid RazorpayX webhook signature.' });
       return;
     }
 
     const payload = req.body;
-    const eventId = payload.event_id || payload.id || `EVT-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+    const eventId = payload.event_id || payload.id || `EVT-RZPX-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
     const eventType = payload.event || payload.type || 'payout.updated';
 
-    // 2. Check Duplicate Webhook Event
+    // 3. Duplicate Webhook Event Suppression (Idempotency)
     const existing = await WebhookEvent.findOne({ eventId });
     if (existing) {
-      // Return 200 OK immediately for duplicate webhooks to prevent provider retries
+      // Immediately acknowledge duplicate to prevent webhook storming
       res.status(200).json({ success: true, message: 'Duplicate webhook event acknowledged.' });
       return;
     }
 
     const webhookRecord = await WebhookEvent.create({
       eventId,
-      provider: provider.name,
+      provider: 'RAZORPAYX',
       eventType,
       payload,
       signature,
       processed: false,
     });
 
-    // 3. Extract Payment Reference & update status
-    const payoutData = payload.payload?.payout?.entity || payload.data || payload;
-    const paymentRef = payoutData.reference_id || payoutData.reference;
-    const providerTxId = payoutData.id;
-    const providerStatus = (payoutData.status || '').toLowerCase();
-    const utr = payoutData.utr;
+    // 4. Extract RazorpayX Payout Data
+    const payoutEntity = payload.payload?.payout?.entity || payload.data || payload;
+    const paymentRef = payoutEntity.reference_id || payoutEntity.reference;
+    const payoutId = payoutEntity.id;
+    const rzpStatus = (payoutEntity.status || '').toLowerCase();
+    const utr = payoutEntity.utr;
 
-    if (paymentRef || providerTxId) {
+    if (paymentRef || payoutId) {
       const payment = await PaymentRequest.findOne({
-        $or: [{ paymentReference: paymentRef }, { providerTransactionId: providerTxId }],
+        $or: [{ paymentReference: paymentRef }, { razorpayxPayoutId: payoutId }, { providerTransactionId: payoutId }],
       });
 
       if (payment) {
-        if (providerStatus === 'processed' || providerStatus === 'paid' || providerStatus === 'success') {
+        if (rzpStatus === 'processed' || rzpStatus === 'paid' || rzpStatus === 'success') {
           payment.status = 'PAID';
           if (utr) payment.providerUtr = utr;
+          if (payoutEntity.fees !== undefined) payment.fees = payoutEntity.fees;
+          if (payoutEntity.tax !== undefined) payment.tax = payoutEntity.tax;
           if (payment.expense) {
             await Expense.findByIdAndUpdate(payment.expense, {
               paymentStatus: 'PAID',
               paidAt: new Date(),
             });
           }
-        } else if (
-          providerStatus === 'reversed' ||
-          providerStatus === 'rejected' ||
-          providerStatus === 'failed'
-        ) {
-          payment.status = 'FAILED';
-          payment.failureReason = payoutData.failure_reason || 'Rejected by bank network';
+        } else if (rzpStatus === 'reversed') {
+          payment.status = 'REVERSED';
+          payment.reversalReason = payoutEntity.failure_reason || 'Bank reversal processed';
+          payment.reversedAt = new Date();
+          // Re-open linked expense
           if (payment.expense) {
             await Expense.findByIdAndUpdate(payment.expense, {
               paymentStatus: 'UNPAID',
             });
           }
+        } else if (
+          rzpStatus === 'rejected' ||
+          rzpStatus === 'cancelled' ||
+          rzpStatus === 'failed'
+        ) {
+          payment.status = 'FAILED';
+          payment.failureReason = payoutEntity.failure_reason || 'Rejected by bank network';
+          if (payment.expense) {
+            await Expense.findByIdAndUpdate(payment.expense, {
+              paymentStatus: 'UNPAID',
+            });
+          }
+        } else if (rzpStatus === 'processing' || rzpStatus === 'queued' || rzpStatus === 'initiated') {
+          payment.status = 'PROCESSING';
         }
+
+        payment.razorpayxStatus = rzpStatus;
+        if (payoutId) payment.razorpayxPayoutId = payoutId;
 
         payment.auditTrail.push({
           timestamp: new Date(),
-          action: `WEBHOOK_EVENT_${eventType.toUpperCase()}`,
+          action: `RAZORPAYX_WEBHOOK_${eventType.toUpperCase()}`,
           performedBy: payment.createdBy,
-          note: `Webhook received: ${eventType}. Status: ${payment.status}. UTR: ${utr || 'N/A'}`,
+          note: `Webhook received: ${eventType}. Mapped status: ${payment.status}. UTR: ${utr || 'N/A'}`,
         });
 
         await payment.save();
@@ -700,9 +776,9 @@ export async function handlePaymentWebhook(req: any, res: Response): Promise<voi
     webhookRecord.processedAt = new Date();
     await webhookRecord.save();
 
-    res.status(200).json({ success: true, message: 'Webhook processed successfully.' });
+    res.status(200).json({ success: true, message: 'RazorpayX webhook processed successfully.' });
   } catch (err: any) {
-    console.error('Webhook error:', err);
+    console.error('RazorpayX Webhook error:', err);
     res.status(500).json({ success: false, message: 'Webhook processing error', error: err.message });
   }
 }

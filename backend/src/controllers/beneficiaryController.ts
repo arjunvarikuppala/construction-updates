@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../types/index.js';
 import { Beneficiary, maskAccountNumber, PayeeType } from '../models/Beneficiary.js';
-import { getPaymentProvider } from '../services/payments/providerFactory.js';
+import { razorpayXService } from '../services/payments/razorpayXService.js';
 import { logAudit } from '../services/auditService.js';
 
 export async function createBeneficiary(req: AuthenticatedRequest, res: Response): Promise<void> {
@@ -45,12 +45,8 @@ export async function createBeneficiary(req: AuthenticatedRequest, res: Response
     }
 
     // Auto-resolve bank name from IFSC or use provided
-    const provider = getPaymentProvider();
     const resolvedBankName =
-      bankName?.trim() ||
-      (provider.name.includes('SANDBOX')
-        ? (provider as any).resolveBankNameFromIFSC(cleanIFSC)
-        : `${cleanIFSC.slice(0, 4)} Bank`);
+      bankName?.trim() || `${cleanIFSC.slice(0, 4)} Bank`;
 
     const masked = maskAccountNumber(cleanAccount);
 
@@ -158,20 +154,16 @@ export async function validateBeneficiaryAccount(req: AuthenticatedRequest, res:
       return;
     }
 
-    const provider = getPaymentProvider();
-    const result = await provider.validateBeneficiary(
-      beneficiary.accountNumber,
-      beneficiary.ifsc,
-      beneficiary.name
-    );
+    const result = await razorpayXService.validateBeneficiary(beneficiary);
 
     beneficiary.verificationStatus = result.isValid ? 'VERIFIED' : 'FAILED';
     if (result.registeredName) beneficiary.verifiedName = result.registeredName;
     if (result.bankName) beneficiary.bankName = result.bankName;
+    if (result.validationId) beneficiary.pennyDropValidationId = result.validationId;
 
     beneficiary.verificationDetails = {
       accountExists: result.accountExists,
-      providerRef: result.providerRef,
+      providerRef: result.validationId,
       verifiedAt: new Date(),
       failureReason: result.failureReason,
     };
@@ -185,7 +177,7 @@ export async function validateBeneficiaryAccount(req: AuthenticatedRequest, res:
       beneficiary._id,
       {
         verificationStatus: beneficiary.verificationStatus,
-        providerRef: result.providerRef,
+        providerRef: result.validationId,
         failureReason: result.failureReason,
       }
     );

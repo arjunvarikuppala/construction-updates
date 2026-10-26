@@ -273,6 +273,9 @@ export interface Beneficiary {
   email?: string;
   verificationStatus: BeneficiaryVerificationStatus;
   verifiedName?: string;
+  razorpayxContactId?: string;
+  razorpayxFundAccountId?: string;
+  pennyDropValidationId?: string;
   verificationDetails?: {
     accountExists?: boolean;
     providerRef?: string;
@@ -287,10 +290,12 @@ export type PaymentMethod = 'NEFT' | 'RTGS';
 export type PaymentRequestStatus =
   | 'DRAFT'
   | 'AWAITING_AUTHORIZATION'
+  | 'AUTHORIZED'
   | 'SUBMITTED'
   | 'PROCESSING'
   | 'PAID'
   | 'FAILED'
+  | 'REVERSED'
   | 'UNKNOWN';
 
 export interface PaymentAuditEntry {
@@ -356,6 +361,14 @@ export interface PaymentRequest {
   providerTransactionId?: string;
   providerUtr?: string;
   providerStatus?: string;
+  razorpayxPayoutId?: string;
+  razorpayxContactId?: string;
+  razorpayxFundAccountId?: string;
+  razorpayxStatus?: string;
+  fees?: number;
+  tax?: number;
+  reversalReason?: string;
+  reversedAt?: string;
   failureReason?: string;
   reconciledAt?: string;
   createdBy: {

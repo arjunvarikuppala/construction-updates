@@ -22,6 +22,12 @@ export interface IBeneficiary extends Document {
     failureReason?: string;
   };
   providerBeneficiaryId?: string;
+
+  // RazorpayX Specific Entities
+  razorpayxContactId?: string;
+  razorpayxFundAccountId?: string;
+  pennyDropValidationId?: string;
+
   isActive: boolean;
   createdBy: mongoose.Types.ObjectId;
   createdAt: Date;
@@ -101,6 +107,23 @@ const BeneficiarySchema = new Schema<IBeneficiary>(
       type: String,
       trim: true,
     },
+
+    // RazorpayX fields
+    razorpayxContactId: {
+      type: String,
+      trim: true,
+      index: true,
+    },
+    razorpayxFundAccountId: {
+      type: String,
+      trim: true,
+      index: true,
+    },
+    pennyDropValidationId: {
+      type: String,
+      trim: true,
+    },
+
     isActive: {
       type: Boolean,
       default: true,

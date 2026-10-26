@@ -6,10 +6,12 @@ export type PaymentMethod = 'NEFT' | 'RTGS';
 export type PaymentRequestStatus =
   | 'DRAFT'
   | 'AWAITING_AUTHORIZATION'
+  | 'AUTHORIZED'
   | 'SUBMITTED'
   | 'PROCESSING'
   | 'PAID'
   | 'FAILED'
+  | 'REVERSED'
   | 'UNKNOWN';
 
 export interface IPaymentAuditEntry {
@@ -42,12 +44,25 @@ export interface IPaymentRequest extends Document {
   authorizationNotes?: string;
   initiatedBy?: mongoose.Types.ObjectId;
   initiatedAt?: Date;
-  providerName?: string;
-  providerTransactionId?: string;
+
+  // Provider tracking (Preserves legacy vs RazorpayX distinction)
+  providerName: string; // 'RAZORPAYX' | 'SANDBOX_CORPORATE_PAYOUT' | 'LEGACY_MOCK'
+  providerTransactionId?: string; // Payout ID (e.g. pout_00000000000001)
   providerUtr?: string;
   providerStatus?: string;
   failureReason?: string;
   reconciledAt?: Date;
+
+  // RazorpayX specific metadata
+  razorpayxPayoutId?: string;
+  razorpayxContactId?: string;
+  razorpayxFundAccountId?: string;
+  razorpayxStatus?: string;
+  fees?: number; // In paise
+  tax?: number; // In paise
+  reversalReason?: string;
+  reversedAt?: Date;
+
   createdBy: mongoose.Types.ObjectId;
   auditTrail: IPaymentAuditEntry[];
   createdAt: Date;
@@ -155,10 +170,12 @@ const PaymentRequestSchema = new Schema<IPaymentRequest>(
       enum: [
         'DRAFT',
         'AWAITING_AUTHORIZATION',
+        'AUTHORIZED',
         'SUBMITTED',
         'PROCESSING',
         'PAID',
         'FAILED',
+        'REVERSED',
         'UNKNOWN',
       ],
       default: 'DRAFT',
@@ -190,7 +207,9 @@ const PaymentRequestSchema = new Schema<IPaymentRequest>(
     },
     providerName: {
       type: String,
+      default: 'RAZORPAYX',
       trim: true,
+      index: true,
     },
     providerTransactionId: {
       type: String,
@@ -214,6 +233,41 @@ const PaymentRequestSchema = new Schema<IPaymentRequest>(
     reconciledAt: {
       type: Date,
     },
+
+    // RazorpayX specific fields
+    razorpayxPayoutId: {
+      type: String,
+      trim: true,
+      index: true,
+    },
+    razorpayxContactId: {
+      type: String,
+      trim: true,
+    },
+    razorpayxFundAccountId: {
+      type: String,
+      trim: true,
+    },
+    razorpayxStatus: {
+      type: String,
+      trim: true,
+    },
+    fees: {
+      type: Number,
+      default: 0,
+    },
+    tax: {
+      type: Number,
+      default: 0,
+    },
+    reversalReason: {
+      type: String,
+      trim: true,
+    },
+    reversedAt: {
+      type: Date,
+    },
+
     createdBy: {
       type: Schema.Types.ObjectId,
       ref: 'User',
@@ -227,8 +281,9 @@ const PaymentRequestSchema = new Schema<IPaymentRequest>(
   }
 );
 
-// Compound index for querying payments per project by status
+// Compound indexes
 PaymentRequestSchema.index({ project: 1, status: 1 });
+PaymentRequestSchema.index({ providerName: 1, razorpayxPayoutId: 1 });
 
 export const PaymentRequest = mongoose.model<IPaymentRequest>(
   'PaymentRequest',

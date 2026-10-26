@@ -33,7 +33,7 @@ interface PaymentReviewModalProps {
 
 export const PaymentReviewModal: React.FC<PaymentReviewModalProps> = ({ payment, isOpen, onClose }) => {
   const queryClient = useQueryClient();
-  const { isMD } = useAuth();
+  const { isMD, user } = useAuth();
   const { success, error: toastError } = useToast();
 
   const [authNotes, setAuthNotes] = useState('');
@@ -106,12 +106,24 @@ export const PaymentReviewModal: React.FC<PaymentReviewModalProps> = ({ payment,
 
   if (!payment) return null;
 
+  const currentUserId = (user as any)?.id || (user as any)?._id;
+  const creatorId =
+    typeof payment.createdBy === 'object' && payment.createdBy !== null
+      ? (payment.createdBy as any)._id || (payment.createdBy as any).id
+      : String(payment.createdBy);
+  const isCreator = Boolean(currentUserId && creatorId && String(currentUserId) === String(creatorId));
+
   const isAwaitingAuth = payment.status === 'AWAITING_AUTHORIZATION';
+  const isAuthorized = payment.status === 'AUTHORIZED';
   const isDraft = payment.status === 'DRAFT';
   const isSettled = payment.status === 'PAID';
   const isFailed = payment.status === 'FAILED';
+  const isReversed = payment.status === 'REVERSED';
   const isUnknownOrInFlight =
     payment.status === 'UNKNOWN' || payment.status === 'SUBMITTED' || payment.status === 'PROCESSING';
+
+  const isLegacyRecord = Boolean(payment.providerName && payment.providerName !== 'RAZORPAYX');
+  const canInitiate = (isDraft || isAuthorized) && isMD && !isLegacyRecord;
 
   return (
     <Modal
@@ -134,6 +146,18 @@ export const PaymentReviewModal: React.FC<PaymentReviewModalProps> = ({ payment,
             <span className="text-xs text-navy-300 font-medium mt-0.5 block">
               Method: <strong>{payment.paymentMethod}</strong> • {payment.payeeType} Payment
             </span>
+            <div className="flex items-center gap-2 mt-1.5">
+              <span className="text-[10px] font-semibold bg-white/10 px-2 py-0.5 rounded text-amber-300">
+                {payment.providerName === 'RAZORPAYX' || !payment.providerName
+                  ? '⚡ RazorpayX Payout'
+                  : `Historical Record (${payment.providerName})`}
+              </span>
+              {payment.razorpayxPayoutId && (
+                <span className="text-[10px] font-mono text-sky-300">
+                  ID: {payment.razorpayxPayoutId}
+                </span>
+              )}
+            </div>
           </div>
 
           <div className="text-right">
@@ -141,18 +165,24 @@ export const PaymentReviewModal: React.FC<PaymentReviewModalProps> = ({ payment,
               className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${
                 payment.status === 'PAID'
                   ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                  : payment.status === 'AUTHORIZED'
+                  ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
                   : payment.status === 'AWAITING_AUTHORIZATION'
                   ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                   : payment.status === 'PROCESSING' || payment.status === 'SUBMITTED'
                   ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30'
+                  : payment.status === 'REVERSED'
+                  ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
                   : payment.status === 'FAILED'
                   ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
                   : 'bg-slate-700 text-slate-200'
               }`}
             >
               {payment.status === 'PAID' && <CheckCircle2 className="w-3.5 h-3.5" />}
+              {payment.status === 'AUTHORIZED' && <FileCheck2 className="w-3.5 h-3.5" />}
               {payment.status === 'AWAITING_AUTHORIZATION' && <Clock className="w-3.5 h-3.5" />}
               {payment.status === 'FAILED' && <XCircle className="w-3.5 h-3.5" />}
+              {payment.status === 'REVERSED' && <RefreshCw className="w-3.5 h-3.5" />}
               {payment.status.replace(/_/g, ' ')}
             </span>
             {payment.providerUtr && (
@@ -165,16 +195,44 @@ export const PaymentReviewModal: React.FC<PaymentReviewModalProps> = ({ payment,
 
         {/* High-Value Authorization Banner if needed */}
         {isAwaitingAuth && (
-          <div className="p-3.5 bg-amber-50 rounded-xl border border-amber-300 text-xs text-amber-950 flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div
+            className={`p-3.5 rounded-xl border text-xs flex items-start gap-3 ${
+              isCreator
+                ? 'bg-rose-50 border-rose-300 text-rose-950'
+                : 'bg-amber-50 border-amber-300 text-amber-950'
+            }`}
+          >
+            <AlertTriangle
+              className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
+                isCreator ? 'text-rose-600' : 'text-amber-600'
+              }`}
+            />
             <div className="space-y-1">
               <span className="font-bold block">
-                Independent MD Authorization Required (&gt; ₹1,00,000)
+                {isCreator
+                  ? 'Dual-Authorization Policy: Self-Approval Prohibited'
+                  : 'Independent MD Authorization Required (> ₹1,00,000)'}
               </span>
-              <p className="text-[11px] text-amber-800 leading-relaxed">
-                As a corporate fraud prevention measure, transactions above ₹1,00,000 must be reviewed and authorized by the Managing Director prior to dispatching corporate bank transfers.
+              <p
+                className={`text-[11px] leading-relaxed ${
+                  isCreator ? 'text-rose-800' : 'text-amber-800'
+                }`}
+              >
+                {isCreator
+                  ? 'You created this high-value payment request. Under SiteTrack dual-control policy, the creator cannot self-approve high-value disbursements. A different Managing Director must review and authorize this transfer.'
+                  : 'As a corporate fraud prevention measure, transactions above ₹1,00,000 must be reviewed and authorized by an independent Managing Director prior to dispatching corporate bank transfers.'}
               </p>
             </div>
+          </div>
+        )}
+
+        {/* Legacy provider warning if applicable */}
+        {isLegacyRecord && (
+          <div className="p-3 bg-slate-100 rounded-xl border border-slate-300 text-xs text-slate-800">
+            <span className="font-bold block">Historical Legacy Record ({payment.providerName})</span>
+            <p className="mt-0.5 text-slate-600">
+              This payment was recorded under the legacy sandbox provider. Active transfers are routed strictly through RazorpayX Payouts.
+            </p>
           </div>
         )}
 
@@ -231,8 +289,23 @@ export const PaymentReviewModal: React.FC<PaymentReviewModalProps> = ({ payment,
         {/* Failure Reason if Failed */}
         {isFailed && payment.failureReason && (
           <div className="p-3 bg-rose-50 rounded-xl border border-rose-200 text-xs text-rose-800">
-            <span className="font-bold block">Bank Clearing Rejection Reason:</span>
+            <span className="font-bold block">RazorpayX Transfer Failure:</span>
             <p className="mt-0.5 text-rose-700">{payment.failureReason}</p>
+          </div>
+        )}
+
+        {/* Reversal Reason if Reversed */}
+        {isReversed && (
+          <div className="p-3 bg-purple-50 rounded-xl border border-purple-200 text-xs text-purple-900">
+            <span className="font-bold block">RazorpayX Payout Reversed by Clearing Bank:</span>
+            <p className="mt-0.5 text-purple-800">
+              {payment.reversalReason || 'Beneficiary bank reversed the funds back to the business account.'}
+            </p>
+            {payment.reversedAt && (
+              <span className="text-[10px] text-purple-600 block mt-1">
+                Reversed on: {formatDate(payment.reversedAt)}
+              </span>
+            )}
           </div>
         )}
 
@@ -261,7 +334,7 @@ export const PaymentReviewModal: React.FC<PaymentReviewModalProps> = ({ payment,
         {/* Action Controls for MD & Users */}
         <div className="pt-3 border-t border-slate-200 space-y-3">
           {/* Executive MD Authorization Form */}
-          {isAwaitingAuth && isMD && (
+          {isAwaitingAuth && isMD && !isCreator && (
             <div className="p-3 bg-navy-50 rounded-xl border border-navy-200 space-y-2.5">
               <span className="text-xs font-bold text-navy-950 block">
                 Executive MD Authorization Action
@@ -280,6 +353,14 @@ export const PaymentReviewModal: React.FC<PaymentReviewModalProps> = ({ payment,
               >
                 Authorize High-Value Payment
               </Button>
+            </div>
+          )}
+
+          {/* Self-approval lock alert */}
+          {isAwaitingAuth && isMD && isCreator && (
+            <div className="p-3 bg-slate-100 rounded-xl border border-slate-300 text-xs text-slate-700 flex items-center gap-2">
+              <Lock className="w-4 h-4 text-slate-500 flex-shrink-0" />
+              <span>Independent dual-authorization enforced: Awaiting another Managing Director to authorize.</span>
             </div>
           )}
 
@@ -315,7 +396,7 @@ export const PaymentReviewModal: React.FC<PaymentReviewModalProps> = ({ payment,
 
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              {(isDraft || isAwaitingAuth) && !showCancelPrompt && (
+              {(isDraft || isAwaitingAuth || isAuthorized) && !showCancelPrompt && (
                 <button
                   type="button"
                   onClick={() => setShowCancelPrompt(true)}
@@ -344,7 +425,7 @@ export const PaymentReviewModal: React.FC<PaymentReviewModalProps> = ({ payment,
               )}
 
               {/* Initiate Transfer button */}
-              {isDraft && isMD && (
+              {canInitiate && (
                 <Button
                   variant="amber"
                   className="font-bold"

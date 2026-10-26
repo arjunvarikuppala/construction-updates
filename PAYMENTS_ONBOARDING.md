@@ -1,174 +1,197 @@
-# SiteTrack Corporate Banking & Payouts Onboarding Guide
+# SiteTrack — RazorpayX Corporate Payouts Onboarding & Integration Guide
 
-This document details the architecture, security safeguards, provider onboarding requirements, credentials, transaction limits, fees, and verification checklist for the **Contractor, Supplier, and Labour Payment Module** in SiteTrack.
+This guide details the architecture, security safeguards, provider onboarding requirements, environment variables, transaction limits, fee structure, and step-by-step activation checklist for **RazorpayX Payouts** in SiteTrack.
 
 ---
 
-## 1. Architecture Overview
+## 1. Architecture & Safe Payment Workflow
 
-SiteTrack implements a decoupled, event-driven payment architecture designed specifically for construction cash flows:
+SiteTrack implements a segregated, multi-stage financial lifecycle designed for construction cash flows:
 
 ```
 +---------------------------------------------------------------------------------------------------+
 |                                       SiteTrack Application                                       |
 +---------------------------------------------------------------------------------------------------+
-|  1. Expense Register           2. Beneficiary Book         3. Payment Request  & Review           |
+|  1. Expense Register           2. Beneficiary Management   3. Payment Request & Review            |
 |  - Records site expenses       - Contractors, Suppliers    - Linked to Project & Expense          |
-|  - NO automatic fund debit     - Masked account storage    - High-Value Rule (> ₹1,00,000)         |
-|  - Preserves site receipts     - Penny-Drop verification   - Independent MD Authorization         |
+|  - NO automatic fund debit     - Masked account display    - High-Value Rule (> ₹1,00,000)         |
+|  - Preserves site receipts     - RazorpayX Contact & FA    - Strict Dual-Authorization            |
+|                                - Automated Penny-Drop      - Creator CANNOT self-approve          |
 +---------------------------------------------------------------------------------------------------+
                                                   |
                                                   v
 +---------------------------------------------------------------------------------------------------+
-|                                  Provider Abstraction Layer                                       |
-|                                     (IPaymentProvider)                                            |
+|                               RazorpayX Payouts Engine Service                                    |
+|                                    (razorpayXService.ts)                                          |
 +---------------------------------------------------------------------------------------------------+
-|                 |                                                 |                               |
-|                 v                                                 v                               v
-|   [Mock Sandbox Provider]                         [RazorpayX Payouts]                 [ICICI CIB Host-to-Host]
-|   - Deterministic test mode                       - Official REST API                 - Corporate PKI Encrypted
-|   - Zero risk to real funds                       - Automated Penny Drop              - Direct Bank Ledger
-|   - Instant settlement & UTR                      - Webhook HMAC-SHA256               - Host-to-Host API
+|  - Contact Provisioning: POST /v1/contacts                                                        |
+|  - Fund Account Creation: POST /v1/fund_accounts                                                  |
+|  - Penny Drop Account Validation: POST /v1/fund_accounts/validations                              |
+|  - Payout Initiation: POST /v1/payouts with X-Payout-Idempotency header                           |
+|  - Status Inquiry & Reconciliation: GET /v1/payouts/{id}                                          |
+|  - Webhook HMAC-SHA256 Raw-Body Verification: X-Razorpay-Signature                                |
 +---------------------------------------------------------------------------------------------------+
                                                   |
                                                   v
 +---------------------------------------------------------------------------------------------------+
 |                                      Security Safeguards                                          |
-|   - Hard killswitch: PAYMENTS_LIVE_ENABLED=false until onboarding & security checks complete      |
-|   - Idempotency keys prevent duplicate debits                                                     |
-|   - Never retry in-flight/unknown payments without running bank reconciliation first              |
-|   - Zero storage of bank logins, OTPs, PINs, or raw card data                                     |
+|  - Killswitch: PAYMENTS_LIVE_ENABLED=false keeps transactions in safe sandbox simulation          |
+|  - Dual-Authorization Enforcement: High-value creator cannot approve their own payment            |
+|  - Never retry in-flight/unknown transfers without prior provider status reconciliation           |
+|  - Webhook deduplication with unique event IDs                                                    |
+|  - Immutable beneficiary snapshot sealed at payment creation                                      |
+|  - Integer paise storage across models, controllers, and APIs                                     |
+|  - Zero storage of bank logins, OTPs, PINs, or raw card security credentials                      |
+|  - Historical records preserved: legacy provider payments remain untouched and non-executable     |
 +---------------------------------------------------------------------------------------------------+
 ```
 
 ---
 
-## 2. Supported Corporate Banking & Payout Providers
+## 2. RazorpayX Payout Lifecycle & Status Mapping
 
-### Option A: RazorpayX Corporate Payouts (Recommended for Fast Deployment)
-- **Supported rails:** NEFT, RTGS, IMPS, UPI.
-- **Beneficiary verification:** Real-time automated Penny Drop validation with registered account name matching.
-- **Workflow:** Virtual Account / Current Account integration, automated webhooks, instant UTR generation.
-- **Best for:** Rapid onboarding (1–3 business days), modern developer REST APIs, automated reconciliation.
+SiteTrack maps RazorpayX Payout lifecycle events directly into internal states:
 
-### Option B: ICICI Bank Corporate Internet Banking (CIB) API
-- **Supported rails:** NEFT, RTGS, Internal Book Transfer.
-- **Beneficiary verification:** Account number & IFSC validation via ICICI Corporate Developer Portal.
-- **Workflow:** Direct debit from primary Corporate Current Account using public-key cryptography (RSA-2048) and Digital Signatures (Class 3 DSC).
-- **Best for:** Direct primary bank settlement without intermediary escrow/virtual accounts.
-
-### Option C: Cashfree Corporate Payouts / Yes Bank
-- **Supported rails:** NEFT, RTGS, IMPS.
-- **Beneficiary verification:** Bank account verification API (penny drop).
-- **Workflow:** Direct API dispatch with dual-approval support.
-
----
-
-## 3. Bank Onboarding Prerequisites & KYC Checklist
-
-Before enabling live payouts, the following corporate documentation must be approved by the banking partner:
-
-| Item | Document Required | Purpose |
+| SiteTrack Internal Status | RazorpayX API Status | Description |
 | :--- | :--- | :--- |
-| **1. Entity KYC** | Certificate of Incorporation (CIN), MOA & AOA | Verifies legal status of the construction firm |
-| **2. Tax Registration** | Company PAN Card & GSTIN Certificate | Statutory compliance & invoice reconciliation |
-| **3. Bank Mandate** | Board Resolution on Company Letterhead | Authorizes electronic corporate payouts and designates authorized officers |
-| **4. Signatory KYC** | PAN Card & Aadhaar of Managing Director / Directors | Individual identity verification for corporate officers |
-| **5. Bank Account** | Cancelled Cheque / Bank Statement (last 3 months) | Links the primary funding current account |
-| **6. DSC** | Class 3 Digital Signature Certificate (for Direct Bank APIs) | Signs outbound payment payloads cryptographically |
+| `DRAFT` | *Local* | Payment created (under ₹1,00,000) and ready for dispatch. |
+| `AWAITING_AUTHORIZATION` | *Local* | Transaction exceeds ₹1,00,000. Locked until independent MD authorizes. |
+| `AUTHORIZED` | *Local* | Authorized by an independent MD (different from creator). Ready for transfer. |
+| `SUBMITTED` | `queued` / `pending` | Dispatched to RazorpayX API; queued for banking rails processing. |
+| `PROCESSING` | `initiated` / `processing`| Transmitted into RBI clearing cycle (NEFT / RTGS). |
+| `PAID` | `processed` / `paid` | Successfully settled into beneficiary's account. UTR captured. Linked expense marked `PAID`. |
+| `REVERSED` | `reversed` | Returned by recipient bank (e.g., account frozen, invalid branch). Linked expense reopened to `UNPAID`. |
+| `FAILED` | `rejected` / `cancelled` / `failed` | Rejected by clearing network or insufficient business balance. |
+| `UNKNOWN` | *Network Timeout / Gateway Error* | Indeterminate outcome. System strictly blocks blind retries until reconciled. |
 
 ---
 
-## 4. Server-Side Secret & Environment Variable Configuration
+## 3. High-Value Authorization & Dual Control Policy
 
-All payment gateway secrets **must remain server-side** in protected environment variables or a managed secret store (e.g., AWS Secrets Manager, HashiCorp Vault). Never check these keys into source code repositories.
+To prevent corporate fraud and satisfy internal financial audit controls:
+1. **Threshold:** Any payment request where `amountPaise > 10000000` (₹1,00,000) automatically enters `AWAITING_AUTHORIZATION`.
+2. **Dual-Authorization Rule:** The user who created the payment request **cannot approve their own high-value disbursement**, even if they are a Managing Director (`payment.createdBy !== req.user.userId`).
+3. **Transition to Authorized:** An independent Managing Director must review the beneficiary details, invoice snapshot, and amount, then submit authorization, which transitions the status to `AUTHORIZED`.
+4. **Initiation:** Only an authorized payment (or a sub-threshold draft) can be dispatched to RazorpayX.
+
+---
+
+## 4. RazorpayX Onboarding Prerequisites & KYC Checklist
+
+Before enabling live payouts, execute the following corporate onboarding steps with Razorpay:
+
+| Step | Requirement | Purpose |
+| :--- | :--- | :--- |
+| **1. Entity Registration** | Certificate of Incorporation (CIN), MOA & AOA | Corporate entity verification |
+| **2. Tax Compliance** | Company PAN & GSTIN Certificate | Statutory verification & invoice compliance |
+| **3. Bank Mandate** | Board Resolution on Company Letterhead | Designates authorized directors for banking payouts |
+| **4. Current Account** | RBL, ICICI, or Yes Bank Current Account | Primary corporate funding account linked to RazorpayX |
+| **5. IP Whitelisting** | Static production server egress IP addresses | Restricts API access exclusively to approved infrastructure |
+| **6. Webhook Endpoint** | HTTPS callback URL with SSL/TLS | Receives real-time asynchronous settlement notifications |
+
+---
+
+## 5. Server-Side Environment Variables & Secrets
+
+All credentials **must remain server-side** in protected environment variables. Never expose these in frontend code, client bundles, or public repositories.
 
 In `backend/.env`:
 
 ```env
 # ==============================================================================
-# PAYMENTS CONFIGURATION
+# PAYMENTS ENGINE CONFIGURATION
 # ==============================================================================
 
-# Active Provider: 'sandbox' | 'razorpayx' | 'icici'
-PAYMENTS_PROVIDER=sandbox
+# Active Provider: RAZORPAYX (Exclusive active provider)
+PAYMENTS_PROVIDER=razorpayx
 
-# SAFETY KILLSWITCH: Must remain 'false' until bank KYC, credentials,
-# and IP whitelisting are verified.
+# SAFETY KILLSWITCH: Keep 'false' until onboarding, credentials, and IP whitelisting are verified.
+# When 'false', the application runs in a safe, deterministic test simulation.
 PAYMENTS_LIVE_ENABLED=false
 
-# High-Value Authorization Threshold in integer Paise (₹1,00,000 = 10,000,000 paise)
+# High-Value Dual-Authorization Threshold in integer Paise (₹1,00,000 = 10,000,000 paise)
 PAYMENT_HIGH_VALUE_THRESHOLD_PAISE=10000000
 
-# Webhook Verification Secret (used to verify HMAC-SHA256 signatures)
-PAYMENTS_WEBHOOK_SECRET=your_production_webhook_secret_here
+# Webhook Secret configured in the RazorpayX Dashboard for HMAC-SHA256 verification
+RAZORPAYX_WEBHOOK_SECRET=your_razorpayx_webhook_secret_here
 
 # ------------------------------------------------------------------------------
-# Provider-Specific Credentials (e.g., RazorpayX)
+# RazorpayX API Credentials
 # ------------------------------------------------------------------------------
 RAZORPAYX_KEY_ID=rzp_live_xxxxxxxxxxxxxxxx
-RAZORPAYX_KEY_SECRET=your_secret_key_here
-RAZORPAYX_ACCOUNT_NUMBER=787878xxxxxx
+RAZORPAYX_KEY_SECRET=your_razorpayx_key_secret_here
+RAZORPAYX_ACCOUNT_NUMBER=787878xxxxxxxxxx
 ```
 
 ---
 
-## 5. Transaction Limits & RBI Regulatory Rules
+## 6. Transaction Limits & RBI Regulatory Rules
 
 1. **NEFT (National Electronic Funds Transfer):**
    - **Minimum Amount:** ₹1 (100 paise).
-   - **Maximum Amount:** Determined by corporate banking limit.
-   - **Operating Hours:** Available 24x7x365 in half-hourly settlement batches or real-time.
+   - **Maximum Amount:** Per corporate limit assigned by banking partner.
+   - **Operating Hours:** Available 24x7x365 in batch settlements.
 
 2. **RTGS (Real Time Gross Settlement):**
    - **Minimum Amount:** **₹2,00,000** (20,000,000 paise) per Reserve Bank of India (RBI) regulations.
-   - **Enforcement:** SiteTrack automatically prevents RTGS requests under ₹2,00,000 and prompts the user to select NEFT.
-   - **Settlement:** Continuous, real-time gross settlement by RBI.
+   - **Enforcement:** SiteTrack UI and API strictly reject RTGS requests under ₹2,00,000 and enforce NEFT selection.
+   - **Settlement:** Continuous, real-time gross settlement directly across RBI books.
 
-3. **High-Value Authorization Rule:**
-   - Any transaction exceeding **₹1,00,000** (configurable via `PAYMENT_HIGH_VALUE_THRESHOLD_PAISE`) is automatically placed into `AWAITING_AUTHORIZATION`.
-   - Outbound bank transfer **cannot be triggered** until an authorized Managing Director explicitly approves the request in SiteTrack.
+3. **Penny Drop Validation:**
+   - Initiates a ₹1 (100 paise) credit to verify account existence and registered account holder name.
+   - Validates that the account is active before high-value payouts are initiated.
 
 ---
 
-## 6. Provider Pricing & Fees (Standard Commercial Estimates)
+## 7. Commercial Fee Structure (Estimated)
 
-| Service | Estimated Pricing | Billing Basis |
+| Service | Estimated Rate | Billing Model |
 | :--- | :--- | :--- |
-| **Penny Drop Account Verification** | ₹1.00 – ₹2.00 + GST | Per verification attempt |
-| **NEFT Transfer** | ₹2.00 – ₹4.00 + GST | Per successful transfer |
-| **RTGS Transfer** | ₹15.00 – ₹25.00 + GST | Per successful transfer |
-| **API Account Maintenance** | ₹0 – ₹5,000 / month | Depends on bank plan |
+| **Penny Drop Account Verification** | ₹1.50 – ₹2.50 + GST | Per verification attempt |
+| **NEFT Payout** | ₹2.50 – ₹4.00 + GST | Per successful transfer |
+| **RTGS Payout** | ₹15.00 – ₹25.00 + GST | Per successful transfer |
+| **Virtual Account / Fund Account** | Included | Standard RazorpayX account feature |
 
 ---
 
-## 7. Security Best Practices Enforced by SiteTrack
+## 8. Webhook Configuration in RazorpayX Dashboard
 
-1. **Separation of Concerns:**
-   - Entering an expense in the SiteTrack Expense Register records cost accounting data. It **never** triggers an automatic bank transfer.
-   - Payments are discrete, audited requests that can be linked to approved expenses.
-
-2. **Beneficiary Snapshot Integrity:**
-   - At payment request creation, the beneficiary's name, masked account number, and IFSC are permanently captured in the `PaymentRequest` record. Future changes in the beneficiary address book do not alter in-flight or completed payment records.
-
-3. **No-Blind-Retry Guard:**
-   - If a bank request times out or returns an `UNKNOWN` status, SiteTrack strictly blocks re-submitting the transfer.
-   - The user or scheduled reconciler must run **"Reconcile Bank Status"** to query the provider ledger before any further action is allowed.
-
-4. **Webhook Security & Deduplication:**
-   - Every webhook payload is verified using constant-time cryptographic HMAC-SHA256 signature checking.
-   - Webhook event IDs are tracked in `WebhookEvent` with unique indexing. Duplicate deliveries from the bank return `HTTP 200` immediately without double-settling.
+1. Navigate to **RazorpayX Dashboard → Settings → Webhooks**.
+2. Click **Add New Webhook**.
+3. **Webhook URL:** `https://<your-sitetrack-domain>/api/v1/payments/webhook`
+4. **Secret:** Generate a cryptographically secure random string (e.g., `openssl rand -hex 24`) and save in `RAZORPAYX_WEBHOOK_SECRET`.
+5. **Subscribed Events:**
+   - `payout.queued`
+   - `payout.initiated`
+   - `payout.processed`
+   - `payout.reversed`
+   - `payout.rejected`
+   - `payout.failed`
+6. Click **Save Webhook**.
 
 ---
 
-## 8. Step-by-Step Go-Live Checklist
+## 9. Historical Legacy Records Preservation
 
-- [ ] **Step 1:** Complete KYC and execute corporate banking agreements with the chosen payout partner (RazorpayX, ICICI, or Cashfree).
-- [ ] **Step 2:** Generate production API Keys and assign outbound transaction debit limits with bank account managers.
-- [ ] **Step 3:** Whitelist production server IP addresses in the bank's developer console.
-- [ ] **Step 4:** Configure the webhook callback endpoint in the provider dashboard:
-      `https://<your-domain>/api/v1/payments/webhook`
-- [ ] **Step 5:** Save the production webhook signing secret into `PAYMENTS_WEBHOOK_SECRET`.
-- [ ] **Step 6:** Run a ₹10 test penny drop and a ₹100 NEFT test transfer in staging.
-- [ ] **Step 7:** Set `PAYMENTS_LIVE_ENABLED=true` and `PAYMENTS_PROVIDER=razorpayx` (or `icici`) in the production environment.
-- [ ] **Step 8:** Begin disbursing approved contractor, supplier, and labour payments securely!
+SiteTrack strictly protects all historical payment records:
+- Historical records created under previous providers (`providerName: 'SANDBOX_CORPORATE_PAYOUT'` or legacy providers) are preserved intact with their original transaction IDs, UTRs, and statuses.
+- Legacy records are visibly badged in the UI as `Historical Record (<Provider>)` to distinguish them from active `RazorpayX Payout` transactions.
+- Legacy records **cannot be re-executed** through RazorpayX, preventing unintended duplicate debits.
+
+---
+
+## 10. Step-by-Step Production Go-Live Checklist
+
+- [ ] **Step 1:** Finalize KYC and activate the primary corporate current account on RazorpayX.
+- [ ] **Step 2:** Generate Live API Key ID and Key Secret from **Settings → API Keys**.
+- [ ] **Step 3:** Whitelist production server IP addresses in the RazorpayX security settings.
+- [ ] **Step 4:** Set up the Webhook URL and secret in the RazorpayX Dashboard.
+- [ ] **Step 5:** Configure production environment variables in the server environment:
+  - `RAZORPAYX_KEY_ID`
+  - `RAZORPAYX_KEY_SECRET`
+  - `RAZORPAYX_ACCOUNT_NUMBER`
+  - `RAZORPAYX_WEBHOOK_SECRET`
+- [ ] **Step 6:** Run a test ₹1 penny drop validation for a known vendor account.
+- [ ] **Step 7:** Run a test ₹100 NEFT payout in staging/production to confirm end-to-end receipt.
+- [ ] **Step 8:** Set `PAYMENTS_LIVE_ENABLED=true` in production environment variables.
+- [ ] **Step 9:** Monitor the Payments audit log and RazorpayX Dashboard for real-time settlements!

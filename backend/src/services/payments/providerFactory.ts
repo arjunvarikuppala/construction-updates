@@ -1,34 +1,24 @@
 import { IPaymentProvider } from './types.js';
-import { MockSandboxPayoutProvider } from './mockSandboxProvider.js';
 import { RazorpayXPayoutProvider } from './razorpayXProvider.js';
 
 let activeProviderInstance: IPaymentProvider | null = null;
 
+/**
+ * RazorpayX Payouts Provider Factory
+ * Returns the active RazorpayX Payouts provider for all new transfers.
+ * The old legacy/mock provider has been completely removed from the active execution path.
+ */
 export function getPaymentProvider(): IPaymentProvider {
   if (activeProviderInstance) {
     return activeProviderInstance;
   }
 
-  const configured = (process.env.PAYMENTS_PROVIDER || 'sandbox').toLowerCase().trim();
-
-  switch (configured) {
-    case 'razorpayx':
-    case 'razorpay':
-      activeProviderInstance = new RazorpayXPayoutProvider();
-      break;
-
-    case 'sandbox':
-    case 'mock':
-    case 'test':
-    default:
-      activeProviderInstance = new MockSandboxPayoutProvider();
-      break;
-  }
-
+  // Active payout provider is now RazorpayX Payouts
+  activeProviderInstance = new RazorpayXPayoutProvider();
   return activeProviderInstance;
 }
 
-// Allows test suite to inject or reset provider
+// Allows testing suite to inspect or reset provider
 export function setPaymentProvider(provider: IPaymentProvider | null): void {
   activeProviderInstance = provider;
 }

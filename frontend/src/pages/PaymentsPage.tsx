@@ -113,6 +113,9 @@ export const PaymentsPage: React.FC = () => {
             <h1 className="text-xl sm:text-2xl font-bold text-navy-950 tracking-tight">
               Contractor, Supplier & Labour Payouts
             </h1>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
+              RazorpayX Payouts Engine
+            </span>
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
               NEFT / RTGS
             </span>
@@ -260,9 +263,11 @@ export const PaymentsPage: React.FC = () => {
             >
               <option value="ALL">All Statuses</option>
               <option value="AWAITING_AUTHORIZATION">Awaiting Authorization</option>
+              <option value="AUTHORIZED">Authorized</option>
               <option value="DRAFT">Draft</option>
               <option value="PROCESSING">Processing / Submitted</option>
               <option value="PAID">Paid / Settled</option>
+              <option value="REVERSED">Reversed</option>
               <option value="FAILED">Failed</option>
             </select>
           )}
@@ -322,20 +327,40 @@ export const PaymentsPage: React.FC = () => {
                         className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
                           req.status === 'PAID'
                             ? 'bg-emerald-100 text-emerald-800'
+                            : req.status === 'AUTHORIZED'
+                            ? 'bg-blue-100 text-blue-800 border border-blue-300 font-extrabold'
                             : req.status === 'AWAITING_AUTHORIZATION'
                             ? 'bg-amber-100 text-amber-900 border border-amber-300 font-extrabold'
                             : req.status === 'PROCESSING' || req.status === 'SUBMITTED'
                             ? 'bg-sky-100 text-sky-800'
+                            : req.status === 'REVERSED'
+                            ? 'bg-purple-100 text-purple-800 border border-purple-300 font-extrabold'
                             : req.status === 'FAILED'
                             ? 'bg-rose-100 text-rose-800'
                             : 'bg-slate-100 text-slate-700'
                         }`}
                       >
-                        {req.status === 'AWAITING_AUTHORIZATION' ? '⚠️ Awaiting Authorization' : req.status.replace(/_/g, ' ')}
+                        {req.status === 'AWAITING_AUTHORIZATION'
+                          ? '⚠️ Awaiting Authorization'
+                          : req.status === 'AUTHORIZED'
+                          ? '✓ Authorized'
+                          : req.status.replace(/_/g, ' ')}
                       </span>
 
                       <span className="text-[10px] font-semibold bg-navy-50 text-navy-900 px-2 py-0.5 rounded border border-navy-100">
                         {req.paymentMethod}
+                      </span>
+
+                      <span
+                        className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${
+                          req.providerName === 'RAZORPAYX' || !req.providerName
+                            ? 'bg-blue-50 text-blue-700 border-blue-200'
+                            : 'bg-slate-100 text-slate-500 border-slate-200'
+                        }`}
+                      >
+                        {req.providerName === 'RAZORPAYX' || !req.providerName
+                          ? 'RazorpayX'
+                          : `Legacy (${req.providerName})`}
                       </span>
 
                       <span className="text-xs text-slate-500">
