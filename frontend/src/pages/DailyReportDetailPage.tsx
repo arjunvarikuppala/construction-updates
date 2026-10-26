@@ -222,30 +222,46 @@ export const DailyReportDetailPage: React.FC = () => {
         </Card>
       )}
 
-      {/* Site Photos Gallery */}
+      {/* Site Photos & Videos Gallery */}
       {report.photos && report.photos.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Site Photographic Records ({report.photos.length})</CardTitle>
+            <CardTitle>Site Media & Video Walkthroughs ({report.photos.length})</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-              {report.photos.map((photo, idx) => (
-                <div key={idx} className="rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 space-y-2">
-                  <a href={photo.url} target="_blank" rel="noreferrer" className="block overflow-hidden h-48">
-                    <img
-                      src={photo.url}
-                      alt={photo.caption || 'Site photo'}
-                      className="w-full h-full object-cover hover:scale-105 transition-transform duration-200"
-                    />
-                  </a>
-                  {photo.caption && (
-                    <div className="p-2 text-xs text-slate-600 font-medium">
-                      {photo.caption}
-                    </div>
-                  )}
-                </div>
-              ))}
+              {report.photos.map((photo, idx) => {
+                const isVideo = /\.(mp4|webm|mov|mkv|avi|3gp)($|\?)/i.test(photo.url);
+
+                return (
+                  <div key={idx} className="rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 space-y-2">
+                    {isVideo ? (
+                      <div className="h-56 bg-black flex items-center justify-center">
+                        <video
+                          src={photo.url}
+                          controls
+                          playsInline
+                          preload="metadata"
+                          className="w-full h-full object-contain"
+                        />
+                      </div>
+                    ) : (
+                      <a href={photo.url} target="_blank" rel="noreferrer" className="block overflow-hidden h-48">
+                        <img
+                          src={photo.url}
+                          alt={photo.caption || 'Site photo'}
+                          className="w-full h-full object-cover hover:scale-105 transition-transform duration-200"
+                        />
+                      </a>
+                    )}
+                    {photo.caption && (
+                      <div className="p-2 text-xs text-slate-600 font-medium">
+                        {photo.caption}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </CardContent>
         </Card>

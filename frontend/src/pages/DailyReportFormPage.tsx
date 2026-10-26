@@ -9,6 +9,7 @@ import {
   Save,
   Trash2,
   Image as ImageIcon,
+  Video,
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/common/Card.js';
 import { Button } from '../components/common/Button.js';
@@ -309,17 +310,16 @@ export const DailyReportFormPage: React.FC = () => {
         <Card>
           <CardHeader>
             <div>
-              <CardTitle>Site Photos & Verification</CardTitle>
-              <p className="text-xs text-slate-500">Capture or upload site progress and quality inspection photos</p>
+              <CardTitle>Site Photos & Videos</CardTitle>
+              <p className="text-xs text-slate-500">Capture or upload site progress photos and video walkthroughs</p>
             </div>
             <label className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-navy-900 text-white text-xs font-semibold cursor-pointer hover:bg-navy-800 transition-colors">
               <Camera className="w-4 h-4 text-amber-400" />
-              <span>{isUploading ? 'Uploading...' : 'Take Photo / Upload'}</span>
+              <span>{isUploading ? 'Uploading Media...' : 'Attach Photos / Videos'}</span>
               <input
                 type="file"
                 multiple
-                accept="image/*"
-                capture="environment"
+                accept="image/*,video/*"
                 className="hidden"
                 onChange={handlePhotoUpload}
                 disabled={isUploading}
@@ -331,32 +331,51 @@ export const DailyReportFormPage: React.FC = () => {
               <div className="p-8 border-2 border-dashed border-slate-200 rounded-xl text-center space-y-2">
                 <ImageIcon className="w-8 h-8 text-slate-300 mx-auto" />
                 <p className="text-xs text-slate-500">
-                  No site photos attached yet. Tap &quot;Take Photo / Upload&quot; to attach camera pictures.
+                  No site media attached yet. Tap &quot;Attach Photos / Videos&quot; to upload high-res images or site clips.
                 </p>
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {photos.map((photo, idx) => (
-                  <div key={idx} className="relative rounded-xl overflow-hidden border border-slate-200 group bg-slate-100 aspect-square">
-                    <img
-                      src={photo.url}
-                      alt={photo.caption || 'Site photo'}
-                      className="w-full h-full object-cover"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removePhoto(idx)}
-                      className="absolute top-1.5 right-1.5 p-1 rounded-full bg-navy-950/80 text-white hover:bg-rose-600 transition-colors"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                    {photo.caption && (
-                      <div className="absolute inset-x-0 bottom-0 bg-navy-950/70 p-1 text-[10px] text-white truncate text-center">
-                        {photo.caption}
-                      </div>
-                    )}
-                  </div>
-                ))}
+                {photos.map((photo, idx) => {
+                  const isVideo = /\.(mp4|webm|mov|mkv|avi|3gp)($|\?)/i.test(photo.url);
+
+                  return (
+                    <div key={idx} className="relative rounded-xl overflow-hidden border border-slate-200 group bg-slate-900 aspect-square">
+                      {isVideo ? (
+                        <div className="w-full h-full flex items-center justify-center bg-black relative">
+                          <video
+                            src={photo.url}
+                            className="w-full h-full object-cover opacity-80"
+                            preload="metadata"
+                          />
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <div className="w-8 h-8 rounded-full bg-navy-900/80 text-amber-400 flex items-center justify-center shadow">
+                              <Video className="w-4 h-4" />
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <img
+                          src={photo.url}
+                          alt={photo.caption || 'Site photo'}
+                          className="w-full h-full object-cover"
+                        />
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => removePhoto(idx)}
+                        className="absolute top-1.5 right-1.5 p-1 rounded-full bg-navy-950/80 text-white hover:bg-rose-600 transition-colors z-10"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                      {photo.caption && (
+                        <div className="absolute inset-x-0 bottom-0 bg-navy-950/70 p-1 text-[10px] text-white truncate text-center z-10">
+                          {photo.caption}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </CardContent>

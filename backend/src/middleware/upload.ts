@@ -29,17 +29,28 @@ const fileFilter = (
   cb: multer.FileFilterCallback
 ) => {
   const allowedMimes = [
+    // Images
     'image/jpeg',
     'image/jpg',
     'image/png',
     'image/webp',
+    'image/heic',
+    'image/heif',
+    // Videos (Construction Walkthroughs & Site Footage)
+    'video/mp4',
+    'video/quicktime', // .mov (iPhone camera default)
+    'video/webm',
+    'video/x-matroska',
+    'video/avi',
+    'video/3gpp',
+    // Documents
     'application/pdf',
   ];
 
-  if (allowedMimes.includes(file.mimetype)) {
+  if (allowedMimes.includes(file.mimetype.toLowerCase())) {
     cb(null, true);
   } else {
-    cb(new Error('Invalid file format. Allowed formats: JPG, PNG, WEBP, PDF'));
+    cb(new Error('Invalid file format. Allowed formats: Photos (JPG, PNG, WEBP, HEIC), Videos (MP4, MOV, WEBM), and PDF documents'));
   }
 };
 
@@ -47,6 +58,6 @@ export const upload = multer({
   storage,
   fileFilter,
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10 MB maximum
+    fileSize: 250 * 1024 * 1024, // 250 MB maximum per file
   },
 });
