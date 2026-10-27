@@ -304,7 +304,7 @@ export const ProjectDetailPage: React.FC = () => {
               Remaining Budget
             </span>
             <span className="text-xl sm:text-2xl font-extrabold text-sky-800 block mt-1">
-              {financials ? formatCompactINR(financials.remainingPaise) : '₹0'}
+              {financials ? formatCompactINR(financials.remainingPaise || 0) : '₹0'}
             </span>
             <span className="text-[11px] text-sky-600 mt-0.5 block">Available uncommitted</span>
           </div>

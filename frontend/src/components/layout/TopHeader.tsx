@@ -3,6 +3,7 @@ import { HardHat, RefreshCw, LogOut } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.js';
 import { useSync } from '../../hooks/useSync.js';
 import { Badge } from '../common/Badge.js';
+import { NotificationCenter } from './NotificationCenter.js';
 
 export const TopHeader: React.FC = () => {
   const { user, logout } = useAuth();
@@ -27,6 +28,9 @@ export const TopHeader: React.FC = () => {
 
       {/* Right Actions */}
       <div className="flex items-center gap-3">
+        {/* Notification Bell Center */}
+        <NotificationCenter />
+
         {/* Sync Indicator */}
         <button
           onClick={syncAll}

@@ -9,6 +9,7 @@
     "start": "node dist/server.js",
     "dev": "tsx watch src/server.ts",
     "seed": "tsx src/scripts/seed.ts",
+    "verify:full": "tsx src/scripts/verify-full-system.ts",
     "test": "tsx src/scripts/verify-md-linking.ts"
   },
   "keywords": [
@@ -35,6 +36,7 @@
     "mongoose": "^8.13.0",
     "morgan": "^1.10.0",
     "multer": "^1.4.5-lts.1",
+    "socket.io": "^4.8.4",
     "zod": "^3.24.2"
   },
   "devDependencies": {

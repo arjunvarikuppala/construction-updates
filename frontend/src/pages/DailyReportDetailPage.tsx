@@ -16,6 +16,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '../components/common/C
 import { Button } from '../components/common/Button.js';
 import { Badge } from '../components/common/Badge.js';
 import { LoadingSkeleton } from '../components/common/LoadingSkeleton.js';
+import { ReadReceiptBadge } from '../components/reports/ReadReceiptBadge.js';
 import { DailyReport } from '../types/index.js';
 import { formatDate } from '../utils/dates.js';
 import { exportDailyReportPdf } from '../utils/exportPdf.js';
@@ -110,6 +111,21 @@ export const DailyReportDetailPage: React.FC = () => {
         <div>
           <span className="text-slate-400 block font-medium">Total Site Labour:</span>
           <span className="font-bold text-amber-700 block mt-0.5">{report.totalLabourCount} Workers</span>
+        </div>
+      </div>
+
+      {/* Read Receipt Status Banner */}
+      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-card flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-3">
+          <ReadReceiptBadge readReceipt={report.readReceipt} detailed />
+          {report.readReceipt?.viewedBy && report.readReceipt.viewedBy.length > 0 && (
+            <span className="text-slate-500 font-medium">
+              Verified viewers: {report.readReceipt.viewedBy.map((v) => v.viewerName).join(', ')}
+            </span>
+          )}
+        </div>
+        <div className="text-slate-400 text-[11px]">
+          Source of truth: Backend audit receipt tracking
         </div>
       </div>
 

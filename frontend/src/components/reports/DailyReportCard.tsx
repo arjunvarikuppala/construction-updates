@@ -4,6 +4,7 @@ import { Users, Wrench, AlertTriangle, ArrowRight, FileDown, Image as ImageIcon,
 import { DailyReport } from '../../types/index.js';
 import { Badge } from '../common/Badge.js';
 import { Button } from '../common/Button.js';
+import { ReadReceiptBadge } from './ReadReceiptBadge.js';
 import { formatDate } from '../../utils/dates.js';
 import { exportDailyReportPdf } from '../../utils/exportPdf.js';
 
@@ -35,11 +36,12 @@ export const DailyReportCard: React.FC<DailyReportCardProps> = ({ report }) => {
         </div>
       </div>
 
-      {/* Prominent Title of Work */}
-      <div>
+      {/* Prominent Title of Work & Read Receipt */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <h3 className="text-base font-extrabold text-navy-950 tracking-tight">
           {report.titleOfWork || 'Daily Construction Work Log'}
         </h3>
+        <ReadReceiptBadge readReceipt={report.readReceipt} />
       </div>
 
       {/* Summary */}

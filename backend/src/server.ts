@@ -1,3 +1,4 @@
+import http from 'http';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -17,6 +18,10 @@ import exportRoutes from './routes/exportRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import uploadRoutes from './routes/uploadRoutes.js';
 import auditRoutes from './routes/auditRoutes.js';
+import paymentRoutes from './routes/paymentRoutes.js';
+import communicationRoutes from './routes/communicationRoutes.js';
+import notificationRoutes from './routes/notificationRoutes.js';
+import { initSocketService } from './services/socketService.js';
 import { seedInitialData } from './scripts/seed.js';
 
 dotenv.config();
@@ -25,7 +30,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+const httpServer = http.createServer(app);
 const PORT = process.env.PORT || 5000;
+
+// Initialize Socket.IO Server
+initSocketService(httpServer);
 
 // Security Middleware
 app.use(
@@ -52,9 +61,16 @@ const apiLimiter = rateLimit({
 
 app.use('/api', apiLimiter);
 
-// Logger & Parsers
+// Logger & Parsers (Capture rawBody for cryptographic webhook signature verification)
 app.use(morgan('dev'));
-app.use(express.json({ limit: '20mb' }));
+app.use(
+  express.json({
+    limit: '20mb',
+    verify: (req: any, _res, buf) => {
+      req.rawBody = buf;
+    },
+  })
+);
 app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 
 // Static uploads serving
@@ -81,6 +97,9 @@ app.use('/api/v1/export', exportRoutes);
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/uploads', uploadRoutes);
 app.use('/api/v1/audit-logs', auditRoutes);
+app.use('/api/v1/payments', paymentRoutes);
+app.use('/api/v1/projects/:projectId/messages', communicationRoutes);
+app.use('/api/v1/notifications', notificationRoutes);
 
 // Global Error Handler
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
@@ -101,10 +120,11 @@ async function startServer() {
     await seedInitialData();
   }
 
-  app.listen(PORT, () => {
+  httpServer.listen(PORT, () => {
     console.log(`\n======================================================`);
     console.log(`🚀 SiteTrack Backend API running on http://localhost:${PORT}`);
     console.log(`📡 Health Check: http://localhost:${PORT}/api/health`);
+    console.log(`🔌 WebSockets: Socket.IO Server active on port ${PORT}`);
     console.log(`📁 Uploads Directory: ${uploadsPath}`);
     console.log(`======================================================\n`);
   });

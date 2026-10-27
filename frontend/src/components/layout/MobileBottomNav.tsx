@@ -9,6 +9,8 @@ import {
   Plus,
   FileText,
   DollarSign,
+  CreditCard,
+  MessageSquare,
   X,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.js';
@@ -50,10 +52,10 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({ pendingApprova
                   setShowActionSheet(false);
                   navigate('/reports/new');
                 }}
-                className="flex flex-col items-center justify-center p-4 rounded-2xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-950 text-center transition-colors"
+                className="flex flex-col items-center justify-center p-3.5 rounded-2xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-950 text-center transition-colors"
               >
-                <div className="w-12 h-12 rounded-xl bg-amber-500 text-navy-950 flex items-center justify-center mb-2 shadow-sm font-bold">
-                  <FileText className="w-6 h-6" />
+                <div className="w-10 h-10 rounded-xl bg-amber-500 text-navy-950 flex items-center justify-center mb-1.5 shadow-sm font-bold">
+                  <FileText className="w-5 h-5" />
                 </div>
                 <span className="text-xs font-bold">Daily Report</span>
                 <span className="text-[10px] text-amber-800 mt-0.5">Submit site log & photos</span>
@@ -64,13 +66,41 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({ pendingApprova
                   setShowActionSheet(false);
                   navigate('/expenses/new');
                 }}
-                className="flex flex-col items-center justify-center p-4 rounded-2xl bg-navy-50 hover:bg-navy-100 border border-navy-200 text-navy-950 text-center transition-colors"
+                className="flex flex-col items-center justify-center p-3.5 rounded-2xl bg-navy-50 hover:bg-navy-100 border border-navy-200 text-navy-950 text-center transition-colors"
               >
-                <div className="w-12 h-12 rounded-xl bg-navy-900 text-amber-400 flex items-center justify-center mb-2 shadow-sm font-bold">
-                  <DollarSign className="w-6 h-6" />
+                <div className="w-10 h-10 rounded-xl bg-navy-900 text-amber-400 flex items-center justify-center mb-1.5 shadow-sm font-bold">
+                  <DollarSign className="w-5 h-5" />
                 </div>
                 <span className="text-xs font-bold">Site Expense</span>
                 <span className="text-[10px] text-navy-700 mt-0.5">Upload receipt & bill</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setShowActionSheet(false);
+                  navigate('/payments');
+                }}
+                className="flex flex-col items-center justify-center p-3.5 rounded-2xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-950 text-center transition-colors"
+              >
+                <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center mb-1.5 shadow-sm font-bold">
+                  <CreditCard className="w-5 h-5" />
+                </div>
+                <span className="text-xs font-bold">Payment Request</span>
+                <span className="text-[10px] text-emerald-800 mt-0.5">NEFT / RTGS / UPI</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setShowActionSheet(false);
+                  navigate('/messages');
+                }}
+                className="flex flex-col items-center justify-center p-3.5 rounded-2xl bg-sky-50 hover:bg-sky-100 border border-sky-200 text-sky-950 text-center transition-colors"
+              >
+                <div className="w-10 h-10 rounded-xl bg-sky-600 text-white flex items-center justify-center mb-1.5 shadow-sm font-bold">
+                  <MessageSquare className="w-5 h-5" />
+                </div>
+                <span className="text-xs font-bold">Project Chat</span>
+                <span className="text-[10px] text-sky-800 mt-0.5">Message MD & site team</span>
               </button>
             </div>
           </div>
@@ -84,7 +114,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({ pendingApprova
           to="/"
           end
           className={({ isActive }) =>
-            `flex flex-col items-center justify-center py-1 px-2.5 rounded-lg text-[10px] font-semibold transition-colors ${
+            `flex flex-col items-center justify-center py-1 px-2 rounded-lg text-[10px] font-semibold transition-colors ${
               isActive ? 'text-navy-900 font-bold' : 'text-slate-400 hover:text-slate-600'
             }`
           }
@@ -98,7 +128,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({ pendingApprova
           <NavLink
             to="/approvals"
             className={({ isActive }) =>
-              `relative flex flex-col items-center justify-center py-1 px-2.5 rounded-lg text-[10px] font-semibold transition-colors ${
+              `relative flex flex-col items-center justify-center py-1 px-2 rounded-lg text-[10px] font-semibold transition-colors ${
                 isActive ? 'text-navy-900 font-bold' : 'text-slate-400 hover:text-slate-600'
               }`
             }
@@ -115,7 +145,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({ pendingApprova
           <NavLink
             to="/projects"
             className={({ isActive }) =>
-              `flex flex-col items-center justify-center py-1 px-2.5 rounded-lg text-[10px] font-semibold transition-colors ${
+              `flex flex-col items-center justify-center py-1 px-2 rounded-lg text-[10px] font-semibold transition-colors ${
                 isActive ? 'text-navy-900 font-bold' : 'text-slate-400 hover:text-slate-600'
               }`
             }
@@ -136,46 +166,31 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({ pendingApprova
           </button>
         )}
 
-        {/* Tab 3: Daily Reports */}
+        {/* Tab 3: Payments */}
         <NavLink
-          to="/reports"
+          to="/payments"
           className={({ isActive }) =>
-            `flex flex-col items-center justify-center py-1 px-2.5 rounded-lg text-[10px] font-semibold transition-colors ${
+            `flex flex-col items-center justify-center py-1 px-2 rounded-lg text-[10px] font-semibold transition-colors ${
               isActive ? 'text-navy-900 font-bold' : 'text-slate-400 hover:text-slate-600'
             }`
           }
         >
-          <ClipboardList className="w-5 h-5 mb-0.5" />
-          <span>Reports</span>
+          <CreditCard className="w-5 h-5 mb-0.5" />
+          <span>Payments</span>
         </NavLink>
 
-        {/* Tab 4: Expenses */}
+        {/* Tab 4: Messages */}
         <NavLink
-          to="/expenses"
+          to="/messages"
           className={({ isActive }) =>
-            `flex flex-col items-center justify-center py-1 px-2.5 rounded-lg text-[10px] font-semibold transition-colors ${
+            `flex flex-col items-center justify-center py-1 px-2 rounded-lg text-[10px] font-semibold transition-colors ${
               isActive ? 'text-navy-900 font-bold' : 'text-slate-400 hover:text-slate-600'
             }`
           }
         >
-          <Receipt className="w-5 h-5 mb-0.5" />
-          <span>Expenses</span>
+          <MessageSquare className="w-5 h-5 mb-0.5" />
+          <span>Messages</span>
         </NavLink>
-
-        {/* Tab 5 (Owner only): Projects */}
-        {isOwner && (
-          <NavLink
-            to="/projects"
-            className={({ isActive }) =>
-              `flex flex-col items-center justify-center py-1 px-2.5 rounded-lg text-[10px] font-semibold transition-colors ${
-                isActive ? 'text-navy-900 font-bold' : 'text-slate-400 hover:text-slate-600'
-              }`
-            }
-          >
-            <Building2 className="w-5 h-5 mb-0.5" />
-            <span>Projects</span>
-          </NavLink>
-        )}
       </nav>
     </>
   );

@@ -8,6 +8,8 @@ import {
   Receipt,
   Users,
   History,
+  CreditCard,
+  MessageSquare,
   LogOut,
   RefreshCw,
   HardHat,
@@ -42,6 +44,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ pendingApprovalsCount = 0 }) =
     },
     { to: '/reports', label: 'Daily Reports', icon: ClipboardList },
     { to: '/expenses', label: 'Expenses Register', icon: Receipt },
+    { to: '/payments', label: 'Payments & Transfers', icon: CreditCard },
+    { to: '/messages', label: 'Project Messages', icon: MessageSquare },
     { to: '/team', label: 'In-Charge Accounts', icon: Users },
     { to: '/audit-logs', label: 'Activity Audit Log', icon: History },
   ];
@@ -51,6 +55,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ pendingApprovalsCount = 0 }) =
     { to: '/projects', label: 'My Projects', icon: Building2 },
     { to: '/reports', label: 'Daily Reports', icon: ClipboardList },
     { to: '/expenses', label: 'My Expenses', icon: Receipt },
+    { to: '/payments', label: 'Payment Requests', icon: CreditCard },
+    { to: '/messages', label: 'Project Messages', icon: MessageSquare },
   ];
 
   const links = isOwner ? ownerLinks : inChargeLinks;

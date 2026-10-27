@@ -1,9 +1,19 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
+export type AuditEntityType =
+  | 'PROJECT'
+  | 'DAILY_REPORT'
+  | 'EXPENSE'
+  | 'USER'
+  | 'PAYMENT_REQUEST'
+  | 'BENEFICIARY'
+  | 'COMMUNICATION'
+  | 'REPORT_VIEW';
+
 export interface IAuditLog extends Document {
   action: string;
   performedBy: mongoose.Types.ObjectId;
-  entityType: 'PROJECT' | 'DAILY_REPORT' | 'EXPENSE' | 'USER';
+  entityType: AuditEntityType;
   entityId: mongoose.Types.ObjectId;
   details?: Record<string, any>;
   ip?: string;
@@ -25,7 +35,16 @@ const AuditLogSchema = new Schema<IAuditLog>(
     },
     entityType: {
       type: String,
-      enum: ['PROJECT', 'DAILY_REPORT', 'EXPENSE', 'USER'],
+      enum: [
+        'PROJECT',
+        'DAILY_REPORT',
+        'EXPENSE',
+        'USER',
+        'PAYMENT_REQUEST',
+        'BENEFICIARY',
+        'COMMUNICATION',
+        'REPORT_VIEW',
+      ],
       required: true,
       index: true,
     },
