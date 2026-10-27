@@ -382,56 +382,166 @@ export const ProjectMessagesPage: React.FC = () => {
                 )}
               </div>
 
-              <p className="text-[11px] text-slate-400 truncate">
-                {isOtherPartyOnline
-                  ? `${otherOnlineParticipants.map((p) => `${p.name} (${p.role === 'MD' ? 'MD' : 'Site In-Charge'})`).join(', ')} is online`
-                  : activeProject?.code
-                  ? `Real-time channel • ${activeProject.code}`
-                  : 'Real-time operational communication'}
-              </p>
+              {/* Subtitle: Linked Accounts status */}
+              <div className="text-[11px] text-slate-500 truncate flex items-center gap-1.5">
+                {presenceData?.linkedMD && (
+                  <span className="font-medium text-slate-700">
+                    MD: <strong className="text-navy-950">{presenceData.linkedMD.name}</strong>
+                  </span>
+                )}
+                <span className="text-slate-300">•</span>
+                {presenceData?.hasAssignedInCharge && presenceData.linkedInCharges && presenceData.linkedInCharges.length > 0 ? (
+                  <span className="font-medium text-slate-700">
+                    In-Charge:{' '}
+                    <strong className="text-navy-950">
+                      {presenceData.linkedInCharges.map((ic) => ic.name).join(', ')}
+                    </strong>
+                    {isOtherPartyOnline ? (
+                      <span className="ml-1 text-emerald-600 font-bold">
+                        ({otherOnlineParticipants.map((p) => p.name).join(', ')} is online)
+                      </span>
+                    ) : (
+                      <span className="ml-1 text-slate-400 font-normal">(Offline)</span>
+                    )}
+                  </span>
+                ) : (
+                  <span className="text-amber-700 font-semibold flex items-center gap-1">
+                    <span>⚠️ No Site In-Charge assigned yet</span>
+                    {(user?.role === 'MD' || user?.role === 'OWNER') && (
+                      <button
+                        onClick={() => navigate(`/projects/${selectedProjectId}`)}
+                        className="text-amber-800 underline font-bold hover:text-amber-950 ml-1 cursor-pointer"
+                      >
+                        Assign now
+                      </button>
+                    )}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
-          {/* Right Header: Active Participants Chips */}
+          {/* Right Header: Strictly Linked Accounts Chips (MD and their linked In-Charges) */}
           <div className="hidden sm:flex items-center gap-2">
-            {participants.map((part) => {
-              const isCurrentUser = part.userId === currentUserId;
-              return (
-                <div
-                  key={part.userId}
-                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold border transition-all ${
-                    part.isOnline
-                      ? 'bg-emerald-50 border-emerald-200 text-emerald-950 shadow-2xs'
-                      : 'bg-slate-50 border-slate-200 text-slate-500'
+            {/* Linked MD */}
+            {presenceData?.linkedMD && (
+              <div
+                key={presenceData.linkedMD.userId}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold border transition-all ${
+                  presenceData.linkedMD.isOnline
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-950 shadow-2xs'
+                    : 'bg-slate-50 border-slate-200 text-slate-500'
+                }`}
+                title={`${presenceData.linkedMD.name} (Managing Director) - ${
+                  presenceData.linkedMD.isOnline
+                    ? presenceData.linkedMD.isInChannel
+                      ? 'Active in this channel right now'
+                      : 'Online on SiteTrack'
+                    : 'Offline'
+                }`}
+              >
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    presenceData.linkedMD.isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'
                   }`}
-                  title={`${part.name} (${part.role}) - ${
-                    part.isOnline
-                      ? part.isInChannel
-                        ? 'Active in this channel right now'
-                        : 'Online on SiteTrack'
-                      : 'Offline'
-                  }`}
-                >
-                  <span
-                    className={`w-2 h-2 rounded-full ${
-                      part.isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'
+                />
+                <span className="truncate max-w-[120px]">
+                  {presenceData.linkedMD.name}
+                  {presenceData.linkedMD.userId === currentUserId && ' (You)'}
+                </span>
+                <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 border border-amber-300 uppercase">
+                  MD
+                </span>
+              </div>
+            )}
+
+            {/* Linked In-Charges (strictly for this project) */}
+            {presenceData?.hasAssignedInCharge && presenceData.linkedInCharges && presenceData.linkedInCharges.length > 0 ? (
+              presenceData.linkedInCharges.map((ic) => {
+                const isCurrentUser = ic.userId === currentUserId;
+                return (
+                  <div
+                    key={ic.userId}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold border transition-all ${
+                      ic.isOnline
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-950 shadow-2xs'
+                        : 'bg-slate-50 border-slate-200 text-slate-500'
                     }`}
-                  />
-                  <span className="truncate max-w-[110px]">
-                    {part.name}
-                    {isCurrentUser && ' (You)'}
+                    title={`${ic.name} (Site In-Charge) - ${
+                      ic.isOnline
+                        ? ic.isInChannel
+                          ? 'Active in this channel right now'
+                          : 'Online on SiteTrack'
+                        : 'Offline'
+                    }`}
+                  >
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        ic.isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'
+                      }`}
+                    />
+                    <span className="truncate max-w-[120px]">
+                      {ic.name}
+                      {isCurrentUser && ' (You)'}
+                    </span>
+                    <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-navy-100 text-navy-900 border border-navy-200 uppercase">
+                      In-Charge
+                    </span>
+                  </div>
+                );
+              })
+            ) : (
+              /* No In-Charge Assigned Alert Chip */
+              <button
+                onClick={() => {
+                  if (user?.role === 'MD' || user?.role === 'OWNER') {
+                    navigate(`/projects/${selectedProjectId}`);
+                  }
+                }}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold bg-amber-50 border border-amber-300 text-amber-900 shadow-2xs hover:bg-amber-100 transition-colors cursor-pointer"
+                title="No Site In-Charge is assigned to this project yet. Click to view project settings and assign one."
+              >
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+                <span className="font-bold">⚠️ No In-Charge Assigned</span>
+                {(user?.role === 'MD' || user?.role === 'OWNER') && (
+                  <span className="text-[10px] font-extrabold text-amber-800 underline ml-0.5">
+                    Assign
                   </span>
-                  <span className="text-[9px] font-extrabold px-1 rounded bg-white/90 border border-slate-200/60 uppercase">
-                    {part.role === 'MD' || part.role === 'OWNER' ? 'MD' : 'In-Charge'}
-                  </span>
-                </div>
-              );
-            })}
+                )}
+              </button>
+            )}
           </div>
         </div>
 
         {/* Messages Feed */}
         <div className="flex-1 p-6 overflow-y-auto space-y-4 bg-slate-50/30">
+          {/* Informational banner when project has no assigned in-charge */}
+          {presenceData && !presenceData.hasAssignedInCharge && activeProject && (
+            <div className="bg-amber-50 border border-amber-200/90 rounded-2xl p-3 mb-2 flex items-center justify-between gap-3 text-xs shadow-2xs">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-xl bg-amber-500 text-navy-950 flex items-center justify-center font-bold flex-shrink-0 shadow-xs">
+                  ⚠️
+                </div>
+                <div>
+                  <p className="font-bold text-navy-950">
+                    No Site In-Charge Assigned to {activeProject.name}
+                  </p>
+                  <p className="text-[11px] text-slate-600">
+                    SiteTrack channels only show linked accounts (the MD and assigned Site In-Charges). Assign an engineer to enable direct two-way messaging.
+                  </p>
+                </div>
+              </div>
+              {(user?.role === 'MD' || user?.role === 'OWNER') && (
+                <button
+                  onClick={() => navigate(`/projects/${selectedProjectId}`)}
+                  className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-navy-950 font-bold text-xs rounded-xl flex-shrink-0 transition-colors shadow-2xs cursor-pointer"
+                >
+                  Assign In-Charge
+                </button>
+              )}
+            </div>
+          )}
+
           {isLoadingMessages ? (
             <LoadingSkeleton rows={5} height="h-16" />
           ) : messages.length === 0 ? (
@@ -439,10 +549,24 @@ export const ProjectMessagesPage: React.FC = () => {
               <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center">
                 <MessageSquare className="w-6 h-6" />
               </div>
-              <h4 className="text-sm font-bold text-navy-950">Start the conversation</h4>
+              <h4 className="text-sm font-bold text-navy-950">
+                {!presenceData?.hasAssignedInCharge
+                  ? 'No Site In-Charge Assigned Yet'
+                  : 'Start the conversation'}
+              </h4>
               <p className="text-xs text-slate-400 max-w-sm">
-                Discuss site progress, review payment requests, clarify invoice doubts, or coordinate operations.
+                {!presenceData?.hasAssignedInCharge
+                  ? 'Assign an In-Charge to this project to discuss site progress, payment requests, invoice clarifications, and daily work operations.'
+                  : `Coordinate operations between MD (${presenceData?.linkedMD?.name || 'Managing Director'}) and Site In-Charge (${presenceData?.linkedInCharges?.map((i) => i.name).join(', ')}).`}
               </p>
+              {!presenceData?.hasAssignedInCharge && (user?.role === 'MD' || user?.role === 'OWNER') && (
+                <button
+                  onClick={() => navigate(`/projects/${selectedProjectId}`)}
+                  className="mt-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-navy-950 font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+                >
+                  Go to Project Settings to Assign
+                </button>
+              )}
             </div>
           ) : (
             messages.map((m: ProjectMessage) => {

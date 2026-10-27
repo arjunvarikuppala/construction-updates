@@ -218,52 +218,122 @@ export async function getProjectPresence(req: AuthenticatedRequest, res: Respons
       return;
     }
 
-    // Find assigned site in-charges
-    const assignments = await ProjectAssignment.find({
-      project: projectId,
-      assignmentStatus: 'ACTIVE',
-    }).populate('siteInCharge', 'name email role');
+    // Fetch the project and its linked ownership
+    const project = await Project.findById(projectId)
+      .populate('createdBy', 'name email role phone')
+      .populate('owner', 'name email role phone')
+      .populate('assignedInCharge', 'name email role phone');
 
-    // Find MDs
-    const mds = await User.find({ role: { $in: ['MD', 'OWNER'] }, isActive: true }).select('name email role');
+    if (!project) {
+      res.status(404).json({ success: false, message: 'Project not found.' });
+      return;
+    }
 
     const participantsMap = new Map<string, any>();
 
-    mds.forEach((md) => {
-      const id = md._id.toString();
-      participantsMap.set(id, {
-        userId: id,
-        name: md.name,
-        role: md.role,
-        isOnline: isUserOnline(id),
-        isInChannel: isUserInProject(id, projectId),
+    // 1. LINKED MANAGING DIRECTOR (Only the MD linked to this project)
+    let projectMD: any = null;
+    if (project.owner && (project.owner as any)._id) {
+      projectMD = project.owner;
+    } else if (project.createdBy && (project.createdBy as any)._id) {
+      projectMD = project.createdBy;
+    } else if (req.user!.role === 'MD' || req.user!.role === 'OWNER') {
+      projectMD = { _id: req.user!.userId, name: req.user!.name || 'Managing Director', role: req.user!.role };
+    }
+
+    if (projectMD) {
+      const mdId = (projectMD._id || projectMD.id).toString();
+      participantsMap.set(mdId, {
+        userId: mdId,
+        name: projectMD.name,
+        role: projectMD.role || 'MD',
+        isOnline: isUserOnline(mdId),
+        isInChannel: isUserInProject(mdId, projectId),
+        isMD: true,
       });
-    });
+    }
+
+    // If caller is an MD and matches creator/owner or is viewing their project, ensure caller is present
+    if (
+      (req.user!.role === 'MD' || req.user!.role === 'OWNER') &&
+      !participantsMap.has(req.user!.userId) &&
+      (String(project.createdBy?._id) === req.user!.userId || String(project.owner?._id) === req.user!.userId)
+    ) {
+      participantsMap.set(req.user!.userId, {
+        userId: req.user!.userId,
+        name: req.user!.name || 'Managing Director',
+        role: req.user!.role,
+        isOnline: isUserOnline(req.user!.userId),
+        isInChannel: isUserInProject(req.user!.userId, projectId),
+        isMD: true,
+      });
+    }
+
+    // 2. LINKED SITE IN-CHARGE(S) FOR THIS PROJECT ONLY
+    // A) From ProjectAssignment:
+    const assignments = await ProjectAssignment.find({
+      project: projectId,
+      assignmentStatus: 'ACTIVE',
+    }).populate('siteInCharge', 'name email role phone');
 
     assignments.forEach((a: any) => {
-      if (a.siteInCharge) {
+      if (a.siteInCharge && a.siteInCharge._id) {
         const id = a.siteInCharge._id.toString();
         participantsMap.set(id, {
           userId: id,
           name: a.siteInCharge.name,
-          role: a.siteInCharge.role,
+          role: a.siteInCharge.role || 'SITE_INCHARGE',
+          phone: a.siteInCharge.phone,
           isOnline: isUserOnline(id),
           isInChannel: isUserInProject(id, projectId),
+          isInCharge: true,
         });
       }
     });
 
+    // B) From project.assignedInCharge:
+    if (project.assignedInCharge && (project.assignedInCharge as any)._id) {
+      const incharge = project.assignedInCharge as any;
+      const id = incharge._id.toString();
+      if (!participantsMap.has(id)) {
+        participantsMap.set(id, {
+          userId: id,
+          name: incharge.name,
+          role: incharge.role || 'SITE_INCHARGE',
+          phone: incharge.phone,
+          isOnline: isUserOnline(id),
+          isInChannel: isUserInProject(id, projectId),
+          isInCharge: true,
+        });
+      }
+    }
+
     const participants = Array.from(participantsMap.values());
-    const onlineCount = participants.filter((p) => p.isOnline).length;
-    const inChannelCount = participants.filter((p) => p.isInChannel).length;
+    const mdParticipants = participants.filter((p) => p.isMD);
+    const inchargeParticipants = participants.filter((p) => p.isInCharge);
+
+    // Counterpart online check:
+    // If caller is MD, is any linked In-Charge online?
+    // If caller is In-Charge, is the linked MD online?
+    const otherParticipants = participants.filter((p) => p.userId !== req.user!.userId);
+    const onlineCount = otherParticipants.filter((p) => p.isOnline).length;
+    const isOtherPartyOnline = onlineCount > 0;
 
     res.json({
       success: true,
       projectId,
+      project: {
+        id: project._id,
+        name: project.name,
+        code: project.code,
+      },
       participants,
+      linkedMD: mdParticipants[0] || null,
+      linkedInCharges: inchargeParticipants,
+      hasAssignedInCharge: inchargeParticipants.length > 0,
       onlineCount,
-      inChannelCount,
-      isChannelActive: inChannelCount > 0,
+      isOtherPartyOnline,
+      isChannelActive: otherParticipants.some((p) => p.isInChannel),
     });
   } catch (err: any) {
     res.status(500).json({ success: false, message: 'Failed to get presence', error: err.message });

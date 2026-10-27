@@ -50,13 +50,13 @@ export function isUserInProject(userId: string, projectId: string): boolean {
 export function getProjectOnlineUsers(projectId: string): OnlineUserInfo[] {
   const list: OnlineUserInfo[] = [];
   activeUsers.forEach((u) => {
-    if (u.socketIds.size > 0) {
+    if (u.socketIds.size > 0 && u.activeProjects.has(String(projectId))) {
       list.push({
         userId: u.userId,
         name: u.name,
         role: u.role,
         isOnline: true,
-        isInChannel: u.activeProjects.has(String(projectId)),
+        isInChannel: true,
         lastSeen: u.lastSeen.toISOString(),
       });
     }

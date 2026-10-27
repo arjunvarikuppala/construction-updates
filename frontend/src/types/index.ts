@@ -519,17 +519,29 @@ export interface ProjectParticipantPresence {
   userId: string;
   name: string;
   role: string;
+  phone?: string;
   isOnline: boolean;
   isInChannel: boolean;
+  isMD?: boolean;
+  isInCharge?: boolean;
   lastSeen?: string;
 }
 
 export interface ProjectPresenceData {
   projectId: string;
+  project?: {
+    id: string;
+    name: string;
+    code: string;
+  };
   participants: ProjectParticipantPresence[];
+  linkedMD?: ProjectParticipantPresence | null;
+  linkedInCharges?: ProjectParticipantPresence[];
+  hasAssignedInCharge?: boolean;
   onlineCount: number;
-  inChannelCount: number;
-  isChannelActive: boolean;
+  inChannelCount?: number;
+  isChannelActive?: boolean;
+  isOtherPartyOnline?: boolean;
 }
 
 // ==========================================

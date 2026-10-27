@@ -276,6 +276,15 @@ export async function listPaymentRequests(req: AuthenticatedRequest, res: Respon
 
       const projectIds = assignments.map((a) => a.project);
       query.project = { $in: projectIds };
+    } else if (req.user!.role === 'MD' || req.user!.role === 'OWNER') {
+      // Scoped access: MD only sees payments for their linked projects
+      const mdProjects = await Project.find({
+        $or: [
+          { createdBy: req.user!.userId },
+          { owner: req.user!.userId },
+        ],
+      }).select('_id');
+      query.project = { $in: mdProjects.map((p) => p._id) };
     }
 
     if (search) {
@@ -298,7 +307,7 @@ export async function listPaymentRequests(req: AuthenticatedRequest, res: Respon
       .sort({ createdAt: -1 });
 
     // Aggregate summary metrics
-    const allMatching = await PaymentRequest.find(req.user!.role === 'SITE_INCHARGE' ? { project: query.project } : {});
+    const allMatching = await PaymentRequest.find(query.project ? { project: query.project } : {});
 
     const summary = {
       totalDisbursedPaise: allMatching
