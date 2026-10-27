@@ -63,6 +63,25 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     });
 
+    // Real-time message seen updates (blue checkmarks)
+    socketInstance.on('messages:seen', (data) => {
+      if (data?.projectId) {
+        queryClient.invalidateQueries({ queryKey: ['project-messages', data.projectId] });
+        queryClient.invalidateQueries({ queryKey: ['unread-messages-count'] });
+      }
+    });
+
+    // Real-time presence updates (online indicators)
+    socketInstance.on('presence:project_users', (data) => {
+      if (data?.projectId) {
+        queryClient.invalidateQueries({ queryKey: ['project-presence', data.projectId] });
+      }
+    });
+
+    socketInstance.on('presence:change', () => {
+      queryClient.invalidateQueries({ queryKey: ['project-presence'] });
+    });
+
     // Real-time report read receipt updates
     socketInstance.on('report:viewed', (data) => {
       queryClient.invalidateQueries({ queryKey: ['daily-reports'] });

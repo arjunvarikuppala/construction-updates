@@ -15,6 +15,8 @@ import {
   CheckCheck,
   Search,
   Users,
+  Eye,
+  Circle,
 } from 'lucide-react';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.js';
@@ -22,7 +24,12 @@ import { useSocket } from '../context/SocketContext.js';
 import { useToast } from '../context/ToastContext.js';
 import { Button } from '../components/common/Button.js';
 import { LoadingSkeleton } from '../components/common/LoadingSkeleton.js';
-import { ProjectMessage, MessageContextType } from '../types/index.js';
+import {
+  ProjectMessage,
+  MessageContextType,
+  ProjectParticipantPresence,
+  ProjectPresenceData,
+} from '../types/index.js';
 import { formatDate } from '../utils/dates.js';
 
 export const ProjectMessagesPage: React.FC = () => {
@@ -81,22 +88,43 @@ export const ProjectMessagesPage: React.FC = () => {
     }
   }, [selectedProjectId, routeProjectId, navigate]);
 
-  // Socket room join / leave lifecycle
+  // Socket room join / leave lifecycle & mark seen
   useEffect(() => {
     if (selectedProjectId) {
       joinProject(selectedProjectId);
 
-      // Mark messages read for this project
-      api.put(`/projects/${selectedProjectId}/messages/read`).then(() => {
-        queryClient.invalidateQueries({ queryKey: ['notifications'] });
-        queryClient.invalidateQueries({ queryKey: ['notifications-unread-count'] });
-      }).catch(() => {});
+      // Tell backend & peers that messages are read
+      api
+        .put(`/projects/${selectedProjectId}/messages/read`)
+        .then(() => {
+          socket?.emit('messages:mark_seen', { projectId: selectedProjectId });
+          queryClient.invalidateQueries({ queryKey: ['notifications'] });
+          queryClient.invalidateQueries({ queryKey: ['notifications-unread-count'] });
+        })
+        .catch(() => {});
 
       return () => {
         leaveProject(selectedProjectId);
       };
     }
-  }, [selectedProjectId, joinProject, leaveProject, queryClient]);
+  }, [selectedProjectId, joinProject, leaveProject, socket, queryClient]);
+
+  // Fetch Presence & Online participants for active project
+  const { data: presenceData } = useQuery({
+    queryKey: ['project-presence', selectedProjectId],
+    queryFn: () =>
+      api.get<ProjectPresenceData>(`/projects/${selectedProjectId}/messages/presence`),
+    enabled: Boolean(selectedProjectId),
+    refetchInterval: 5000,
+  });
+
+  const participants = presenceData?.participants || [];
+  const currentUserId = user?.id || (user as any)?._id;
+
+  const otherParticipants = participants.filter((p) => p.userId !== currentUserId);
+  const otherOnlineParticipants = otherParticipants.filter((p) => p.isOnline);
+  const isOtherPartyOnline = otherOnlineParticipants.length > 0;
+  const inChannelParticipants = otherParticipants.filter((p) => p.isInChannel);
 
   // Fetch Messages for active project
   const { data: messagesData, isLoading: isLoadingMessages } = useQuery({
@@ -106,7 +134,7 @@ export const ProjectMessagesPage: React.FC = () => {
         `/projects/${selectedProjectId}/messages`
       ),
     enabled: Boolean(selectedProjectId),
-    refetchInterval: 10000,
+    refetchInterval: 8000,
   });
   const messages = messagesData?.messages || [];
 
@@ -197,7 +225,31 @@ export const ProjectMessagesPage: React.FC = () => {
     return p.name.toLowerCase().includes(q) || p.code.toLowerCase().includes(q);
   });
 
-  const currentUserId = user?.id || (user as any)?._id;
+  // Check last message for bottom thread "Seen" indicator
+  const outgoingMessages = messages.filter((m: ProjectMessage) => {
+    const sId =
+      typeof m.sender === 'object' && m.sender !== null
+        ? (m.sender as any)._id || (m.sender as any).id
+        : m.sender;
+    return String(sId) === String(currentUserId);
+  });
+  const lastOutgoingMessage =
+    outgoingMessages.length > 0 ? outgoingMessages[outgoingMessages.length - 1] : null;
+
+  const lastSeenReaders =
+    lastOutgoingMessage?.readBy?.filter((r) => {
+      const rId =
+        typeof r.user === 'object' && r.user !== null
+          ? (r.user as any)._id || (r.user as any).id
+          : r.user;
+      return rId && String(rId) !== String(currentUserId);
+    }) || [];
+  const lastOutgoingIsSeen = lastSeenReaders.length > 0;
+  const lastSeenReaderName =
+    lastSeenReaders[0]?.user && typeof lastSeenReaders[0].user === 'object'
+      ? (lastSeenReaders[0].user as any).name
+      : 'Recipient';
+  const lastSeenAt = lastSeenReaders[0]?.readAt;
 
   return (
     <div className="h-[calc(100vh-5.5rem)] flex flex-col md:flex-row bg-white rounded-3xl border border-slate-200/90 shadow-card overflow-hidden">
@@ -249,16 +301,32 @@ export const ProjectMessagesPage: React.FC = () => {
                     isSelected ? 'bg-amber-500/10 border-l-4 border-amber-500' : 'hover:bg-slate-100/70'
                   }`}
                 >
-                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs flex-shrink-0 ${
-                    isSelected ? 'bg-navy-900 text-amber-400' : 'bg-slate-200 text-slate-700'
-                  }`}>
-                    {p.code?.substring(0, 3) || 'PRJ'}
+                  <div className="relative flex-shrink-0">
+                    <div
+                      className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs ${
+                        isSelected ? 'bg-navy-900 text-amber-400' : 'bg-slate-200 text-slate-700'
+                      }`}
+                    >
+                      {p.code?.substring(0, 3) || 'PRJ'}
+                    </div>
+                    {isSelected && isOtherPartyOnline && (
+                      <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-white animate-pulse" />
+                    )}
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-1">
-                      <span className={`text-xs truncate ${isSelected ? 'font-black text-navy-950' : 'font-bold text-slate-800'}`}>
+                      <span
+                        className={`text-xs truncate ${
+                          isSelected ? 'font-black text-navy-950' : 'font-bold text-slate-800'
+                        }`}
+                      >
                         {p.name}
                       </span>
+                      {isSelected && isOtherPartyOnline && (
+                        <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded-full flex-shrink-0">
+                          Active
+                        </span>
+                      )}
                     </div>
                     <span className="font-mono text-[10px] text-slate-400 block mt-0.5">
                       {p.code} • {p.status}
@@ -273,29 +341,93 @@ export const ProjectMessagesPage: React.FC = () => {
 
       {/* RIGHT MAIN AREA: PROJECT CHAT CONVERSATION */}
       <div className="flex-1 flex flex-col bg-white">
-        {/* Chat Header */}
+        {/* Chat Header with ONLINE presence */}
         <div className="h-16 px-6 border-b border-slate-200 flex items-center justify-between bg-white flex-shrink-0">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-navy-900 text-amber-500 flex items-center justify-center font-bold text-xs flex-shrink-0">
-              {activeProject?.code || 'PRJ'}
+            <div className="relative flex-shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-navy-900 text-amber-500 flex items-center justify-center font-bold text-xs shadow-xs">
+                {activeProject?.code?.substring(0, 3) || 'PRJ'}
+              </div>
+              {/* Online Green Pulsing Indicator Dot */}
+              {isOtherPartyOnline ? (
+                <span
+                  className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 bg-emerald-500 rounded-full border-2 border-white animate-pulse"
+                  title="Team members currently active"
+                />
+              ) : (
+                <span
+                  className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-slate-300 rounded-full border-2 border-white"
+                  title="Offline"
+                />
+              )}
             </div>
+
             <div className="min-w-0">
-              <h3 className="text-sm font-extrabold text-navy-950 truncate">
-                {activeProject?.name || 'Select a project channel'}
-              </h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-extrabold text-navy-950 truncate">
+                  {activeProject?.name || 'Select a project channel'}
+                </h3>
+
+                {/* ONLINE / OFFLINE Status Badge */}
+                {isOtherPartyOnline ? (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 animate-in fade-in">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+                    <span>Online</span>
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-500 border border-slate-200">
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                    <span>Offline</span>
+                  </span>
+                )}
+              </div>
+
               <p className="text-[11px] text-slate-400 truncate">
-                Real-time operational communication between MD & assigned Site Engineers
+                {isOtherPartyOnline
+                  ? `${otherOnlineParticipants.map((p) => `${p.name} (${p.role === 'MD' ? 'MD' : 'Site In-Charge'})`).join(', ')} is online`
+                  : activeProject?.code
+                  ? `Real-time channel • ${activeProject.code}`
+                  : 'Real-time operational communication'}
               </p>
             </div>
           </div>
 
-          {activeProject && (
-            <div className="hidden sm:flex items-center gap-2">
-              <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-navy-50 text-navy-800 border border-navy-200">
-                {activeProject.code}
-              </span>
-            </div>
-          )}
+          {/* Right Header: Active Participants Chips */}
+          <div className="hidden sm:flex items-center gap-2">
+            {participants.map((part) => {
+              const isCurrentUser = part.userId === currentUserId;
+              return (
+                <div
+                  key={part.userId}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold border transition-all ${
+                    part.isOnline
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-950 shadow-2xs'
+                      : 'bg-slate-50 border-slate-200 text-slate-500'
+                  }`}
+                  title={`${part.name} (${part.role}) - ${
+                    part.isOnline
+                      ? part.isInChannel
+                        ? 'Active in this channel right now'
+                        : 'Online on SiteTrack'
+                      : 'Offline'
+                  }`}
+                >
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      part.isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'
+                    }`}
+                  />
+                  <span className="truncate max-w-[110px]">
+                    {part.name}
+                    {isCurrentUser && ' (You)'}
+                  </span>
+                  <span className="text-[9px] font-extrabold px-1 rounded bg-white/90 border border-slate-200/60 uppercase">
+                    {part.role === 'MD' || part.role === 'OWNER' ? 'MD' : 'In-Charge'}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         {/* Messages Feed */}
@@ -316,12 +448,32 @@ export const ProjectMessagesPage: React.FC = () => {
             messages.map((m: ProjectMessage) => {
               const id = m._id || m.id;
               const isMine =
-                m.sender?._id === currentUserId ||
-                m.sender?.id === currentUserId ||
-                m.sender?.email === user?.email;
+                (typeof m.sender === 'object' && m.sender !== null
+                  ? (m.sender as any)._id || (m.sender as any).id
+                  : m.sender) === currentUserId || m.sender?.email === user?.email;
 
               const isSenderOwner =
                 m.sender?.role === 'MD' || m.sender?.role === 'OWNER';
+
+              // SEEN TYPE COMPUTATION (Read Receipts)
+              const otherReaders =
+                m.readBy?.filter((r) => {
+                  const rId =
+                    typeof r.user === 'object' && r.user !== null
+                      ? (r.user as any)._id || (r.user as any).id
+                      : r.user;
+                  return rId && String(rId) !== String(currentUserId);
+                }) || [];
+
+              const isSeen = otherReaders.length > 0;
+              const firstReader = otherReaders[0];
+              const seenReaderName =
+                typeof firstReader?.user === 'object' && firstReader?.user !== null
+                  ? (firstReader.user as any).name
+                  : isSenderOwner
+                  ? 'Site In-Charge'
+                  : 'Managing Director';
+              const seenAt = firstReader?.readAt;
 
               return (
                 <div
@@ -346,7 +498,7 @@ export const ProjectMessagesPage: React.FC = () => {
 
                   {/* Message Bubble */}
                   <div
-                    className={`max-w-lg rounded-2xl p-4 shadow-xs space-y-2.5 ${
+                    className={`max-w-lg rounded-2xl p-3.5 shadow-xs space-y-2 ${
                       isMine
                         ? 'bg-navy-950 text-white rounded-tr-none'
                         : 'bg-white text-navy-950 border border-slate-200/90 rounded-tl-none'
@@ -420,11 +572,61 @@ export const ProjectMessagesPage: React.FC = () => {
                         ))}
                       </div>
                     )}
+
+                    {/* MESSAGE FOOTER: TIME + SEEN STATUS (like WhatsApp / iMessage) */}
+                    <div className="flex items-center justify-end gap-1 pt-1 text-[10px]">
+                      <span className={isMine ? 'text-slate-400' : 'text-slate-400'}>
+                        {formatDate(m.createdAt, 'hh:mm a')}
+                      </span>
+
+                      {/* Outgoing Read Receipts */}
+                      {isMine && (
+                        <span
+                          className="inline-flex items-center gap-0.5 ml-1 font-bold select-none cursor-default"
+                          title={
+                            isSeen
+                              ? `Seen by ${seenReaderName} at ${seenAt ? formatDate(seenAt, 'hh:mm a') : 'recently'}`
+                              : isOtherPartyOnline
+                              ? 'Delivered to online participant'
+                              : 'Sent'
+                          }
+                        >
+                          {isSeen ? (
+                            <>
+                              <CheckCheck className="w-3.5 h-3.5 text-sky-400 stroke-[2.5]" />
+                              <span className="text-[10px] text-sky-400 font-extrabold">Seen</span>
+                            </>
+                          ) : isOtherPartyOnline ? (
+                            <>
+                              <CheckCheck className="w-3.5 h-3.5 text-slate-400" />
+                              <span className="text-[10px] text-slate-400">Delivered</span>
+                            </>
+                          ) : (
+                            <>
+                              <Check className="w-3.5 h-3.5 text-slate-400" />
+                              <span className="text-[10px] text-slate-400">Sent</span>
+                            </>
+                          )}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
             })
           )}
+
+          {/* Real-time "Seen by" receipt tag at the bottom of thread */}
+          {lastOutgoingMessage && lastOutgoingIsSeen && (
+            <div className="flex items-center justify-end gap-1.5 px-2 text-[11px] text-sky-600 font-medium animate-in fade-in">
+              <CheckCheck className="w-3.5 h-3.5 text-sky-500" />
+              <span>
+                Seen by {lastSeenReaderName} at{' '}
+                {lastSeenAt ? formatDate(lastSeenAt, 'hh:mm a') : 'recently'}
+              </span>
+            </div>
+          )}
+
           <div ref={messagesEndRef} />
         </div>
 

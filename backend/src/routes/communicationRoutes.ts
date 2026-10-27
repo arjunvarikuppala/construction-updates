@@ -4,6 +4,7 @@ import {
   sendProjectMessage,
   markProjectMessagesRead,
   getUnreadMessagesCount,
+  getProjectPresence,
 } from '../controllers/communicationController.js';
 import { authenticate } from '../middleware/auth.js';
 
@@ -15,5 +16,6 @@ router.get('/', listProjectMessages);
 router.post('/', sendProjectMessage);
 router.put('/read', markProjectMessagesRead);
 router.get('/unread-count', getUnreadMessagesCount);
+router.get('/presence', getProjectPresence);
 
 export default router;

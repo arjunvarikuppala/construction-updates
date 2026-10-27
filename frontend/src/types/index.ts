@@ -500,11 +500,36 @@ export interface ProjectMessage {
   contextId?: string;
   contextSummary?: string;
   readBy: Array<{
-    user: string;
+    user:
+      | string
+      | {
+          _id?: string;
+          id?: string;
+          name?: string;
+          email?: string;
+          role?: string;
+        };
     readAt: string;
   }>;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ProjectParticipantPresence {
+  userId: string;
+  name: string;
+  role: string;
+  isOnline: boolean;
+  isInChannel: boolean;
+  lastSeen?: string;
+}
+
+export interface ProjectPresenceData {
+  projectId: string;
+  participants: ProjectParticipantPresence[];
+  onlineCount: number;
+  inChannelCount: number;
+  isChannelActive: boolean;
 }
 
 // ==========================================
