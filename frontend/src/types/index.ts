@@ -123,11 +123,14 @@ export interface ReadReceiptInfo {
   lastViewedByName?: string;
   lastViewedById?: string;
   isCurrentRevisionSeen?: boolean;
+  reportVersion?: number;
+  viewedVersion?: number;
   viewedBy?: Array<{
     viewerId: string;
     viewerName: string;
     firstViewedAt: string;
     lastViewedAt: string;
+    reportVersion?: number;
   }>;
 }
 
@@ -164,6 +167,7 @@ export interface DailyReport {
   nextDayPlan?: string;
   photos: SitePhoto[];
   status: ReportStatus;
+  version?: number;
   readReceipt?: ReadReceiptInfo;
   createdAt: string;
   updatedAt: string;

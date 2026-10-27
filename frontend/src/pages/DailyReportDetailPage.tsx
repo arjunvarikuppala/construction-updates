@@ -119,27 +119,21 @@ export const DailyReportDetailPage: React.FC = () => {
 
       {/* Read Receipt Status Banner */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-card flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-        <div className="flex items-center gap-3">
-          {isMDUser ? (
-            <div className="flex items-center gap-2 text-slate-700 font-medium">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>
-                Verified MD Review Recorded • Seen timestamp is delivered to Site In-Charge ({report.submittedBy?.name || 'In-Charge'})
-              </span>
-            </div>
-          ) : (
-            <>
-              <ReadReceiptBadge readReceipt={report.readReceipt} detailed />
-              {report.readReceipt?.viewedBy && report.readReceipt.viewedBy.length > 0 && (
-                <span className="text-slate-500 font-medium">
-                  Verified viewers: {report.readReceipt.viewedBy.map((v) => v.viewerName).join(', ')}
-                </span>
-              )}
-            </>
+        <div className="flex flex-wrap items-center gap-3">
+          <ReadReceiptBadge readReceipt={report.readReceipt} detailed />
+          {report.readReceipt?.viewedBy && report.readReceipt.viewedBy.length > 0 && (
+            <span className="text-slate-500 font-medium">
+              Verified viewers: {report.readReceipt.viewedBy.map((v) => v.viewerName).join(', ')}
+            </span>
+          )}
+          {report.version && report.version > 1 && (
+            <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
+              Revision #{report.version}
+            </span>
           )}
         </div>
         <div className="text-slate-400 text-[11px]">
-          Source of truth: Backend audit receipt tracking
+          Source of truth: Server-verified timestamp tracking
         </div>
       </div>
 

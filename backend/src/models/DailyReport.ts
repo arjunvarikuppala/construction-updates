@@ -16,6 +16,7 @@ export interface IDailyReport extends Document {
   nextDayPlan?: string;
   photos: SitePhoto[];
   status: ReportStatus;
+  version: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -102,6 +103,12 @@ const DailyReportSchema = new Schema<IDailyReport>(
       enum: ['DRAFT', 'SUBMITTED'],
       default: 'SUBMITTED',
       index: true,
+    },
+    version: {
+      type: Number,
+      required: true,
+      default: 1,
+      min: 1,
     },
   },
   {

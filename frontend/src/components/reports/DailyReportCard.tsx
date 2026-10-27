@@ -1,16 +1,12 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQueryClient, useMutation } from '@tanstack/react-query';
-import { Users, Wrench, AlertTriangle, ArrowRight, FileDown, Image as ImageIcon, Edit3, CheckCheck } from 'lucide-react';
+import { Users, Wrench, AlertTriangle, ArrowRight, FileDown, Image as ImageIcon, Edit3 } from 'lucide-react';
 import { DailyReport } from '../../types/index.js';
 import { Badge } from '../common/Badge.js';
 import { Button } from '../common/Button.js';
 import { ReadReceiptBadge } from './ReadReceiptBadge.js';
 import { formatDate } from '../../utils/dates.js';
 import { exportDailyReportPdf } from '../../utils/exportPdf.js';
-import { useAuth } from '../../context/AuthContext.js';
-import { useToast } from '../../context/ToastContext.js';
-import { api } from '../../api/client.js';
 
 interface DailyReportCardProps {
   report: DailyReport;
@@ -18,21 +14,7 @@ interface DailyReportCardProps {
 
 export const DailyReportCard: React.FC<DailyReportCardProps> = ({ report }) => {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const { user } = useAuth();
-  const { success } = useToast();
   const id = report._id || report.id;
-
-  const isMDUser = user?.role === 'MD' || user?.role === 'OWNER';
-  const isUnreadByMD = isMDUser && report.readReceipt?.status === 'NOT_VIEWED';
-
-  const markViewedMutation = useMutation({
-    mutationFn: () => api.post(`/daily-reports/${id}/view`),
-    onSuccess: () => {
-      success('Report marked as reviewed');
-      queryClient.invalidateQueries({ queryKey: ['daily-reports'] });
-    },
-  });
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-card hover:shadow-card-hover transition-all space-y-3.5">
@@ -136,21 +118,6 @@ export const DailyReportCard: React.FC<DailyReportCardProps> = ({ report }) => {
         </span>
 
         <div className="flex items-center gap-2">
-          {/* Quick Mark as Reviewed for MD */}
-          {isUnreadByMD && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => markViewedMutation.mutate()}
-              isLoading={markViewedMutation.isPending}
-              leftIcon={<CheckCheck className="w-3.5 h-3.5 text-emerald-600" />}
-              className="border-emerald-300 text-emerald-800 bg-emerald-50 hover:bg-emerald-100"
-              title="Quickly mark as reviewed (notifies In-Charge in real time)"
-            >
-              Mark Reviewed
-            </Button>
-          )}
-
           <Button
             size="sm"
             variant="ghost"

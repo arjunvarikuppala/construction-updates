@@ -5,6 +5,7 @@ export interface IReportView extends Document {
   project: mongoose.Types.ObjectId;
   viewer: mongoose.Types.ObjectId;
   viewerRole: string;
+  reportVersion: number;
   firstViewedAt: Date;
   lastViewedAt: Date;
   reportUpdatedAtSnapshot: Date;
@@ -37,6 +38,11 @@ const ReportViewSchema = new Schema<IReportView>(
       required: true,
       default: 'MD',
       index: true,
+    },
+    reportVersion: {
+      type: Number,
+      required: true,
+      default: 1,
     },
     firstViewedAt: {
       type: Date,

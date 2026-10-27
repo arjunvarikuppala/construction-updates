@@ -38,11 +38,13 @@ async function attachReadReceipts(reports: any[]) {
     rViews.sort((a, b) => new Date(b.lastViewedAt).getTime() - new Date(a.lastViewedAt).getTime());
     const latestView = rViews[0];
 
+    const currentVersion = reportObj.version || 1;
+    const viewedVersion = latestView.reportVersion || 1;
     const reportUpdatedTime = new Date(reportObj.updatedAt).getTime();
     const lastViewedTime = new Date(latestView.lastViewedAt).getTime();
 
-    // If report was edited after the last recorded MD view (with 3-second grace)
-    const isNewRevision = reportUpdatedTime - lastViewedTime > 3000;
+    // If report was edited to a newer version or edited after the last recorded MD view (with 3-second grace)
+    const isNewRevision = currentVersion > viewedVersion || (reportUpdatedTime - lastViewedTime > 3000);
 
     reportObj.readReceipt = {
       status: isNewRevision ? 'REVISION_NOT_VIEWED' : 'SEEN_BY_MD',
@@ -50,9 +52,13 @@ async function attachReadReceipts(reports: any[]) {
       lastViewedByName: latestView.viewer?.name || 'Managing Director',
       lastViewedById: latestView.viewer?._id,
       isCurrentRevisionSeen: !isNewRevision,
+      reportVersion: currentVersion,
+      viewedVersion: viewedVersion,
       viewedBy: rViews.map((v) => ({
         viewerId: v.viewer?._id,
         viewerName: v.viewer?.name,
+        viewerRole: v.viewerRole,
+        reportVersion: v.reportVersion || 1,
         firstViewedAt: v.firstViewedAt,
         lastViewedAt: v.lastViewedAt,
       })),
@@ -180,12 +186,15 @@ export async function getDailyReportById(req: AuthenticatedRequest, res: Respons
     // Record view if authenticated user is MD
     if (isMD(req.user!.role)) {
       const now = new Date();
+      const currentVersion = report.version || 1;
+
       await ReportView.findOneAndUpdate(
         { report: report._id, viewer: req.user!.userId },
         {
           project: projectId,
           viewerRole: 'MD',
           lastViewedAt: now,
+          reportVersion: currentVersion,
           reportUpdatedAtSnapshot: report.updatedAt,
           $setOnInsert: { firstViewedAt: now },
         },
@@ -249,12 +258,15 @@ export async function recordDailyReportView(req: AuthenticatedRequest, res: Resp
 
     if (isMD(req.user!.role)) {
       const now = new Date();
+      const currentVersion = report.version || 1;
+
       await ReportView.findOneAndUpdate(
         { report: report._id, viewer: req.user!.userId },
         {
           project: projectId,
           viewerRole: 'MD',
           lastViewedAt: now,
+          reportVersion: currentVersion,
           reportUpdatedAtSnapshot: report.updatedAt,
           $setOnInsert: { firstViewedAt: now },
         },
@@ -346,6 +358,7 @@ export async function createDailyReport(req: AuthenticatedRequest, res: Response
       nextDayPlan: nextDayPlan?.trim(),
       photos,
       status,
+      version: 1,
     });
 
     await logAudit('DAILY_REPORT_CREATED', req.user!.userId, 'DAILY_REPORT', report._id, {
@@ -406,6 +419,7 @@ export async function updateDailyReport(req: AuthenticatedRequest, res: Response
     if (photos) report.photos = photos;
     if (status) report.status = status;
 
+    report.version = (report.version || 1) + 1;
     report.lastEditedBy = new mongoose.Types.ObjectId(req.user!.userId);
 
     await report.save();

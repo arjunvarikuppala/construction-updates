@@ -1,5 +1,5 @@
 import React from 'react';
-import { Eye, EyeOff, AlertCircle, Check } from 'lucide-react';
+import { Eye, EyeOff, AlertCircle, CheckCheck } from 'lucide-react';
 import { ReadReceiptInfo } from '../../types/index.js';
 import { formatDate } from '../../utils/dates.js';
 import { useAuth } from '../../context/AuthContext.js';
@@ -20,89 +20,54 @@ export const ReadReceiptBadge: React.FC<ReadReceiptBadgeProps> = ({
 
   const status = readReceipt?.status || 'NOT_VIEWED';
   const lastViewedAt = readReceipt?.lastViewedAt;
-  const viewerName = readReceipt?.lastViewedByName || 'MD';
+  const viewerName = readReceipt?.lastViewedByName;
 
-  // ========================================================
-  // MANAGING DIRECTOR VIEW:
-  // "Seen by MD: [timestamp]" is strictly shown TO ONLY THE INCHARGE.
-  // The MD is the reviewer; they see "Unread" / "New Revision" / "Reviewed" without self-referential timestamps.
-  // ========================================================
-  if (isMDUser) {
-    if (status === 'NOT_VIEWED') {
-      return (
-        <div
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-sky-50 text-sky-800 border border-sky-200 ${className}`}
-          title="You have not reviewed this daily report yet"
-        >
-          <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-pulse" />
-          <span>Unread</span>
-        </div>
-      );
-    }
-
-    if (status === 'REVISION_NOT_VIEWED') {
-      return (
-        <div
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200 ${className}`}
-          title="The Site In-Charge edited this report after your last view"
-        >
-          <AlertCircle className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
-          <span>New Revision</span>
-        </div>
-      );
-    }
-
-    // status === 'SEEN_BY_MD'
-    return (
-      <div
-        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-50 text-slate-500 border border-slate-200/90 ${className}`}
-        title="You have reviewed this daily report"
-      >
-        <Check className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-        <span>Reviewed</span>
-      </div>
-    );
-  }
-
-  // ========================================================
-  // SITE IN-CHARGE VIEW:
-  // Shows the verified MD read receipt with exact timestamp as soon as MD views it.
-  // ========================================================
+  // 1. SEEN BY MD (Active verified review timestamp)
   if (status === 'SEEN_BY_MD') {
+    const formattedTimestamp = lastViewedAt
+      ? formatDate(lastViewedAt, 'dd MMM yyyy, hh:mm a')
+      : '';
+
     return (
       <div
         className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-2xs transition-all duration-300 animate-in fade-in zoom-in-95 ${className}`}
-        title={`Verified MD view recorded at ${lastViewedAt ? formatDate(lastViewedAt, 'dd MMM yyyy, hh:mm a') : 'recent'}`}
+        title={`Verified MD view recorded at ${formattedTimestamp || 'recently'}${viewerName ? ` by ${viewerName}` : ''}`}
       >
         <Eye className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0 animate-pulse" />
         <span className="font-bold">
-          Seen by MD{viewerName && viewerName !== 'MD' && viewerName !== 'Managing Director' ? ` (${viewerName})` : ''}
-          {lastViewedAt ? `: ${formatDate(lastViewedAt, 'dd MMM, hh:mm a')}` : ''}
+          Seen by MD{formattedTimestamp ? ` — ${formattedTimestamp}` : ''}
         </span>
       </div>
     );
   }
 
+  // 2. REPORT UPDATED AFTER MD LAST VIEW
   if (status === 'REVISION_NOT_VIEWED') {
+    const previousTimestamp = lastViewedAt
+      ? formatDate(lastViewedAt, 'dd MMM yyyy, hh:mm a')
+      : '';
+
     return (
       <div
-        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200 ${className}`}
-        title="Report was updated/edited after the last recorded MD view"
+        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-300 shadow-2xs ${className}`}
+        title={`Report updated after last view · Awaiting MD review${previousTimestamp ? ` (Last viewed: ${previousTimestamp})` : ''}`}
       >
         <AlertCircle className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
-        <span>New revision not viewed</span>
+        <span className="font-bold">
+          {detailed ? 'Seen by MD — updated version not yet viewed' : "Updated after MD's last view"}
+        </span>
       </div>
     );
   }
 
-  // NOT_VIEWED
+  // 3. NOT VIEWED YET
   return (
     <div
       className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200 ${className}`}
-      title="No authorized MD has viewed this report yet"
+      title={isMDUser ? 'You have not opened and viewed this report yet' : 'MD has not viewed this report yet'}
     >
       <EyeOff className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-      <span>Not viewed yet</span>
+      <span>{isMDUser ? 'MD has not viewed this report yet' : 'Not viewed by MD yet'}</span>
     </div>
   );
 };
