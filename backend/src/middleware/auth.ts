@@ -13,12 +13,18 @@ export interface ProjectAuthorizedRequest extends AuthenticatedRequest {
 
 export function authenticate(req: AuthenticatedRequest, res: Response, next: NextFunction): void {
   const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  let token: string | undefined;
+
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.split(' ')[1];
+  } else if (req.query && req.query.token) {
+    token = String(req.query.token);
+  }
+
+  if (!token) {
     res.status(401).json({ success: false, message: 'Authentication required. No token provided.' });
     return;
   }
-
-  const token = authHeader.split(' ')[1];
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as AuthUserPayload;
     req.user = decoded;
@@ -68,11 +74,20 @@ export async function verifyUserProjectAccess(
   userId: string,
   userRole: string
 ): Promise<{ allowed: boolean; project?: IProject; reason?: string }> {
-  if (!mongoose.Types.ObjectId.isValid(String(projectId))) {
+  const pStr = String(projectId || '').trim();
+  if (!pStr) {
     return { allowed: false, reason: 'INVALID_ID' };
   }
 
-  const project = await Project.findById(projectId);
+  let project: IProject | null = null;
+  if (mongoose.Types.ObjectId.isValid(pStr)) {
+    project = await Project.findById(pStr);
+  }
+  if (!project) {
+    // Fallback: Support project code lookup (e.g. TG-156, HYDRA167) for seamless route resolution
+    project = await Project.findOne({ code: pStr.toUpperCase() });
+  }
+
   if (!project) {
     return { allowed: false, reason: 'NOT_FOUND' };
   }

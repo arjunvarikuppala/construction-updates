@@ -5,8 +5,14 @@ export type MessageContextType = 'GENERAL' | 'DAILY_REPORT' | 'EXPENSE' | 'PAYME
 export interface IMessageAttachment {
   url: string;
   name: string;
-  type: string; // 'image' | 'pdf' | 'document' | 'other'
+  type: 'image' | 'video' | 'pdf' | 'document' | 'other' | string;
+  mimeType?: string;
   size?: number;
+  storageKey?: string;
+  width?: number;
+  height?: number;
+  duration?: number;
+  thumbnailUrl?: string;
 }
 
 export interface IProjectMessage extends Document {
@@ -30,7 +36,13 @@ const MessageAttachmentSchema = new Schema<IMessageAttachment>(
     url: { type: String, required: true },
     name: { type: String, required: true },
     type: { type: String, default: 'image' },
+    mimeType: { type: String },
     size: { type: Number },
+    storageKey: { type: String },
+    width: { type: Number },
+    height: { type: Number },
+    duration: { type: Number },
+    thumbnailUrl: { type: String },
   },
   { _id: false }
 );
@@ -51,9 +63,9 @@ const ProjectMessageSchema = new Schema<IProjectMessage>(
     },
     content: {
       type: String,
-      required: [true, 'Message content cannot be empty'],
       trim: true,
       maxlength: 3000,
+      default: '',
     },
     attachments: [MessageAttachmentSchema],
     contextType: {
@@ -83,6 +95,15 @@ const ProjectMessageSchema = new Schema<IProjectMessage>(
     timestamps: true,
   }
 );
+
+ProjectMessageSchema.pre('validate', function (next) {
+  const hasContent = Boolean(this.content && this.content.trim().length > 0);
+  const hasAttachments = Array.isArray(this.attachments) && this.attachments.length > 0;
+  if (!hasContent && !hasAttachments) {
+    this.invalidate('content', 'Message must contain either text or at least one attachment.');
+  }
+  next();
+});
 
 ProjectMessageSchema.index({ project: 1, createdAt: -1 });
 

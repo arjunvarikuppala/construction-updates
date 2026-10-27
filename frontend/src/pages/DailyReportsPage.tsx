@@ -38,7 +38,7 @@ export const DailyReportsPage: React.FC = () => {
 
       return api.get<{ count: number; reports: DailyReport[] }>(`/daily-reports?${params.toString()}`);
     },
-    refetchInterval: 15000,
+    refetchInterval: 6000,
   });
 
   // Fetch missing reports alert for Owner

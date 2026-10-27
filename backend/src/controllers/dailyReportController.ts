@@ -170,7 +170,8 @@ export async function getDailyReportById(req: AuthenticatedRequest, res: Respons
       return;
     }
 
-    const accessCheck = await verifyUserProjectAccess((report.project as any)._id, req.user!.userId, req.user!.role);
+    const projectId = String((report.project as any)?._id || report.project);
+    const accessCheck = await verifyUserProjectAccess(projectId, req.user!.userId, req.user!.role);
     if (!accessCheck.allowed) {
       res.status(403).json({ success: false, message: 'Forbidden. You do not have access to this report.' });
       return;
@@ -182,7 +183,7 @@ export async function getDailyReportById(req: AuthenticatedRequest, res: Respons
       await ReportView.findOneAndUpdate(
         { report: report._id, viewer: req.user!.userId },
         {
-          project: (report.project as any)._id,
+          project: projectId,
           viewerRole: 'MD',
           lastViewedAt: now,
           reportUpdatedAtSnapshot: report.updatedAt,
@@ -194,7 +195,7 @@ export async function getDailyReportById(req: AuthenticatedRequest, res: Respons
       // Instant real-time broadcast so In-Charge receives updated Seen status immediately
       broadcastReportViewed({
         reportId: report._id.toString(),
-        projectId: (report.project as any)._id.toString(),
+        projectId,
         viewerId: req.user!.userId,
         viewerName: req.user!.name || 'Managing Director',
         viewedAt: now.toISOString(),
@@ -208,7 +209,7 @@ export async function getDailyReportById(req: AuthenticatedRequest, res: Respons
             const notif = await Notification.create({
               recipient: authorId,
               sender: req.user!.userId,
-              project: (report.project as any)._id,
+              project: projectId,
               type: 'DAILY_REPORT_VIEWED',
               title: 'Daily Report Viewed by MD',
               message: `${req.user!.name || 'Managing Director'} viewed your daily report "${report.titleOfWork || 'Daily Work Log'}".`,
@@ -239,7 +240,8 @@ export async function recordDailyReportView(req: AuthenticatedRequest, res: Resp
       return;
     }
 
-    const accessCheck = await verifyUserProjectAccess((report.project as any)._id, req.user!.userId, req.user!.role);
+    const projectId = String((report.project as any)?._id || report.project);
+    const accessCheck = await verifyUserProjectAccess(projectId, req.user!.userId, req.user!.role);
     if (!accessCheck.allowed) {
       res.status(403).json({ success: false, message: 'Forbidden.' });
       return;
@@ -250,7 +252,7 @@ export async function recordDailyReportView(req: AuthenticatedRequest, res: Resp
       await ReportView.findOneAndUpdate(
         { report: report._id, viewer: req.user!.userId },
         {
-          project: (report.project as any)._id,
+          project: projectId,
           viewerRole: 'MD',
           lastViewedAt: now,
           reportUpdatedAtSnapshot: report.updatedAt,
@@ -261,13 +263,13 @@ export async function recordDailyReportView(req: AuthenticatedRequest, res: Resp
 
       await logAudit('DAILY_REPORT_VIEWED', req.user!.userId, 'REPORT_VIEW', report._id, {
         reportId: report._id,
-        projectId: (report.project as any)._id,
+        projectId,
       });
 
       // Instant real-time broadcast to all connected clients
       broadcastReportViewed({
         reportId: report._id.toString(),
-        projectId: (report.project as any)._id.toString(),
+        projectId,
         viewerId: req.user!.userId,
         viewerName: req.user!.name || 'Managing Director',
         viewedAt: now.toISOString(),
@@ -281,7 +283,7 @@ export async function recordDailyReportView(req: AuthenticatedRequest, res: Resp
             const notif = await Notification.create({
               recipient: authorId,
               sender: req.user!.userId,
-              project: (report.project as any)._id,
+              project: projectId,
               type: 'DAILY_REPORT_VIEWED',
               title: 'Daily Report Viewed by MD',
               message: `${req.user!.name || 'Managing Director'} viewed your daily report "${report.titleOfWork || 'Daily Work Log'}".`,

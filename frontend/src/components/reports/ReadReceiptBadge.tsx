@@ -71,12 +71,12 @@ export const ReadReceiptBadge: React.FC<ReadReceiptBadgeProps> = ({
   if (status === 'SEEN_BY_MD') {
     return (
       <div
-        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 animate-in fade-in ${className}`}
+        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-2xs transition-all duration-300 animate-in fade-in zoom-in-95 ${className}`}
         title={`Verified MD view recorded at ${lastViewedAt ? formatDate(lastViewedAt, 'dd MMM yyyy, hh:mm a') : 'recent'}`}
       >
-        <Eye className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
-        <span>
-          Seen by MD{detailed && viewerName !== 'MD' ? ` (${viewerName})` : ''}
+        <Eye className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0 animate-pulse" />
+        <span className="font-bold">
+          Seen by MD{viewerName && viewerName !== 'MD' && viewerName !== 'Managing Director' ? ` (${viewerName})` : ''}
           {lastViewedAt ? `: ${formatDate(lastViewedAt, 'dd MMM, hh:mm a')}` : ''}
         </span>
       </div>

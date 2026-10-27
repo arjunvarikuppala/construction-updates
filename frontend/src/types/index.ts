@@ -479,8 +479,14 @@ export type MessageContextType = 'GENERAL' | 'DAILY_REPORT' | 'EXPENSE' | 'PAYME
 export interface MessageAttachment {
   url: string;
   name: string;
-  type: string;
+  type: 'image' | 'video' | 'pdf' | 'document' | 'other' | string;
+  mimeType?: string;
   size?: number;
+  storageKey?: string;
+  width?: number;
+  height?: number;
+  duration?: number;
+  thumbnailUrl?: string;
 }
 
 export interface ProjectMessage {

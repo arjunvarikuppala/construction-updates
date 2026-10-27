@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useMemo, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useAuth } from './AuthContext.js';
+import { useToast } from './ToastContext.js';
 import { useQueryClient } from '@tanstack/react-query';
 
 interface SocketContextType {
@@ -19,6 +20,7 @@ const SocketContext = createContext<SocketContextType>({
 
 export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { token, user } = useAuth();
+  const { info: toastInfo } = useToast();
   const queryClient = useQueryClient();
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -33,12 +35,13 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return;
     }
 
-    // Connect to same origin host
+    // Connect to same origin host using configured Vite socket.io proxy
     const socketInstance: Socket = io({
+      path: '/socket.io',
       auth: { token },
       transports: ['websocket', 'polling'],
-      reconnectionAttempts: 10,
-      reconnectionDelay: 2000,
+      reconnectionAttempts: 15,
+      reconnectionDelay: 1500,
     });
 
     socketInstance.on('connect', () => {
@@ -50,7 +53,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
 
     // Real-time notification updates
-    socketInstance.on('notification:new', (notification) => {
+    socketInstance.on('notification:new', () => {
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
       queryClient.invalidateQueries({ queryKey: ['notifications-unread-count'] });
     });
@@ -82,12 +85,72 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       queryClient.invalidateQueries({ queryKey: ['project-presence'] });
     });
 
-    // Real-time report read receipt updates
-    socketInstance.on('report:viewed', (data) => {
-      queryClient.invalidateQueries({ queryKey: ['daily-reports'] });
+    // DYNAMIC INSTANT REPORT READ RECEIPT UPDATES
+    socketInstance.on('report:viewed', (data: any) => {
       if (data?.reportId) {
-        queryClient.invalidateQueries({ queryKey: ['daily-report-detail', data.reportId] });
+        const viewedAt = data.viewedAt || new Date().toISOString();
+        const viewerName = data.viewerName || 'Managing Director';
+
+        // 1. Instantly update all daily-reports in cache with ZERO network delay
+        queryClient.setQueriesData(
+          { queryKey: ['daily-reports'] },
+          (oldData: any) => {
+            if (!oldData || !Array.isArray(oldData.reports)) return oldData;
+            return {
+              ...oldData,
+              reports: oldData.reports.map((r: any) => {
+                const rId = r._id || r.id;
+                if (String(rId) === String(data.reportId)) {
+                  return {
+                    ...r,
+                    readReceipt: {
+                      status: 'SEEN_BY_MD',
+                      lastViewedAt: viewedAt,
+                      lastViewedByName: viewerName,
+                      lastViewedById: data.viewerId,
+                      isCurrentRevisionSeen: true,
+                    },
+                  };
+                }
+                return r;
+              }),
+            };
+          }
+        );
+
+        // 2. Also update detail view in cache if currently open
+        queryClient.setQueryData(
+          ['daily-report-detail', data.reportId],
+          (oldData: any) => {
+            if (!oldData || !oldData.report) return oldData;
+            return {
+              ...oldData,
+              report: {
+                ...oldData.report,
+                readReceipt: {
+                  status: 'SEEN_BY_MD',
+                  lastViewedAt: viewedAt,
+                  lastViewedByName: viewerName,
+                  lastViewedById: data.viewerId,
+                  isCurrentRevisionSeen: true,
+                },
+              },
+            };
+          }
+        );
+
+        // 3. Notify Site In-Charge dynamically if they are logged in
+        const isInCharge = user?.role === 'SITE_INCHARGE' || user?.role === 'IN_CHARGE';
+        if (isInCharge) {
+          toastInfo(`👁️ Daily report viewed by MD (${viewerName})`);
+        }
       }
+
+      // Background re-sync with server
+      queryClient.invalidateQueries({ queryKey: ['daily-reports'] });
+      queryClient.invalidateQueries({ queryKey: ['in-charge-dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications-unread-count'] });
     });
 
     // Real-time payment status updates
@@ -101,7 +164,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return () => {
       socketInstance.disconnect();
     };
-  }, [token, user?.id]);
+  }, [token, user?.id, toastInfo, queryClient, user?.role]);
 
   const joinProject = useCallback(
     (projectId: string) => {
