@@ -1,5 +1,5 @@
 import React from 'react';
-import { Eye, EyeOff, AlertCircle, CheckCheck } from 'lucide-react';
+import { Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { ReadReceiptInfo } from '../../types/index.js';
 import { formatDate } from '../../utils/dates.js';
 import { useAuth } from '../../context/AuthContext.js';
@@ -18,11 +18,17 @@ export const ReadReceiptBadge: React.FC<ReadReceiptBadgeProps> = ({
   const { user } = useAuth();
   const isMDUser = user?.role === 'MD' || user?.role === 'OWNER';
 
-  const status = readReceipt?.status || 'NOT_VIEWED';
-  const lastViewedAt = readReceipt?.lastViewedAt;
-  const viewerName = readReceipt?.lastViewedByName;
+  // REQUIREMENT 1 & 4: Completely hide read-receipt badges from the Managing Director (MD) dashboard.
+  // Never show "Seen by MD", "Not seen by MD", or self-confirmations to the MD.
+  if (isMDUser || !readReceipt) {
+    return null;
+  }
 
-  // 1. SEEN BY MD (Active verified review timestamp)
+  const status = readReceipt.status || 'NOT_VIEWED';
+  const lastViewedAt = readReceipt.lastViewedAt;
+  const viewerName = readReceipt.lastViewedByName;
+
+  // 1. SEEN BY MD (Active verified review timestamp visible strictly to Site In-Charge)
   if (status === 'SEEN_BY_MD') {
     const formattedTimestamp = lastViewedAt
       ? formatDate(lastViewedAt, 'dd MMM yyyy, hh:mm a')
@@ -64,10 +70,10 @@ export const ReadReceiptBadge: React.FC<ReadReceiptBadgeProps> = ({
   return (
     <div
       className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200 ${className}`}
-      title={isMDUser ? 'You have not opened and viewed this report yet' : 'MD has not viewed this report yet'}
+      title="MD has not viewed this report yet"
     >
       <EyeOff className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-      <span>{isMDUser ? 'MD has not viewed this report yet' : 'Not viewed by MD yet'}</span>
+      <span>Not viewed by MD yet</span>
     </div>
   );
 };

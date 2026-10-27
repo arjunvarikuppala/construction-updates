@@ -10,8 +10,17 @@ import { logAudit } from '../services/auditService.js';
 import { verifyUserProjectAccess } from '../middleware/auth.js';
 import { emitToProject, emitToUser, broadcastReportViewed } from '../services/socketService.js';
 
-async function attachReadReceipts(reports: any[]) {
+async function attachReadReceipts(reports: any[], callerRole?: string) {
   if (!reports || reports.length === 0) return [];
+
+  // Role-specific enforcement: If caller is MD or OWNER, do not attach read receipt tracking to response
+  if (callerRole && isMD(callerRole)) {
+    return reports.map((r) => {
+      const reportObj = r.toObject ? r.toObject() : { ...r };
+      delete reportObj.readReceipt;
+      return reportObj;
+    });
+  }
 
   const reportIds = reports.map((r) => r._id);
   const views = await ReportView.find({ report: { $in: reportIds } }).populate('viewer', 'name email role');
@@ -155,7 +164,7 @@ export async function listDailyReports(req: AuthenticatedRequest, res: Response)
       .populate('lastEditedBy', 'name email role')
       .sort({ workDate: -1, createdAt: -1 });
 
-    const enrichedReports = await attachReadReceipts(reports);
+    const enrichedReports = await attachReadReceipts(reports, user.role);
 
     res.json({ success: true, count: enrichedReports.length, reports: enrichedReports });
   } catch (error: any) {
@@ -233,7 +242,7 @@ export async function getDailyReportById(req: AuthenticatedRequest, res: Respons
       }
     }
 
-    const [enrichedReport] = await attachReadReceipts([report]);
+    const [enrichedReport] = await attachReadReceipts([report], req.user!.role);
     res.json({ success: true, report: enrichedReport });
   } catch (error: any) {
     res.status(500).json({ success: false, message: 'Failed to fetch daily report', error: error.message });
@@ -310,7 +319,7 @@ export async function recordDailyReportView(req: AuthenticatedRequest, res: Resp
       }
     }
 
-    const [enrichedReport] = await attachReadReceipts([report]);
+    const [enrichedReport] = await attachReadReceipts([report], req.user!.role);
     res.json({ success: true, message: 'Report view recorded', readReceipt: enrichedReport?.readReceipt });
   } catch (error: any) {
     res.status(500).json({ success: false, message: 'Failed to record report view', error: error.message });
