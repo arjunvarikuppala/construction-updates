@@ -16,9 +16,6 @@ export interface IExpense extends Document {
   rejectionReason?: string;
   resubmissionCount: number;
   previousNotes?: string;
-  paymentStatus?: 'UNPAID' | 'PAYMENT_REQUESTED' | 'PAID';
-  paymentRequestId?: mongoose.Types.ObjectId;
-  paidAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -108,19 +105,6 @@ const ExpenseSchema = new Schema<IExpense>(
     previousNotes: {
       type: String,
       trim: true,
-    },
-    paymentStatus: {
-      type: String,
-      enum: ['UNPAID', 'PAYMENT_REQUESTED', 'PAID'],
-      default: 'UNPAID',
-      index: true,
-    },
-    paymentRequestId: {
-      type: Schema.Types.ObjectId,
-      ref: 'PaymentRequest',
-    },
-    paidAt: {
-      type: Date,
     },
   },
   {

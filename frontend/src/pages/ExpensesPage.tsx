@@ -290,7 +290,6 @@ export const ExpensesPage: React.FC = () => {
               onReject={(exp) => setRejectTarget(exp)}
               onResubmit={(exp) => setResubmitTarget(exp)}
               onView={(exp) => setApprovalTarget(exp)}
-              onPay={() => navigate('/payments')}
             />
           </div>
 

@@ -10,7 +10,6 @@ import {
   FileText,
   DollarSign,
   X,
-  Banknote,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.js';
 
@@ -45,19 +44,19 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({ pendingApprova
               </button>
             </div>
 
-            <div className="grid grid-cols-3 gap-2 pt-1">
+            <div className="grid grid-cols-2 gap-3 pt-1">
               <button
                 onClick={() => {
                   setShowActionSheet(false);
                   navigate('/reports/new');
                 }}
-                className="flex flex-col items-center justify-center p-3 rounded-2xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-950 text-center transition-colors"
+                className="flex flex-col items-center justify-center p-4 rounded-2xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-950 text-center transition-colors"
               >
-                <div className="w-10 h-10 rounded-xl bg-amber-500 text-navy-950 flex items-center justify-center mb-1.5 shadow-sm font-bold">
-                  <FileText className="w-5 h-5" />
+                <div className="w-12 h-12 rounded-xl bg-amber-500 text-navy-950 flex items-center justify-center mb-2 shadow-sm font-bold">
+                  <FileText className="w-6 h-6" />
                 </div>
-                <span className="text-[11px] font-bold">Daily Report</span>
-                <span className="text-[9px] text-amber-800 mt-0.5">Site logs</span>
+                <span className="text-xs font-bold">Daily Report</span>
+                <span className="text-[10px] text-amber-800 mt-0.5">Submit site log & photos</span>
               </button>
 
               <button
@@ -65,27 +64,13 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({ pendingApprova
                   setShowActionSheet(false);
                   navigate('/expenses/new');
                 }}
-                className="flex flex-col items-center justify-center p-3 rounded-2xl bg-navy-50 hover:bg-navy-100 border border-navy-200 text-navy-950 text-center transition-colors"
+                className="flex flex-col items-center justify-center p-4 rounded-2xl bg-navy-50 hover:bg-navy-100 border border-navy-200 text-navy-950 text-center transition-colors"
               >
-                <div className="w-10 h-10 rounded-xl bg-navy-900 text-amber-400 flex items-center justify-center mb-1.5 shadow-sm font-bold">
-                  <DollarSign className="w-5 h-5" />
+                <div className="w-12 h-12 rounded-xl bg-navy-900 text-amber-400 flex items-center justify-center mb-2 shadow-sm font-bold">
+                  <DollarSign className="w-6 h-6" />
                 </div>
-                <span className="text-[11px] font-bold">Expense</span>
-                <span className="text-[9px] text-navy-700 mt-0.5">Upload bill</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setShowActionSheet(false);
-                  navigate('/payments');
-                }}
-                className="flex flex-col items-center justify-center p-3 rounded-2xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-950 text-center transition-colors"
-              >
-                <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center mb-1.5 shadow-sm font-bold">
-                  <Banknote className="w-5 h-5" />
-                </div>
-                <span className="text-[11px] font-bold">Payouts</span>
-                <span className="text-[9px] text-emerald-800 mt-0.5">Pay vendors</span>
+                <span className="text-xs font-bold">Site Expense</span>
+                <span className="text-[10px] text-navy-700 mt-0.5">Upload receipt & bill</span>
               </button>
             </div>
           </div>
