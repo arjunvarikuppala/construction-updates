@@ -260,3 +260,18 @@ export function emitToMDs(event: string, data: any): void {
     io.to('role:MD').emit(event, data);
   }
 }
+
+export function broadcastReportViewed(data: {
+  reportId: string;
+  projectId: string;
+  viewerId: string;
+  viewerName: string;
+  viewedAt: Date | string;
+}): void {
+  if (io) {
+    // 1. Broadcast globally to all connected clients (so In-Charge on /reports or dashboard gets it instantly)
+    io.emit('report:viewed', data);
+    // 2. Also emit to specific project channel room
+    io.to(`project:${data.projectId}`).emit('report:viewed', data);
+  }
+}

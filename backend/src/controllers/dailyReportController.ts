@@ -4,10 +4,11 @@ import { DailyReport } from '../models/DailyReport.js';
 import { Project } from '../models/Project.js';
 import { ProjectAssignment } from '../models/ProjectAssignment.js';
 import { ReportView } from '../models/ReportView.js';
+import { Notification } from '../models/Notification.js';
 import { AuthenticatedRequest, isMD, isSiteInCharge } from '../types/index.js';
 import { logAudit } from '../services/auditService.js';
 import { verifyUserProjectAccess } from '../middleware/auth.js';
-import { emitToProject } from '../services/socketService.js';
+import { emitToProject, emitToUser, broadcastReportViewed } from '../services/socketService.js';
 
 async function attachReadReceipts(reports: any[]) {
   if (!reports || reports.length === 0) return [];
@@ -176,25 +177,50 @@ export async function getDailyReportById(req: AuthenticatedRequest, res: Respons
     }
 
     // Record view if authenticated user is MD
-    if (req.user!.role === 'MD') {
+    if (isMD(req.user!.role)) {
+      const now = new Date();
       await ReportView.findOneAndUpdate(
         { report: report._id, viewer: req.user!.userId },
         {
           project: (report.project as any)._id,
           viewerRole: 'MD',
-          lastViewedAt: new Date(),
+          lastViewedAt: now,
           reportUpdatedAtSnapshot: report.updatedAt,
-          $setOnInsert: { firstViewedAt: new Date() },
+          $setOnInsert: { firstViewedAt: now },
         },
         { upsert: true, new: true }
       );
 
-      emitToProject((report.project as any)._id.toString(), 'report:viewed', {
-        reportId: report._id,
+      // Instant real-time broadcast so In-Charge receives updated Seen status immediately
+      broadcastReportViewed({
+        reportId: report._id.toString(),
+        projectId: (report.project as any)._id.toString(),
         viewerId: req.user!.userId,
-        viewerName: req.user!.email,
-        viewedAt: new Date(),
+        viewerName: req.user!.name || 'Managing Director',
+        viewedAt: now.toISOString(),
       });
+
+      // Send In-App notification to the In-Charge who submitted this report
+      if (report.submittedBy) {
+        const authorId = String((report.submittedBy as any)._id || report.submittedBy);
+        if (authorId !== req.user!.userId) {
+          try {
+            const notif = await Notification.create({
+              recipient: authorId,
+              sender: req.user!.userId,
+              project: (report.project as any)._id,
+              type: 'DAILY_REPORT_VIEWED',
+              title: 'Daily Report Viewed by MD',
+              message: `${req.user!.name || 'Managing Director'} viewed your daily report "${report.titleOfWork || 'Daily Work Log'}".`,
+              relatedEntity: 'DAILY_REPORT',
+              relatedId: report._id.toString(),
+            });
+            emitToUser(authorId, 'notification:new', notif);
+          } catch (notifErr) {
+            console.error('Failed to create report view notification:', notifErr);
+          }
+        }
+      }
     }
 
     const [enrichedReport] = await attachReadReceipts([report]);
@@ -219,15 +245,16 @@ export async function recordDailyReportView(req: AuthenticatedRequest, res: Resp
       return;
     }
 
-    if (req.user!.role === 'MD') {
+    if (isMD(req.user!.role)) {
+      const now = new Date();
       await ReportView.findOneAndUpdate(
         { report: report._id, viewer: req.user!.userId },
         {
           project: (report.project as any)._id,
           viewerRole: 'MD',
-          lastViewedAt: new Date(),
+          lastViewedAt: now,
           reportUpdatedAtSnapshot: report.updatedAt,
-          $setOnInsert: { firstViewedAt: new Date() },
+          $setOnInsert: { firstViewedAt: now },
         },
         { upsert: true, new: true }
       );
@@ -237,11 +264,36 @@ export async function recordDailyReportView(req: AuthenticatedRequest, res: Resp
         projectId: (report.project as any)._id,
       });
 
-      emitToProject((report.project as any)._id.toString(), 'report:viewed', {
-        reportId: report._id,
+      // Instant real-time broadcast to all connected clients
+      broadcastReportViewed({
+        reportId: report._id.toString(),
+        projectId: (report.project as any)._id.toString(),
         viewerId: req.user!.userId,
-        viewedAt: new Date(),
+        viewerName: req.user!.name || 'Managing Director',
+        viewedAt: now.toISOString(),
       });
+
+      // Send In-App notification to the In-Charge who submitted this report
+      if (report.submittedBy) {
+        const authorId = String((report.submittedBy as any)._id || report.submittedBy);
+        if (authorId !== req.user!.userId) {
+          try {
+            const notif = await Notification.create({
+              recipient: authorId,
+              sender: req.user!.userId,
+              project: (report.project as any)._id,
+              type: 'DAILY_REPORT_VIEWED',
+              title: 'Daily Report Viewed by MD',
+              message: `${req.user!.name || 'Managing Director'} viewed your daily report "${report.titleOfWork || 'Daily Work Log'}".`,
+              relatedEntity: 'DAILY_REPORT',
+              relatedId: report._id.toString(),
+            });
+            emitToUser(authorId, 'notification:new', notif);
+          } catch (notifErr) {
+            console.error('Failed to create report view notification:', notifErr);
+          }
+        }
+      }
     }
 
     const [enrichedReport] = await attachReadReceipts([report]);

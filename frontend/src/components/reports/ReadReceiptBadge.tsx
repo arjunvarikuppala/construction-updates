@@ -1,7 +1,8 @@
 import React from 'react';
-import { Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { Eye, EyeOff, AlertCircle, Check } from 'lucide-react';
 import { ReadReceiptInfo } from '../../types/index.js';
 import { formatDate } from '../../utils/dates.js';
+import { useAuth } from '../../context/AuthContext.js';
 
 interface ReadReceiptBadgeProps {
   readReceipt?: ReadReceiptInfo;
@@ -14,14 +15,63 @@ export const ReadReceiptBadge: React.FC<ReadReceiptBadgeProps> = ({
   className = '',
   detailed = false,
 }) => {
+  const { user } = useAuth();
+  const isMDUser = user?.role === 'MD' || user?.role === 'OWNER';
+
   const status = readReceipt?.status || 'NOT_VIEWED';
   const lastViewedAt = readReceipt?.lastViewedAt;
   const viewerName = readReceipt?.lastViewedByName || 'MD';
 
+  // ========================================================
+  // MANAGING DIRECTOR VIEW:
+  // "Seen by MD: [timestamp]" is strictly shown TO ONLY THE INCHARGE.
+  // The MD is the reviewer; they see "Unread" / "New Revision" / "Reviewed" without self-referential timestamps.
+  // ========================================================
+  if (isMDUser) {
+    if (status === 'NOT_VIEWED') {
+      return (
+        <div
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-sky-50 text-sky-800 border border-sky-200 ${className}`}
+          title="You have not reviewed this daily report yet"
+        >
+          <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-pulse" />
+          <span>Unread</span>
+        </div>
+      );
+    }
+
+    if (status === 'REVISION_NOT_VIEWED') {
+      return (
+        <div
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200 ${className}`}
+          title="The Site In-Charge edited this report after your last view"
+        >
+          <AlertCircle className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
+          <span>New Revision</span>
+        </div>
+      );
+    }
+
+    // status === 'SEEN_BY_MD'
+    return (
+      <div
+        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-50 text-slate-500 border border-slate-200/90 ${className}`}
+        title="You have reviewed this daily report"
+      >
+        <Check className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+        <span>Reviewed</span>
+      </div>
+    );
+  }
+
+  // ========================================================
+  // SITE IN-CHARGE VIEW:
+  // Shows the verified MD read receipt with exact timestamp as soon as MD views it.
+  // ========================================================
   if (status === 'SEEN_BY_MD') {
     return (
       <div
-        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 ${className}`}
+        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 animate-in fade-in ${className}`}
         title={`Verified MD view recorded at ${lastViewedAt ? formatDate(lastViewedAt, 'dd MMM yyyy, hh:mm a') : 'recent'}`}
       >
         <Eye className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
