@@ -225,7 +225,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
   return (
     <div
       onClick={onClick}
-      className={`bg-white rounded-3xl border border-slate-200/90 shadow-card transition-all duration-200 overflow-hidden ${
+      className={`bg-white rounded-3xl border border-amber-300/80 shadow-card transition-all duration-200 overflow-hidden ${
         onClick ? 'cursor-pointer hover:border-amber-400 hover:shadow-lg' : ''
       } ${isHero ? 'p-5 sm:p-6' : 'p-4 sm:p-5'}`}
     >
@@ -250,21 +250,21 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
-          {/* Freshness Badge */}
+          {/* Freshness / Verification Badge */}
           {isStale ? (
-            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200" title="Offline cached data">
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200" title="Offline cached data">
               <Clock className="w-3 h-3 text-slate-500" />
               Cached
             </span>
           ) : cached ? (
-            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200" title="Cached observation">
-              <Clock className="w-3 h-3 text-blue-500" />
+            <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200/80" title="Verified observation">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
               Verified
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200" title="Live observation">
+            <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/80" title="Live observation">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              Live
+              Verified Live
             </span>
           )}
 

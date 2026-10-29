@@ -1,5 +1,6 @@
 import React from 'react';
-import { ExternalLink, CheckCircle2, XCircle, RefreshCw, Eye } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { ExternalLink, CheckCircle2, XCircle, RefreshCw, Eye, ArrowRight } from 'lucide-react';
 import { Expense } from '../../types/index.js';
 import { Badge } from '../common/Badge.js';
 import { Button } from '../common/Button.js';
@@ -23,44 +24,55 @@ export const ExpenseCard: React.FC<ExpenseCardProps> = ({
   onResubmit,
   onView,
 }) => {
+  const navigate = useNavigate();
+
   return (
-    <div className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-card hover:shadow-card-hover transition-all space-y-3">
-      {/* Top row: Status and Date */}
+    <div className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-card hover:shadow-card-hover transition-all space-y-2.5">
+      {/* Row 1: Status badge and date */}
       <div className="flex items-center justify-between text-xs">
         <Badge status={expense.status} size="sm" />
         <span className="text-slate-500 font-medium">{formatDate(expense.date, 'dd MMM yyyy')}</span>
       </div>
 
-      {/* Amount & Vendor */}
-      <div className="flex items-baseline justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <h4 className="font-bold text-navy-950 text-base leading-snug truncate">{expense.vendor}</h4>
-          <span className="text-xs text-slate-500 font-medium block truncate">
-            {expense.project?.code} • {expense.project?.name}
-          </span>
-        </div>
-        <div className="text-right flex-shrink-0">
-          <span className="text-lg font-black text-navy-900">{formatINR(expense.amount)}</span>
-        </div>
+      {/* Row 2: Expense description/title and amount */}
+      <div className="flex items-baseline justify-between gap-3 pt-0.5">
+        <h4
+          className="font-bold text-navy-950 text-base leading-snug truncate flex-1 min-w-0"
+          title={expense.description || expense.vendor}
+        >
+          {expense.description || expense.vendor}
+        </h4>
+        <span className="text-base sm:text-lg font-black text-navy-900 shrink-0">
+          {formatINR(expense.amount)}
+        </span>
       </div>
 
-      {/* Description & Category */}
-      <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-xs text-slate-700 space-y-1">
-        <div className="flex items-center justify-between gap-2">
-          <Badge category={expense.category} size="sm" />
-          {expense.receiptUrl && (
-            <a
-              href={expense.receiptUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="text-[11px] font-semibold text-navy-800 flex items-center gap-1 hover:underline"
-            >
-              <ExternalLink className="w-3 h-3" />
-              <span>Bill Receipt</span>
-            </a>
-          )}
-        </div>
-        <p className="text-slate-600 line-clamp-2 pt-1">{expense.description}</p>
+      {/* Row 3: Project code and project name */}
+      <div className="flex items-center gap-1.5 text-xs text-slate-500 truncate -mt-1">
+        {expense.project?.code && (
+          <span className="font-mono text-[11px] font-bold text-navy-900 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 shrink-0">
+            {expense.project.code}
+          </span>
+        )}
+        <span className="truncate font-medium">{expense.project?.name || expense.vendor}</span>
+      </div>
+
+      {/* Row 4: Category and Bill Receipt action in a light-grey panel */}
+      <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-100 flex items-center justify-between gap-2">
+        <Badge category={expense.category} size="sm" />
+        {expense.receiptUrl ? (
+          <a
+            href={expense.receiptUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="text-[11px] font-semibold text-navy-800 flex items-center gap-1 hover:text-amber-600 transition-colors"
+          >
+            <span>Bill Receipt</span>
+            <ExternalLink className="w-3 h-3 text-slate-400" />
+          </a>
+        ) : (
+          <span className="text-[11px] text-slate-400 italic">No receipt attached</span>
+        )}
       </div>
 
       {/* Rejection Note Warning */}
@@ -71,24 +83,24 @@ export const ExpenseCard: React.FC<ExpenseCardProps> = ({
         </div>
       )}
 
-      {/* Action Buttons */}
-      <div className="pt-1 flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 [&>button]:flex-1 [&>button]:sm:flex-initial w-full sm:w-auto">
-        <Button
-          size="sm"
-          variant="ghost"
-          className="text-xs text-slate-600"
-          onClick={() => onView?.(expense)}
-          leftIcon={<Eye className="w-3.5 h-3.5" />}
+      {/* Row 5: Centered Details action with eye icon and right arrow */}
+      <div className="pt-1 border-t border-slate-100 space-y-2">
+        <button
+          type="button"
+          onClick={() => (onView ? onView(expense) : navigate('/expenses'))}
+          className="w-full py-2 px-3 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-xs font-bold text-slate-700 flex items-center justify-center gap-2 transition-colors active:bg-slate-200"
         >
-          Details
-        </Button>
+          <Eye className="w-3.5 h-3.5 text-slate-500" />
+          <span>Details</span>
+          <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
+        </button>
 
         {isOwner && expense.status === 'PENDING' && (
-          <>
+          <div className="flex items-center gap-2 pt-1">
             <Button
               size="sm"
               variant="outline"
-              className="text-xs text-rose-700 border-rose-200 hover:bg-rose-50"
+              className="flex-1 text-xs text-rose-700 border-rose-200 hover:bg-rose-50"
               onClick={() => onReject?.(expense)}
               leftIcon={<XCircle className="w-3.5 h-3.5 text-rose-600" />}
             >
@@ -97,20 +109,20 @@ export const ExpenseCard: React.FC<ExpenseCardProps> = ({
             <Button
               size="sm"
               variant="amber"
-              className="text-xs font-semibold"
+              className="flex-1 text-xs font-semibold"
               onClick={() => onApprove?.(expense)}
               leftIcon={<CheckCircle2 className="w-3.5 h-3.5" />}
             >
               Approve
             </Button>
-          </>
+          </div>
         )}
 
         {!isOwner && expense.status === 'REJECTED' && (
           <Button
             size="sm"
             variant="amber"
-            className="text-xs font-semibold"
+            className="w-full text-xs font-semibold"
             onClick={() => onResubmit?.(expense)}
             leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
           >

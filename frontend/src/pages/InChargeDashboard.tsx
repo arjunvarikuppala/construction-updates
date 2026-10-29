@@ -17,6 +17,7 @@ import {
   UserX,
   Layers,
   ArrowRightLeft,
+  MapPin,
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/common/Card.js';
 import { Button } from '../components/common/Button.js';
@@ -206,35 +207,37 @@ export const InChargeDashboard: React.FC = () => {
             </div>
           )}
 
-          {/* Hero Card for Assigned Construction Project */}
-          <div className="bg-gradient-to-br from-navy-900 to-navy-950 text-white rounded-3xl p-5 sm:p-6 shadow-xl border border-navy-800 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-              <div>
-                <span className="font-mono text-xs font-bold text-amber-400 bg-amber-500/20 border border-amber-500/30 px-2 py-0.5 rounded-md">
-                  {activeProject.code}
-                </span>
-                <h2 className="text-lg sm:text-xl font-black text-white mt-1.5 leading-snug">
-                  {activeProject.name}
-                </h2>
-                <span className="text-xs text-navy-200 mt-0.5 block">{activeProject.location}</span>
+          {/* 1. Project Summary Card */}
+          <div className="bg-navy-950 text-white rounded-3xl p-5 sm:p-6 shadow-xl border border-navy-900 space-y-4">
+            <div>
+              <span className="inline-block font-mono text-xs font-bold text-amber-400 bg-amber-500/20 border border-amber-500/30 px-2.5 py-0.5 rounded-lg">
+                {activeProject.code}
+              </span>
+              <h2 className="text-xl sm:text-2xl font-black text-white mt-2 leading-snug">
+                {activeProject.name}
+              </h2>
+              <div className="flex items-center gap-1.5 text-xs text-navy-200 mt-1">
+                <MapPin className="w-3.5 h-3.5 text-amber-400/90 shrink-0" />
+                <span>{activeProject.location}</span>
               </div>
-
-              <Button
-                size="sm"
-                variant="amber"
-                onClick={() => navigate(`/projects/${activeProjectId}`)}
-                className="w-full sm:w-auto shrink-0 font-bold"
-                rightIcon={<ArrowRight className="w-3.5 h-3.5" />}
-              >
-                Project Workspace
-              </Button>
             </div>
 
-            {/* Operational Site Claims & Approvals */}
-            <div className="space-y-1.5 pt-2 border-t border-navy-800/80">
+            {/* Full-width amber Project Workspace button */}
+            <Button
+              size="md"
+              variant="amber"
+              onClick={() => navigate(`/projects/${activeProjectId}`)}
+              className="w-full font-bold shadow-sm flex items-center justify-center gap-2"
+              rightIcon={<ArrowRight className="w-4 h-4" />}
+            >
+              Project Workspace
+            </Button>
+
+            {/* Compact approved claims and workspace status summary */}
+            <div className="space-y-1.5 pt-3 border-t border-navy-900">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-navy-300">Approved Claims:</span>
-                <span className="font-bold text-emerald-400">
+                <span className="font-bold text-emerald-400 text-sm">
                   {formatCompactINR(activeProject.approved ?? 0)}
                 </span>
               </div>
@@ -251,7 +254,7 @@ export const InChargeDashboard: React.FC = () => {
             </div>
           </div>
 
-          {/* Site Weather & Conditions Card with Error Isolation */}
+          {/* 2. Site Weather & Conditions Card with Error Isolation */}
           <ErrorBoundary
             level="widget"
             widgetName="Site Weather"
@@ -277,7 +280,90 @@ export const InChargeDashboard: React.FC = () => {
             />
           </ErrorBoundary>
 
-          {/* Today's Daily Report Quick Action Status Card */}
+          {/* 3. Recent Site Submissions */}
+          <div className="bg-white rounded-3xl border border-slate-200/90 p-4 sm:p-5 shadow-card space-y-3.5">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm sm:text-base font-bold text-navy-950">Recent Site Submissions</h3>
+                <p className="text-xs text-slate-500">Live review status from Managing Director</p>
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => navigate('/expenses')}
+                rightIcon={<ArrowRight className="w-3.5 h-3.5" />}
+              >
+                All
+              </Button>
+            </div>
+
+            <div className="space-y-2.5">
+              {pendingExpenses.slice(0, 3).map((e) => (
+                <ExpenseCard
+                  key={e._id || e.id}
+                  expense={e}
+                  isOwner={false}
+                  onView={() => navigate('/expenses')}
+                  onResubmit={(exp) => setResubmitTarget(exp)}
+                />
+              ))}
+              {approvedExpenses.slice(0, 2).map((e) => (
+                <ExpenseCard
+                  key={e._id || e.id}
+                  expense={e}
+                  isOwner={false}
+                  onView={() => navigate('/expenses')}
+                />
+              ))}
+              {pendingExpenses.length === 0 && approvedExpenses.length === 0 && (
+                <p className="text-xs text-slate-400 italic py-4 text-center">
+                  No expenses submitted yet for this project.
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* 4. Action Required: Rejected Expenses Alert */}
+          {rejectedExpenses.length > 0 && (
+            <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-rose-800 font-bold text-xs uppercase tracking-wider">
+                  <AlertTriangle className="w-4 h-4 text-rose-600" />
+                  <span>Action Required: {rejectedExpenses.length} Rejected Expense(s)</span>
+                </div>
+                <span className="text-[11px] text-rose-600 font-semibold">Correct & Resubmit</span>
+              </div>
+
+              <div className="space-y-2">
+                {rejectedExpenses.slice(0, 3).map((exp) => (
+                  <div
+                    key={exp._id || exp.id}
+                    className="bg-white p-3 rounded-xl border border-rose-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs"
+                  >
+                    <div>
+                      <span className="font-bold text-navy-950 block">{exp.description}</span>
+                      <span className="text-[11px] text-rose-700 font-medium">
+                        Reason: {exp.rejectionReason || 'Receipt unclear'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto pt-1 sm:pt-0 border-t sm:border-t-0 border-rose-100">
+                      <span className="font-bold text-navy-950">{formatINR(exp.amount)}</span>
+                      <Button
+                        size="sm"
+                        variant="amber"
+                        onClick={() => setResubmitTarget(exp)}
+                        className="text-xs py-1 px-2.5"
+                      >
+                        Resubmit
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 5. Today's Daily Report Quick Action Status Card */}
           <div className="bg-white rounded-2xl border border-slate-200/90 p-4 sm:p-5 shadow-card space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -330,7 +416,7 @@ export const InChargeDashboard: React.FC = () => {
             </div>
           </div>
 
-          {/* Quick Action Buttons Grid */}
+          {/* 6. Quick Action Buttons Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <button
               onClick={() => navigate(`/expenses/new?projectId=${activeProjectId}`)}
@@ -361,78 +447,6 @@ export const InChargeDashboard: React.FC = () => {
                 Work items, labour, machinery logs
               </span>
             </button>
-          </div>
-
-          {/* Action Required: Rejected Expenses Alert */}
-          {rejectedExpenses.length > 0 && (
-            <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-rose-800 font-bold text-xs uppercase tracking-wider">
-                  <AlertTriangle className="w-4 h-4 text-rose-600" />
-                  <span>Action Required: {rejectedExpenses.length} Rejected Expense(s)</span>
-                </div>
-                <span className="text-[11px] text-rose-600 font-semibold">Correct & Resubmit</span>
-              </div>
-
-              <div className="space-y-2">
-                {rejectedExpenses.slice(0, 3).map((exp) => (
-                  <div
-                    key={exp._id || exp.id}
-                    className="bg-white p-3 rounded-xl border border-rose-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs"
-                  >
-                    <div>
-                      <span className="font-bold text-navy-950 block">{exp.description}</span>
-                      <span className="text-[11px] text-rose-700 font-medium">
-                        Reason: {exp.rejectionReason || 'Receipt unclear'}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto pt-1 sm:pt-0 border-t sm:border-t-0 border-rose-100">
-                      <span className="font-bold text-navy-950">{formatINR(exp.amount)}</span>
-                      <Button
-                        size="sm"
-                        variant="amber"
-                        onClick={() => setResubmitTarget(exp)}
-                        className="text-xs py-1 px-2.5"
-                      >
-                        Resubmit
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Recent Expenses List with Statuses */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-card space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-bold text-navy-950">Recent Site Submissions</h3>
-                <p className="text-xs text-slate-500">Live review status from Managing Director</p>
-              </div>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => navigate('/expenses')}
-                rightIcon={<ArrowRight className="w-3.5 h-3.5" />}
-              >
-                All
-              </Button>
-            </div>
-
-            <div className="space-y-2">
-              {pendingExpenses.slice(0, 3).map((e) => (
-                <ExpenseCard key={e._id || e.id} expense={e} isOwner={false} />
-              ))}
-              {approvedExpenses.slice(0, 2).map((e) => (
-                <ExpenseCard key={e._id || e.id} expense={e} isOwner={false} />
-              ))}
-              {pendingExpenses.length === 0 && approvedExpenses.length === 0 && (
-                <p className="text-xs text-slate-400 italic py-2 text-center">
-                  No expenses submitted yet for this project.
-                </p>
-              )}
-            </div>
           </div>
         </>
       )}

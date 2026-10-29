@@ -16,7 +16,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({ onOpenMobileDrawer }) => {
   const { totalUnread } = useUnreadReports();
 
   return (
-    <header className="h-16 bg-white border-b border-slate-200/90 px-2.5 sm:px-6 flex items-center justify-between sticky top-0 z-30 shadow-xs flex-shrink-0">
+    <header className="h-16 bg-white border-b border-slate-200/90 px-2.5 sm:px-6 flex items-center justify-between fixed top-0 inset-x-0 z-40 md:sticky md:top-0 md:z-30 shadow-xs flex-shrink-0">
       {/* Mobile Brand / Desktop Title */}
       <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
         {/* Mobile Hamburger Drawer Trigger */}

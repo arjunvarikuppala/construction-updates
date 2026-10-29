@@ -31,7 +31,7 @@ export const AppLayout: React.FC = () => {
   const isMessagesPage = location.pathname.startsWith('/messages');
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="flex h-screen h-[100dvh] overflow-hidden bg-background">
       {/* Desktop Sidebar & Mobile Collapsible Drawer */}
       <Sidebar
         pendingApprovalsCount={pendingCount}
@@ -40,16 +40,16 @@ export const AppLayout: React.FC = () => {
       />
 
       {/* Main Layout Area */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden min-w-0">
+      <div className="flex-1 flex flex-col h-full overflow-hidden min-w-0 relative">
         <OfflineBanner />
         <TopHeader onOpenMobileDrawer={() => setIsMobileDrawerOpen(true)} />
 
-        {/* Scrollable Viewport with Bottom Nav Clearance */}
+        {/* Scrollable Viewport with Top Header Clearance & Bottom Nav Clearance */}
         <main
           className={`flex-1 min-w-0 ${
             isMessagesPage
-              ? 'overflow-hidden p-2 sm:p-4 md:p-6 pb-20 md:pb-6 flex flex-col min-h-0'
-              : 'overflow-y-auto px-3 py-4 sm:px-6 sm:py-6 pb-28 md:pb-8'
+              ? 'overflow-hidden p-2 sm:p-4 md:p-6 pt-16 md:pt-6 pb-20 md:pb-6 flex flex-col min-h-0'
+              : 'overflow-y-auto px-3 py-4 sm:px-6 sm:py-6 pt-20 md:pt-6 pb-28 md:pb-8'
           }`}
         >
           <div className={`max-w-7xl mx-auto w-full ${isMessagesPage ? 'h-full flex flex-col flex-1 min-h-0' : ''}`}>

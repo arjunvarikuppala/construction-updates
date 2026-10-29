@@ -77,19 +77,37 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({ pendingApprova
                 <span className="text-[10px] text-navy-700 mt-0.5">Upload receipt & bill</span>
               </button>
 
-              <button
-                onClick={() => {
-                  setShowActionSheet(false);
-                  navigate('/payments');
-                }}
-                className="flex flex-col items-center justify-center p-3.5 rounded-2xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-950 text-center transition-colors"
-              >
-                <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center mb-1.5 shadow-sm font-bold">
-                  <CreditCard className="w-5 h-5" />
-                </div>
-                <span className="text-xs font-bold">Payment Request</span>
-                <span className="text-[10px] text-emerald-800 mt-0.5">NEFT / RTGS / UPI</span>
-              </button>
+              {isOwner ? (
+                <button
+                  onClick={() => {
+                    setShowActionSheet(false);
+                    navigate('/approvals');
+                  }}
+                  className="flex flex-col items-center justify-center p-3.5 rounded-2xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-950 text-center transition-colors"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center mb-1.5 shadow-sm font-bold">
+                    <FileCheck2 className="w-5 h-5" />
+                  </div>
+                  <span className="text-xs font-bold">Approvals</span>
+                  <span className="text-[10px] text-emerald-800 mt-0.5">
+                    {pendingApprovalsCount > 0 ? `${pendingApprovalsCount} pending review` : 'Verify expense claims'}
+                  </span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => {
+                    setShowActionSheet(false);
+                    navigate('/payments');
+                  }}
+                  className="flex flex-col items-center justify-center p-3.5 rounded-2xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-950 text-center transition-colors"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center mb-1.5 shadow-sm font-bold">
+                    <CreditCard className="w-5 h-5" />
+                  </div>
+                  <span className="text-xs font-bold">Payment Request</span>
+                  <span className="text-[10px] text-emerald-800 mt-0.5">NEFT / RTGS / UPI</span>
+                </button>
+              )}
 
               <button
                 onClick={() => {
@@ -125,48 +143,33 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({ pendingApprova
           <span>Home</span>
         </NavLink>
 
-        {/* Tab 2: Projects / Approvals */}
-        {isOwner ? (
-          <NavLink
-            to="/approvals"
-            className={({ isActive }) =>
-              `relative flex flex-col items-center justify-center min-w-[48px] min-h-[46px] py-1 px-2 rounded-xl text-[10px] font-semibold transition-colors ${
-                isActive ? 'text-navy-900 font-bold' : 'text-slate-400 hover:text-slate-600'
-              }`
-            }
-          >
-            <FileCheck2 className="w-5 h-5 mb-0.5" />
-            <span>Approvals</span>
-            {pendingApprovalsCount > 0 && (
-              <span className="absolute top-0.5 right-1 w-4 h-4 rounded-full bg-amber-500 text-navy-950 font-bold text-[9px] flex items-center justify-center">
-                {pendingApprovalsCount}
-              </span>
-            )}
-          </NavLink>
-        ) : (
-          <NavLink
-            to="/projects"
-            className={({ isActive }) =>
-              `flex flex-col items-center justify-center min-w-[48px] min-h-[46px] py-1 px-2 rounded-xl text-[10px] font-semibold transition-colors ${
-                isActive ? 'text-navy-900 font-bold' : 'text-slate-400 hover:text-slate-600'
-              }`
-            }
-          >
-            <Building2 className="w-5 h-5 mb-0.5" />
-            <span>Projects</span>
-          </NavLink>
-        )}
+        {/* Tab 2: Projects */}
+        <NavLink
+          to="/projects"
+          className={({ isActive }) =>
+            `relative flex flex-col items-center justify-center min-w-[48px] min-h-[46px] py-1 px-2 rounded-xl text-[10px] font-semibold transition-colors ${
+              isActive ? 'text-navy-900 font-bold' : 'text-slate-400 hover:text-slate-600'
+            }`
+          }
+        >
+          <Building2 className="w-5 h-5 mb-0.5" />
+          <span>Projects</span>
+          {isOwner && totalUnread > 0 && (
+            <span
+              className="absolute top-1 right-2 w-2 h-2 rounded-full bg-amber-500 ring-2 ring-white"
+              title={`${totalUnread} unread daily report(s)`}
+            />
+          )}
+        </NavLink>
 
-        {/* Center Action Button for In-Charge */}
-        {isInCharge && (
-          <button
-            onClick={() => setShowActionSheet(true)}
-            aria-label="Quick Action Menu"
-            className="-mt-5 w-12 h-12 rounded-full bg-amber-500 text-navy-950 flex items-center justify-center shadow-lg border-2 border-white active:scale-95 transition-transform"
-          >
-            <Plus className="w-6 h-6 stroke-[2.5]" />
-          </button>
-        )}
+        {/* Center Action Button (Visually prominent & centered for all roles) */}
+        <button
+          onClick={() => setShowActionSheet(true)}
+          aria-label="Quick Action Menu"
+          className="-mt-5 w-12 h-12 rounded-full bg-amber-500 text-navy-950 flex items-center justify-center shadow-lg border-2 border-white active:scale-95 transition-transform hover:bg-amber-400 shrink-0"
+        >
+          <Plus className="w-6 h-6 stroke-[2.5]" />
+        </button>
 
         {/* Tab 3: Payments */}
         <NavLink
