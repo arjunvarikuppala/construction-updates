@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.js';
+import { useUnreadReports } from '../../hooks/useUnreadReports.js';
 
 interface MobileBottomNavProps {
   pendingApprovalsCount?: number;
@@ -21,6 +22,7 @@ interface MobileBottomNavProps {
 
 export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({ pendingApprovalsCount = 0 }) => {
   const { isOwner, isInCharge } = useAuth();
+  const { totalUnread } = useUnreadReports();
   const navigate = useNavigate();
   const [showActionSheet, setShowActionSheet] = useState(false);
 
@@ -108,13 +110,13 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({ pendingApprova
       )}
 
       {/* Persistent Bottom Bar */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200/90 shadow-lg z-40 px-2 py-1.5 pb-safe flex items-center justify-around select-none">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200/90 shadow-lg z-40 px-2 py-1 pb-safe flex items-center justify-around select-none">
         {/* Tab 1: Dashboard */}
         <NavLink
           to="/"
           end
           className={({ isActive }) =>
-            `flex flex-col items-center justify-center py-1 px-2 rounded-lg text-[10px] font-semibold transition-colors ${
+            `flex flex-col items-center justify-center min-w-[48px] min-h-[46px] py-1 px-2 rounded-xl text-[10px] font-semibold transition-colors ${
               isActive ? 'text-navy-900 font-bold' : 'text-slate-400 hover:text-slate-600'
             }`
           }
@@ -128,7 +130,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({ pendingApprova
           <NavLink
             to="/approvals"
             className={({ isActive }) =>
-              `relative flex flex-col items-center justify-center py-1 px-2 rounded-lg text-[10px] font-semibold transition-colors ${
+              `relative flex flex-col items-center justify-center min-w-[48px] min-h-[46px] py-1 px-2 rounded-xl text-[10px] font-semibold transition-colors ${
                 isActive ? 'text-navy-900 font-bold' : 'text-slate-400 hover:text-slate-600'
               }`
             }
@@ -136,7 +138,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({ pendingApprova
             <FileCheck2 className="w-5 h-5 mb-0.5" />
             <span>Approvals</span>
             {pendingApprovalsCount > 0 && (
-              <span className="absolute top-0 right-2 w-4 h-4 rounded-full bg-amber-500 text-navy-950 font-bold text-[9px] flex items-center justify-center">
+              <span className="absolute top-0.5 right-1 w-4 h-4 rounded-full bg-amber-500 text-navy-950 font-bold text-[9px] flex items-center justify-center">
                 {pendingApprovalsCount}
               </span>
             )}
@@ -145,7 +147,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({ pendingApprova
           <NavLink
             to="/projects"
             className={({ isActive }) =>
-              `flex flex-col items-center justify-center py-1 px-2 rounded-lg text-[10px] font-semibold transition-colors ${
+              `flex flex-col items-center justify-center min-w-[48px] min-h-[46px] py-1 px-2 rounded-xl text-[10px] font-semibold transition-colors ${
                 isActive ? 'text-navy-900 font-bold' : 'text-slate-400 hover:text-slate-600'
               }`
             }
@@ -159,7 +161,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({ pendingApprova
         {isInCharge && (
           <button
             onClick={() => setShowActionSheet(true)}
-            aria-label="Quick Action"
+            aria-label="Quick Action Menu"
             className="-mt-5 w-12 h-12 rounded-full bg-amber-500 text-navy-950 flex items-center justify-center shadow-lg border-2 border-white active:scale-95 transition-transform"
           >
             <Plus className="w-6 h-6 stroke-[2.5]" />
@@ -170,7 +172,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({ pendingApprova
         <NavLink
           to="/payments"
           className={({ isActive }) =>
-            `flex flex-col items-center justify-center py-1 px-2 rounded-lg text-[10px] font-semibold transition-colors ${
+            `flex flex-col items-center justify-center min-w-[48px] min-h-[46px] py-1 px-2 rounded-xl text-[10px] font-semibold transition-colors ${
               isActive ? 'text-navy-900 font-bold' : 'text-slate-400 hover:text-slate-600'
             }`
           }
@@ -183,7 +185,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({ pendingApprova
         <NavLink
           to="/messages"
           className={({ isActive }) =>
-            `flex flex-col items-center justify-center py-1 px-2 rounded-lg text-[10px] font-semibold transition-colors ${
+            `flex flex-col items-center justify-center min-w-[48px] min-h-[46px] py-1 px-2 rounded-xl text-[10px] font-semibold transition-colors ${
               isActive ? 'text-navy-900 font-bold' : 'text-slate-400 hover:text-slate-600'
             }`
           }

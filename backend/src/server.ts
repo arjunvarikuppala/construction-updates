@@ -1,3 +1,4 @@
+import './config/env.js';
 import http from 'http';
 import express from 'express';
 import cors from 'cors';
@@ -6,7 +7,6 @@ import morgan from 'morgan';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import rateLimit from 'express-rate-limit';
-import dotenv from 'dotenv';
 
 import { connectDB } from './config/db.js';
 import authRoutes from './routes/authRoutes.js';
@@ -23,8 +23,6 @@ import communicationRoutes from './routes/communicationRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import { initSocketService } from './services/socketService.js';
 import { seedInitialData } from './scripts/seed.js';
-
-dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -90,6 +88,7 @@ app.get('/api/health', (_req, res) => {
 // API Routes
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/projects', projectRoutes);
+app.use('/api/projects', projectRoutes); // Backward-compatible route alias
 app.use('/api/v1/daily-reports', dailyReportRoutes);
 app.use('/api/v1/expenses', expenseRoutes);
 app.use('/api/v1/dashboard', dashboardRoutes);

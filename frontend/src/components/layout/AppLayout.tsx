@@ -1,5 +1,5 @@
-import React from 'react';
-import { Outlet } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Outlet, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Sidebar } from './Sidebar.js';
 import { TopHeader } from './TopHeader.js';
@@ -11,6 +11,13 @@ import { api } from '../../api/client.js';
 
 export const AppLayout: React.FC = () => {
   const { isOwner } = useAuth();
+  const location = useLocation();
+  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
+
+  // Close mobile drawer on navigation
+  useEffect(() => {
+    setIsMobileDrawerOpen(false);
+  }, [location.pathname]);
 
   // Query pending approvals for badge count with near-real-time synchronization (20s interval + window focus)
   const { data: approvalsData } = useQuery({
@@ -24,16 +31,20 @@ export const AppLayout: React.FC = () => {
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
-      {/* Desktop Sidebar */}
-      <Sidebar pendingApprovalsCount={pendingCount} />
+      {/* Desktop Sidebar & Mobile Collapsible Drawer */}
+      <Sidebar
+        pendingApprovalsCount={pendingCount}
+        isMobileOpen={isMobileDrawerOpen}
+        onMobileClose={() => setIsMobileDrawerOpen(false)}
+      />
 
       {/* Main Layout Area */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden">
+      <div className="flex-1 flex flex-col h-full overflow-hidden min-w-0">
         <OfflineBanner />
-        <TopHeader />
+        <TopHeader onOpenMobileDrawer={() => setIsMobileDrawerOpen(true)} />
 
         {/* Scrollable Viewport */}
-        <main className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6 pb-28 md:pb-8">
+        <main className="flex-1 overflow-y-auto px-3 py-4 sm:px-6 sm:py-6 pb-28 md:pb-8">
           <div className="max-w-7xl mx-auto">
             <Outlet />
           </div>

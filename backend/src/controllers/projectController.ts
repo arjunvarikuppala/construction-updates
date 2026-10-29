@@ -9,6 +9,7 @@ import { AuthenticatedRequest, isMD, isSiteInCharge } from '../types/index.js';
 import { logAudit } from '../services/auditService.js';
 import { rupeesToPaise } from '../utils/currency.js';
 import { verifyUserProjectAccess } from '../middleware/auth.js';
+import { WeatherService } from '../services/weatherService.js';
 
 export async function listProjects(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
@@ -250,6 +251,12 @@ export async function createProject(req: AuthenticatedRequest, res: Response): P
       name,
       code,
       location,
+      address,
+      city,
+      state,
+      country,
+      latitude,
+      longitude,
       description,
       budget,
       assignedInCharge,
@@ -258,7 +265,7 @@ export async function createProject(req: AuthenticatedRequest, res: Response): P
       status,
     } = req.body;
 
-    if (!name || !code || !location) {
+    if (!name || !code || (!location && !address && !city)) {
       res.status(400).json({
         success: false,
         message: 'Project name, unique project code, and site address/location are required',
@@ -288,10 +295,36 @@ export async function createProject(req: AuthenticatedRequest, res: Response): P
       inChargeUserId = inChargeUser._id;
     }
 
+    const effectiveLocation = (location || address || '').trim();
+
+    // Automatically resolve location text to coordinates via backend geocoding service
+    let latVal: number | null = null;
+    let lonVal: number | null = null;
+    let resolvedCity = city?.trim() || '';
+    let resolvedState = state?.trim() || '';
+    let resolvedCountry = country?.trim() || 'India';
+
+    if (effectiveLocation) {
+      const resolved = await WeatherService.resolveLocationText(effectiveLocation);
+      if (resolved.resolved && resolved.latitude !== undefined && resolved.longitude !== undefined) {
+        latVal = resolved.latitude;
+        lonVal = resolved.longitude;
+        if (!resolvedCity && resolved.city) resolvedCity = resolved.city;
+        if (!resolvedState && resolved.state) resolvedState = resolved.state;
+        if (resolved.country) resolvedCountry = resolved.country;
+      }
+    }
+
     const project = await Project.create({
       name: name.trim(),
       code: cleanCode,
-      location: location.trim(),
+      location: effectiveLocation,
+      address: address?.trim() || '',
+      city: resolvedCity,
+      state: resolvedState,
+      country: resolvedCountry,
+      latitude: latVal,
+      longitude: lonVal,
       description: description?.trim(),
       budget: budgetPaise,
       assignedInCharge: inChargeUserId,
@@ -336,6 +369,12 @@ export async function updateProject(req: AuthenticatedRequest, res: Response): P
     const {
       name,
       location,
+      address,
+      city,
+      state,
+      country,
+      latitude,
+      longitude,
       description,
       budget,
       assignedInCharge,
@@ -357,9 +396,40 @@ export async function updateProject(req: AuthenticatedRequest, res: Response): P
     }
 
     const oldInChargeId = project.assignedInCharge?.toString();
+    let locationChanged = false;
 
     if (name) project.name = name.trim();
-    if (location) project.location = location.trim();
+    if (location && location.trim() !== project.location) {
+      project.location = location.trim();
+      locationChanged = true;
+
+      // Automatically re-resolve coordinates on backend
+      const resolved = await WeatherService.resolveLocationText(project.location);
+      if (resolved.resolved && resolved.latitude !== undefined && resolved.longitude !== undefined) {
+        project.latitude = resolved.latitude;
+        project.longitude = resolved.longitude;
+        if (resolved.city) project.city = resolved.city;
+        if (resolved.state) project.state = resolved.state;
+        if (resolved.country) project.country = resolved.country;
+      }
+    }
+    if (address !== undefined && address.trim() !== project.address) {
+      project.address = address.trim();
+      locationChanged = true;
+    }
+    if (city !== undefined && city.trim() !== project.city) {
+      project.city = city.trim();
+      locationChanged = true;
+    }
+    if (state !== undefined && state.trim() !== project.state) {
+      project.state = state.trim();
+      locationChanged = true;
+    }
+    if (country !== undefined && country.trim() !== project.country) {
+      project.country = country.trim();
+      locationChanged = true;
+    }
+
     if (description !== undefined) project.description = description.trim();
     if (budget !== undefined) {
       project.budget = req.body.isPaise ? Number(budget) : rupeesToPaise(budget);
@@ -401,6 +471,10 @@ export async function updateProject(req: AuthenticatedRequest, res: Response): P
     }
 
     await project.save();
+
+    if (locationChanged) {
+      await WeatherService.invalidateCache(project._id.toString());
+    }
 
     await logAudit('PROJECT_UPDATED', req.user!.userId, 'PROJECT', project._id, {
       name: project.name,

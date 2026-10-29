@@ -26,15 +26,12 @@ const CATEGORIES: Array<{ value: ExpenseCategory; label: string }> = [
   { value: 'OTHER', label: 'Other Operational Expense' },
 ];
 
-export const ExpenseResubmitModal: React.FC<ExpenseResubmitModalProps> = ({
-  isOpen,
-  onClose,
-  expense,
-  onResubmit,
-  isLoading,
-}) => {
-  if (!expense) return null;
-
+const ExpenseResubmitForm: React.FC<{
+  expense: Expense;
+  onClose: () => void;
+  onResubmit: (updatedData: any) => void;
+  isLoading: boolean;
+}> = ({ expense, onClose, onResubmit, isLoading }) => {
   const [category, setCategory] = useState<ExpenseCategory>(expense.category);
   const [description, setDescription] = useState(expense.description);
   const [amountRupees, setAmountRupees] = useState(String(paiseToRupees(expense.amount)));
@@ -76,98 +73,113 @@ export const ExpenseResubmitModal: React.FC<ExpenseResubmitModalProps> = ({
   };
 
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={onClose}
-      title="Correct & Resubmit Expense"
-      description={`Original rejection: "${expense.rejectionReason}"`}
-      size="lg"
-      footer={
-        <>
-          <Button variant="outline" onClick={onClose} disabled={isLoading}>
-            Cancel
-          </Button>
-          <Button
-            variant="amber"
-            onClick={handleSave}
-            isLoading={isLoading}
-            leftIcon={<RefreshCw className="w-4 h-4" />}
-          >
-            Resubmit for Review
-          </Button>
-        </>
-      }
-    >
-      <div className="space-y-4">
-        {/* Rejection notice box */}
-        <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900">
-          <span className="font-bold block mb-0.5">Managing Director Rejection Note:</span>
-          <p className="italic">{expense.rejectionReason}</p>
-        </div>
+    <div className="space-y-4">
+      {/* Rejection Notice Info */}
+      <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 space-y-0.5">
+        <span className="font-bold">Original Rejection Reason:</span>
+        <p>{expense.rejectionReason || 'Receipt unclear or details incorrect'}</p>
+      </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Select
-            label="Category"
-            value={category}
-            onChange={(e) => setCategory(e.target.value as ExpenseCategory)}
-            options={CATEGORIES}
-            required
-          />
+      <Select
+        label="Expense Category"
+        options={CATEGORIES}
+        value={category}
+        onChange={(e) => setCategory(e.target.value as ExpenseCategory)}
+        required
+      />
 
-          <Input
-            label="Amount (in ₹ Rupees)"
-            type="number"
-            step="0.01"
-            value={amountRupees}
-            onChange={(e) => setAmountRupees(e.target.value)}
-            required
-          />
-        </div>
+      <Input
+        label="Expense Amount (₹ INR)"
+        type="number"
+        value={amountRupees}
+        onChange={(e) => setAmountRupees(e.target.value)}
+        required
+      />
 
-        <Input
-          label="Vendor / Payee Name"
-          value={vendor}
-          onChange={(e) => setVendor(e.target.value)}
-          required
-        />
+      <Input
+        label="Vendor / Paid To"
+        value={vendor}
+        onChange={(e) => setVendor(e.target.value)}
+        required
+      />
 
-        <Textarea
-          label="Expense Description & Work Reference"
-          rows={3}
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          required
-        />
+      <Textarea
+        label="Expense Description & Work Reference"
+        rows={3}
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        required
+      />
 
-        <Textarea
-          label="Corrections & Resubmission Note to Owner"
-          placeholder="E.g., Attached revised GST invoice with weighbridge slip as requested..."
-          rows={2}
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          required
-        />
+      <Textarea
+        label="Corrections & Resubmission Note to Owner"
+        placeholder="E.g., Attached revised GST invoice with weighbridge slip as requested..."
+        rows={2}
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
+        required
+      />
 
-        {/* Upload replacement receipt */}
-        <div>
-          <label className="block text-xs font-semibold text-slate-700 mb-1.5 uppercase tracking-wider">
-            Updated Bill / Receipt Photo
+      {/* Upload replacement receipt */}
+      <div>
+        <label className="block text-xs font-semibold text-slate-700 mb-1.5 uppercase tracking-wider">
+          Updated Bill / Receipt Photo
+        </label>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 px-4 py-2 border border-slate-300 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors">
+            <Upload className="w-4 h-4 text-slate-500" />
+            <span>{isUploading ? 'Uploading...' : 'Choose File / Take Photo'}</span>
+            <input type="file" accept="image/*,application/pdf" className="hidden" onChange={handleFileUpload} />
           </label>
-          <div className="flex items-center gap-3">
-            <label className="flex items-center gap-2 px-4 py-2 border border-slate-300 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors">
-              <Upload className="w-4 h-4 text-slate-500" />
-              <span>{isUploading ? 'Uploading...' : 'Choose File / Take Photo'}</span>
-              <input type="file" accept="image/*,application/pdf" className="hidden" onChange={handleFileUpload} />
-            </label>
-            {receiptUrl && (
-              <span className="text-xs text-emerald-600 font-medium flex items-center gap-1">
-                <FileText className="w-3.5 h-3.5" />
-                Receipt attached
-              </span>
-            )}
-          </div>
+          {receiptUrl && (
+            <span className="text-xs text-emerald-600 font-medium flex items-center gap-1">
+              <FileText className="w-3.5 h-3.5" />
+              Receipt attached
+            </span>
+          )}
         </div>
       </div>
+
+      <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+        <Button variant="outline" size="sm" onClick={onClose} disabled={isLoading}>
+          Cancel
+        </Button>
+        <Button
+          variant="amber"
+          size="sm"
+          onClick={handleSave}
+          disabled={isLoading || isUploading || !description || !amountRupees}
+          leftIcon={<RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />}
+        >
+          {isLoading ? 'Resubmitting...' : 'Resubmit to Owner'}
+        </Button>
+      </div>
+    </div>
+  );
+};
+
+export const ExpenseResubmitModal: React.FC<ExpenseResubmitModalProps> = ({
+  isOpen,
+  onClose,
+  expense,
+  onResubmit,
+  isLoading,
+}) => {
+  return (
+    <Modal
+      isOpen={isOpen && Boolean(expense)}
+      onClose={onClose}
+      title="Correct & Resubmit Rejected Expense"
+      size="md"
+    >
+      {expense ? (
+        <ExpenseResubmitForm
+          expense={expense}
+          onClose={onClose}
+          onResubmit={onResubmit}
+          isLoading={isLoading}
+        />
+      ) : null}
     </Modal>
   );
 };

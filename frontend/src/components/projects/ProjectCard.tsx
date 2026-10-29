@@ -3,7 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { MapPin, User, Calendar, ArrowRight } from 'lucide-react';
 import { Project } from '../../types/index.js';
 import { Badge } from '../common/Badge.js';
+import { UnreadDot } from '../common/UnreadDot.js';
 import { useAuth } from '../../context/AuthContext.js';
+import { useUnreadReports } from '../../hooks/useUnreadReports.js';
 import { formatCompactINR, formatINR } from '../../utils/currency.js';
 import { formatDate } from '../../utils/dates.js';
 
@@ -13,9 +15,14 @@ interface ProjectCardProps {
 
 export const ProjectCard: React.FC<ProjectCardProps> = ({ project }) => {
   const navigate = useNavigate();
-  const { isMD } = useAuth();
+  const { isMD, isOwner } = useAuth();
+  const isMDOrOwner = isMD || isOwner;
+  const { isProjectUnread, getProjectUnreadCount } = useUnreadReports();
   const id = project._id || project.id;
   const financials = project.financials;
+  const unreadCount = id ? getProjectUnreadCount(id) : 0;
+  const hasUnread = id ? isProjectUnread(id) : false;
+  const showUnread = isMDOrOwner && hasUnread;
 
   const burnRate = financials?.burnPercentage || 0;
   const burnColor =
@@ -32,12 +39,25 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project }) => {
           <span className="font-mono text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-md">
             {project.code}
           </span>
-          <Badge status={project.status} size="sm" />
+          <div className="flex items-center gap-1.5">
+            {showUnread && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-900 border border-amber-300">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                {unreadCount > 1 ? `${unreadCount} new reports` : 'New report'}
+              </span>
+            )}
+            <Badge status={project.status} size="sm" />
+          </div>
         </div>
 
-        <h3 className="text-base font-bold text-navy-950 group-hover:text-navy-800 transition-colors line-clamp-1">
-          {project.name}
-        </h3>
+        <div className="flex items-center gap-2">
+          <h3 className="text-base font-bold text-navy-950 group-hover:text-navy-800 transition-colors line-clamp-1">
+            {project.name}
+          </h3>
+          {showUnread && (
+            <UnreadDot count={unreadCount} title={`${unreadCount} unread daily report(s)`} />
+          )}
+        </div>
 
         <div className="flex items-center gap-1.5 text-xs text-slate-500">
           <MapPin className="w-3.5 h-3.5 flex-shrink-0 text-slate-400" />

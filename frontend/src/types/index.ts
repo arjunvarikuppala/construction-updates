@@ -71,6 +71,12 @@ export interface Project {
   code: string;
   description?: string;
   location: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  latitude?: number | null;
+  longitude?: number | null;
   startDate: string;
   endDate?: string;
   expectedCompletionDate?: string;
@@ -100,10 +106,75 @@ export interface Project {
   updatedAt?: string;
 }
 
+export interface WeatherAlert {
+  type: 'HEAVY_RAIN' | 'THUNDERSTORM' | 'EXCESSIVE_HEAT' | 'STRONG_WINDS';
+  severity: 'INFO' | 'WARNING' | 'CRITICAL';
+  headline: string;
+  description: string;
+  actionableAdvice: string;
+}
+
+export interface WeatherData {
+  temperature: number;
+  feelsLike: number;
+  condition: string;
+  conditionCode: number;
+  icon: string;
+  humidity: number;
+  windSpeed: number;
+  windDirection?: number;
+  precipitationProbability?: number;
+  precipitation?: number;
+  observationTime: string;
+  alerts: WeatherAlert[];
+}
+
+export interface ProjectWeatherResponse {
+  success: boolean;
+  project: {
+    id: string;
+    name: string;
+    code: string;
+    location: string;
+    address?: string;
+    city?: string;
+    state?: string;
+    country?: string;
+    coordinates: {
+      latitude: number | null;
+      longitude: number | null;
+    };
+  };
+  isConfigured: boolean;
+  weather?: WeatherData;
+  cached?: boolean;
+  isStale?: boolean;
+  fetchedAt?: string;
+  statusMessage?: string;
+}
+
+export interface ProjectWeatherSummary {
+  projectId: string;
+  projectName: string;
+  projectCode: string;
+  location: string;
+  coordinates: {
+    latitude: number | null;
+    longitude: number | null;
+  };
+  isConfigured: boolean;
+  weather?: WeatherData;
+  isStale?: boolean;
+  cached?: boolean;
+  fetchedAt?: string;
+  statusMessage?: string;
+}
+
 export interface WorkItem {
   description: string;
   quantity: number;
   unit: string;
+  budget?: number;
 }
 
 export interface LabourCountItem {
@@ -134,6 +205,16 @@ export interface ReadReceiptInfo {
   }>;
 }
 
+export interface ReportComment {
+  _id?: string;
+  author: string | { _id: string; name: string; role: string };
+  authorName: string;
+  authorRole: string;
+  message: string;
+  type: 'COMMENT' | 'CHANGES_REQUESTED' | 'CORRECTION_REQUIRED';
+  createdAt: string;
+}
+
 export interface DailyReport {
   _id: string;
   id?: string;
@@ -162,12 +243,14 @@ export interface DailyReport {
   workItems: WorkItem[];
   labourBreakdown: LabourCountItem[];
   totalLabourCount: number;
+  totalWorkBudget?: number;
   equipmentDetails?: string;
   issuesAndDelays?: string;
   nextDayPlan?: string;
   photos: SitePhoto[];
   status: ReportStatus;
   version?: number;
+  comments?: ReportComment[];
   readReceipt?: ReadReceiptInfo;
   createdAt: string;
   updatedAt: string;
@@ -567,6 +650,9 @@ export type NotificationType =
   | 'PROJECT_MESSAGE'
   | 'DAILY_REPORT_SUBMITTED'
   | 'DAILY_REPORT_VIEWED'
+  | 'DAILY_REPORT_COMMENT'
+  | 'DAILY_REPORT_CHANGES_REQUESTED'
+  | 'DAILY_REPORT_REJECTED'
   | 'SYSTEM';
 
 export type NotificationRelatedEntity =

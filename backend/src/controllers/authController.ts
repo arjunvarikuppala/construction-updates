@@ -7,7 +7,7 @@ import { Invitation } from '../models/Invitation.js';
 import { AuthenticatedRequest, AuthUserPayload } from '../types/index.js';
 import { logAudit } from '../services/auditService.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'sitetrack_super_secure_jwt_secret_dev_2026';
+import { getJwtSecret } from '../middleware/auth.js';
 const JWT_EXPIRES_IN = '7d';
 
 export async function getFirstMDStatus(req: AuthenticatedRequest, res: Response): Promise<void> {
@@ -57,7 +57,7 @@ export async function registerMD(req: AuthenticatedRequest, res: Response): Prom
       assignedProjects: [],
     };
 
-    const token = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+    const token = jwt.sign(payload, getJwtSecret(), { expiresIn: JWT_EXPIRES_IN });
 
     await logAudit(
       'MD_REGISTERED',
@@ -117,7 +117,7 @@ export async function login(req: AuthenticatedRequest, res: Response): Promise<v
       assignedProjects: user.assignedProjects.map((id) => id.toString()),
     };
 
-    const token = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+    const token = jwt.sign(payload, getJwtSecret(), { expiresIn: JWT_EXPIRES_IN });
 
     await logAudit(
       'USER_LOGIN',
@@ -297,7 +297,7 @@ export async function acceptInvitation(req: AuthenticatedRequest, res: Response)
       assignedProjects: newUser.assignedProjects.map((id) => id.toString()),
     };
 
-    const jwtToken = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+    const jwtToken = jwt.sign(payload, getJwtSecret(), { expiresIn: JWT_EXPIRES_IN });
 
     res.status(201).json({
       success: true,

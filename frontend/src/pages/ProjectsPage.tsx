@@ -8,11 +8,14 @@ import { Input, Select } from '../components/common/Input.js';
 import { LoadingSkeleton } from '../components/common/LoadingSkeleton.js';
 import { EmptyState } from '../components/common/EmptyState.js';
 import { useAuth } from '../context/AuthContext.js';
+import { useUnreadReports } from '../hooks/useUnreadReports.js';
 import { Project } from '../types/index.js';
 import { api } from '../api/client.js';
 
 export const ProjectsPage: React.FC = () => {
-  const { isOwner } = useAuth();
+  const { isOwner, isMD } = useAuth();
+  const isMDOrOwner = isOwner || isMD;
+  const { totalUnread } = useUnreadReports();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -36,9 +39,17 @@ export const ProjectsPage: React.FC = () => {
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-navy-950 tracking-tight">
-            {isOwner ? 'Construction Projects Directory' : 'My Assigned Projects'}
-          </h1>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-xl sm:text-2xl font-bold text-navy-950 tracking-tight">
+              {isOwner ? 'Construction Projects Directory' : 'My Assigned Projects'}
+            </h1>
+            {isMDOrOwner && totalUnread > 0 && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-900 border border-amber-300">
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                {totalUnread} Unread Daily Report{totalUnread > 1 ? 's' : ''}
+              </span>
+            )}
+          </div>
           <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
             {isOwner
               ? 'Multi-site portfolio, project budgets, and assigned site in-charge engineers.'
@@ -50,6 +61,7 @@ export const ProjectsPage: React.FC = () => {
           <Button
             variant="amber"
             onClick={() => setIsModalOpen(true)}
+            className="w-full sm:w-auto"
             leftIcon={<Plus className="w-4 h-4" />}
           >
             Create New Project

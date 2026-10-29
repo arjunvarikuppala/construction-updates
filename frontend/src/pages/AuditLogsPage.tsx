@@ -67,7 +67,7 @@ export const AuditLogsPage: React.FC = () => {
                   </div>
 
                   {log.details && (
-                    <div className="p-2 rounded-lg bg-slate-50 border border-slate-200 text-slate-700 font-mono text-[11px] mt-1">
+                    <div className="p-2 rounded-lg bg-slate-50 border border-slate-200 text-slate-700 font-mono text-[11px] mt-1 break-all whitespace-pre-wrap">
                       {JSON.stringify(log.details)}
                     </div>
                   )}

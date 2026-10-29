@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { HardHat, Lock, Mail, ArrowRight, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.js';
@@ -9,7 +9,7 @@ import { api } from '../api/client.js';
 
 export const Login: React.FC = () => {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { user, token, isLoading: authLoading, login } = useAuth();
   const { success, error: toastError } = useToast();
 
   const [email, setEmail] = useState('');
@@ -17,6 +17,22 @@ export const Login: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+
+  // Check for session expired or authentication message on mount
+  useEffect(() => {
+    const authMsg = sessionStorage.getItem('sitetrack_auth_message');
+    if (authMsg) {
+      sessionStorage.removeItem('sitetrack_auth_message');
+      setErrorMessage(authMsg);
+    }
+  }, []);
+
+  // If already authenticated with a valid session, redirect immediately away from login
+  useEffect(() => {
+    if (!authLoading && token && user) {
+      navigate('/', { replace: true });
+    }
+  }, [token, user, authLoading, navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();

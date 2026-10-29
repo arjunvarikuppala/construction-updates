@@ -155,6 +155,7 @@ export const InChargeUsersPage: React.FC = () => {
 
         <Button
           variant="amber"
+          className="w-full sm:w-auto font-bold"
           onClick={() => {
             setIsModalOpen(true);
             setGeneratedInviteLink('');
@@ -201,7 +202,7 @@ export const InChargeUsersPage: React.FC = () => {
               </div>
 
               {/* MD-Only Salary Compensation View & Edit */}
-              <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+              <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                     Salary (MD View Only)

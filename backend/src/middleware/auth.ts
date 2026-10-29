@@ -4,14 +4,15 @@ import mongoose from 'mongoose';
 import { AuthenticatedRequest, AuthUserPayload, isMD, isSiteInCharge, normalizeRole } from '../types/index.js';
 import { Project, IProject } from '../models/Project.js';
 import { ProjectAssignment } from '../models/ProjectAssignment.js';
+import { User } from '../models/User.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'sitetrack_super_secure_jwt_secret_dev_2026';
+export const getJwtSecret = () => process.env.JWT_SECRET || 'sitetrack_super_secure_jwt_secret_dev_2026';
 
 export interface ProjectAuthorizedRequest extends AuthenticatedRequest {
   projectDoc?: IProject;
 }
 
-export function authenticate(req: AuthenticatedRequest, res: Response, next: NextFunction): void {
+export async function authenticate(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
   const authHeader = req.headers.authorization;
   let token: string | undefined;
 
@@ -26,8 +27,22 @@ export function authenticate(req: AuthenticatedRequest, res: Response, next: Nex
     return;
   }
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as AuthUserPayload;
-    req.user = decoded;
+    const decoded = jwt.verify(token, getJwtSecret()) as AuthUserPayload;
+    
+    // Validate that the user exists and is active, and attach fresh DB role
+    const dbUser = await User.findById(decoded.userId).select('role isActive name email assignedProjects');
+    if (!dbUser || !dbUser.isActive) {
+      res.status(401).json({ success: false, message: 'Invalid or deactivated user session. Please sign in again.' });
+      return;
+    }
+
+    req.user = {
+      userId: dbUser._id.toString(),
+      role: dbUser.role,
+      email: dbUser.email,
+      name: dbUser.name,
+      assignedProjects: (dbUser.assignedProjects || []).map((id: any) => id.toString()),
+    };
     next();
   } catch (err) {
     res.status(401).json({ success: false, message: 'Invalid or expired authentication session' });
@@ -49,9 +64,16 @@ export function requireRole(...roles: string[]) {
     });
 
     if (!matches) {
+      const friendlyRoleName = isSiteInCharge(userRole)
+        ? 'Site In-Charge'
+        : isMD(userRole)
+        ? 'Managing Director'
+        : userRole;
       res.status(403).json({
         success: false,
-        message: `Forbidden. Requires one of roles: [${roles.join(', ')}]`,
+        message: `Forbidden. Requires one of roles: [${roles.join(', ')}]. Active session is signed in as ${req.user.name || req.user.email} (${friendlyRoleName}).`,
+        currentRole: userRole,
+        requiredRoles: roles,
       });
       return;
     }

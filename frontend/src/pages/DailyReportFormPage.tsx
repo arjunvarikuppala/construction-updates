@@ -36,7 +36,7 @@ export const DailyReportFormPage: React.FC = () => {
   const [workDate, setWorkDate] = useState(new Date().toISOString().split('T')[0]);
   const [workSummary, setWorkSummary] = useState('');
   const [workItems, setWorkItems] = useState<WorkItem[]>([
-    { description: '', quantity: 0, unit: 'sq.m' },
+    { description: '', quantity: 0, unit: 'sq.m', budget: 0 },
   ]);
   const [labourList, setLabourList] = useState<LabourCountItem[]>([
     { role: 'Mason', count: 4 },
@@ -147,7 +147,13 @@ export const DailyReportFormPage: React.FC = () => {
         titleOfWork: titleOfWork.trim(),
         workDate,
         workSummary: workSummary.trim(),
-        workItems: workItems.filter((item) => item.description.trim().length > 0),
+        workItems: workItems
+          .filter((item) => item.description.trim().length > 0)
+          .map((item) => ({
+            ...item,
+            quantity: Math.max(0, Number(item.quantity) || 0),
+            budget: Math.max(0, Number(item.budget) || 0),
+          })),
         labourBreakdown: labourList.filter((l) => l.count > 0),
         equipmentDetails: equipmentDetails.trim(),
         issuesAndDelays: issuesAndDelays.trim(),

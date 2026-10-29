@@ -209,7 +209,7 @@ export const PaymentsPage: React.FC = () => {
         </div>
 
         {/* Action Buttons */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto [&>button]:flex-1 [&>button]:sm:flex-initial">
           {/* Scan Beneficiary QR */}
           <Button
             size="sm"
@@ -259,7 +259,7 @@ export const PaymentsPage: React.FC = () => {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Payments */}
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-card">
           <span className="text-[10px] text-slate-400 uppercase font-bold block">Total Requests</span>
@@ -348,27 +348,29 @@ export const PaymentsPage: React.FC = () => {
             </div>
 
             {/* Status Dropdown */}
-            <div className="flex items-center gap-2">
-              <Filter className="w-4 h-4 text-slate-400 flex-shrink-0" />
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white text-slate-800 focus:ring-2 focus:ring-amber-500 outline-none"
-              >
-                <option value="ALL">All Statuses</option>
-                <option value="SUBMITTED">Submitted / Needs Review</option>
-                <option value="AUTHORIZED">Authorized (Ready to Transfer)</option>
-                <option value="PROCESSING">Processing / In-Flight</option>
-                <option value="PAID">Paid / Completed</option>
-                <option value="REJECTED">Rejected</option>
-                <option value="FAILED">Failed</option>
-              </select>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+              <div className="flex items-center gap-2">
+                <Filter className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="w-full sm:w-auto px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white text-slate-800 focus:ring-2 focus:ring-amber-500 outline-none"
+                >
+                  <option value="ALL">All Statuses</option>
+                  <option value="SUBMITTED">Submitted / Needs Review</option>
+                  <option value="AUTHORIZED">Authorized (Ready to Transfer)</option>
+                  <option value="PROCESSING">Processing / In-Flight</option>
+                  <option value="PAID">Paid / Completed</option>
+                  <option value="REJECTED">Rejected</option>
+                  <option value="FAILED">Failed</option>
+                </select>
+              </div>
 
               {/* Project Filter */}
               <select
                 value={projectFilter}
                 onChange={(e) => setProjectFilter(e.target.value)}
-                className="px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white text-slate-800 focus:ring-2 focus:ring-amber-500 outline-none"
+                className="w-full sm:w-auto px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white text-slate-800 focus:ring-2 focus:ring-amber-500 outline-none"
               >
                 <option value="ALL">All Projects</option>
                 {projects.map((p: any) => (
@@ -392,9 +394,79 @@ export const PaymentsPage: React.FC = () => {
               </p>
             </div>
           ) : (
-            <div className="bg-white rounded-2xl border border-slate-200/90 shadow-card overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
+            <>
+              {/* Mobile Card View for Payment Requests */}
+              <div className="md:hidden space-y-3">
+                {filteredPayments.map((p: PaymentRequest) => {
+                  const id = p._id || p.id;
+                  const amount = p.amountPaise || p.amount || 0;
+                  const isHigh = p.isHighValue || p.requiresHighValueAuth || amount >= 10000000;
+                  const ref = p.referenceNumber || p.paymentReference;
+                  const payeeName = p.beneficiarySnapshot?.name || p.payeeNameSnapshot;
+                  const vpa = p.beneficiarySnapshot?.vpa || p.vpaSnapshot;
+                  const acMasked = p.beneficiarySnapshot?.accountNumberMasked || p.accountNumberMaskedSnapshot;
+                  const projCode = p.projectSnapshot?.code || p.project?.code;
+                  const method = p.preferredMethod || p.paymentMethod;
+
+                  return (
+                    <div
+                      key={id}
+                      onClick={() => setSelectedPayment(p)}
+                      className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-card hover:shadow-card-hover transition-all space-y-3 cursor-pointer"
+                    >
+                      <div className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-1.5 font-mono font-bold text-navy-900">
+                          <span>{ref}</span>
+                          <span className="font-sans text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-normal">
+                            {method}
+                          </span>
+                        </div>
+                        {getStatusBadge(p.status)}
+                      </div>
+
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <h4 className="font-bold text-navy-950 text-base leading-snug">{payeeName}</h4>
+                          <span className="text-xs text-slate-500 font-mono block mt-0.5">
+                            {vpa ? `UPI: ${vpa}` : `A/C: ${acMasked}`}
+                          </span>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <span className="text-lg font-black text-navy-900">
+                            ₹{(amount / 100).toLocaleString('en-IN')}
+                          </span>
+                          {isHigh && (
+                            <span className="block text-[9px] font-bold text-amber-700">
+                              High-Value
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-xs text-slate-700 flex items-center justify-between">
+                        <span className="font-mono text-[11px] font-bold bg-navy-50 text-navy-900 border border-navy-200 px-2 py-0.5 rounded">
+                          {projCode}
+                        </span>
+                        <span className="text-slate-500 text-[11px] truncate max-w-[200px]">{p.purpose}</span>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-[11px]">
+                        <span className="text-slate-400">
+                          {formatDate(p.createdAt, 'dd MMM, hh:mm a')}
+                        </span>
+                        <span className="text-navy-900 font-bold hover:underline inline-flex items-center gap-1">
+                          Review Details <ArrowRight className="w-3 h-3 text-amber-500" />
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Desktop Table View */}
+              <div className="hidden md:block bg-white rounded-2xl border border-slate-200/90 shadow-card overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse min-w-[750px]">
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50 text-slate-500 font-bold uppercase tracking-wider">
                       <th className="py-3 px-4">Ref & Date</th>
@@ -483,14 +555,15 @@ export const PaymentsPage: React.FC = () => {
                 </table>
               </div>
             </div>
-          )}
-        </div>
-      )}
+          </>
+        )}
+      </div>
+    )}
 
       {/* TAB 2: BENEFICIARIES */}
       {activeTab === 'beneficiaries' && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between bg-white p-4 rounded-2xl border border-slate-200 shadow-card">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-card">
             <div>
               <h3 className="text-sm font-bold text-navy-950">Registered Beneficiaries</h3>
               <p className="text-xs text-slate-500">
@@ -500,6 +573,7 @@ export const PaymentsPage: React.FC = () => {
             <Button
               size="sm"
               variant="primary"
+              className="w-full sm:w-auto shrink-0 font-bold"
               onClick={() => {
                 setScannedInitialVpa('');
                 setScannedInitialName('');

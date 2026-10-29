@@ -18,6 +18,8 @@ import { InChargeUsersPage } from './pages/InChargeUsersPage.js';
 import { AuditLogsPage } from './pages/AuditLogsPage.js';
 import { PaymentsPage } from './pages/PaymentsPage.js';
 import { ProjectMessagesPage } from './pages/ProjectMessagesPage.js';
+import { NotificationsPage } from './pages/NotificationsPage.js';
+import { ErrorBoundary } from './components/common/ErrorBoundary.js';
 
 // Protected Route Guard
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -62,7 +64,9 @@ export const App: React.FC = () => {
         path="/"
         element={
           <ProtectedRoute>
-            <AppLayout />
+            <ErrorBoundary level="page">
+              <AppLayout />
+            </ErrorBoundary>
           </ProtectedRoute>
         }
       >
@@ -88,6 +92,9 @@ export const App: React.FC = () => {
         {/* Project Communication */}
         <Route path="messages" element={<ProjectMessagesPage />} />
         <Route path="messages/:projectId" element={<ProjectMessagesPage />} />
+
+        {/* Notifications History */}
+        <Route path="notifications" element={<NotificationsPage />} />
 
         {/* Owner Executive Approvals */}
         <Route

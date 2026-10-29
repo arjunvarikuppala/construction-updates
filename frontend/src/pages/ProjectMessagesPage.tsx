@@ -1,11 +1,10 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   MessageSquare,
   Send,
   Paperclip,
-  Building2,
   FileText,
   CreditCard,
   Receipt,
@@ -14,9 +13,6 @@ import {
   Check,
   CheckCheck,
   Search,
-  Users,
-  Eye,
-  Circle,
   Image as ImageIcon,
   Film,
   Download,
@@ -28,7 +24,8 @@ import {
   AlertCircle,
   Loader2,
   RefreshCw,
-  Play,
+  ArrowLeft,
+  WifiOff,
 } from 'lucide-react';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.js';
@@ -40,7 +37,6 @@ import {
   ProjectMessage,
   MessageAttachment,
   MessageContextType,
-  ProjectParticipantPresence,
   ProjectPresenceData,
 } from '../types/index.js';
 import { formatDate } from '../utils/dates.js';
@@ -94,19 +90,21 @@ export const ProjectMessagesPage: React.FC = () => {
   const linkedReportId = searchParams.get('reportId');
 
   const navigate = useNavigate();
-  const { user, isOwner } = useAuth();
-  const { socket, joinProject, leaveProject } = useSocket();
+  const { user } = useAuth();
+  const { socket, isConnected, joinProject, leaveProject } = useSocket();
   const { showToast } = useToast();
   const queryClient = useQueryClient();
 
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const replaceInputRef = useRef<HTMLInputElement | null>(null);
   const replacingIdRef = useRef<string | null>(null);
   const dragCounter = useRef(0);
+  const isNearBottomRef = useRef(true);
+  const prevProjectIdRef = useRef<string>('');
 
-  // Active selected project
-  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
+  const [mobileView, setMobileView] = useState<'channels' | 'chat'>('chat');
 
   // Form input states
   const [content, setContent] = useState('');
@@ -139,56 +137,96 @@ export const ProjectMessagesPage: React.FC = () => {
     queryKey: ['projects'],
     queryFn: () => api.get<{ success: boolean; projects: any[] }>('/projects'),
   });
-  const projects = projectsData?.projects || [];
+  const projects = useMemo(() => projectsData?.projects || [], [projectsData]);
 
-  // Match routeProjectId (which may be an ObjectId OR Project Code like "TG-156") with projects list
+  // Synchronously match routeProjectId with projects list
+  const matchedProject = useMemo(() => {
+    if (!routeProjectId || projects.length === 0) return null;
+    return (
+      projects.find(
+        (p: any) =>
+          (p._id || p.id) === routeProjectId ||
+          (p.code && p.code.toLowerCase() === routeProjectId.toLowerCase())
+      ) || null
+    );
+  }, [projects, routeProjectId]);
+
+  // Canonical active project ID
+  const activeProjectId = useMemo(() => {
+    if (matchedProject) return matchedProject._id || matchedProject.id;
+    if (routeProjectId) return routeProjectId;
+    if (projects.length > 0) return projects[0]._id || projects[0].id;
+    return '';
+  }, [matchedProject, routeProjectId, projects]);
+
+  const activeProject = useMemo(() => {
+    if (matchedProject) return matchedProject;
+    if (activeProjectId && projects.length > 0) {
+      return projects.find((p: any) => (p._id || p.id) === activeProjectId) || null;
+    }
+    return null;
+  }, [matchedProject, activeProjectId, projects]);
+
+  // If no routeProjectId was provided in URL, redirect synchronously once projects load
   useEffect(() => {
-    if (projects.length > 0) {
-      if (routeProjectId) {
-        const matched = projects.find(
-          (p: any) =>
-            (p._id || p.id) === routeProjectId ||
-            (p.code && p.code.toLowerCase() === routeProjectId.toLowerCase())
-        );
-        if (matched) {
-          setSelectedProjectId(matched._id || matched.id);
-        } else {
-          setSelectedProjectId(routeProjectId);
-        }
-      } else if (!selectedProjectId) {
-        const firstId = projects[0]._id || projects[0].id;
-        setSelectedProjectId(firstId);
+    if (!routeProjectId && projects.length > 0) {
+      const defaultId = projects[0]._id || projects[0].id;
+      navigate(`/messages/${defaultId}`, { replace: true });
+    }
+  }, [routeProjectId, projects, navigate]);
+
+  // Handle channel selection cleanly without state conflicts
+  const handleSelectProject = useCallback(
+    (targetProjectId: string) => {
+      if (targetProjectId === activeProjectId) {
+        setMobileView('chat');
+        return;
       }
-    }
-  }, [projects, routeProjectId, selectedProjectId]);
 
-  // Keep route synced with selected project
-  useEffect(() => {
-    if (selectedProjectId && selectedProjectId !== routeProjectId) {
-      navigate(`/messages/${selectedProjectId}`, { replace: true });
-    }
-  }, [selectedProjectId, routeProjectId, navigate]);
+      // Clean up staged attachments from previous channel so media doesn't leak into new project
+      setStagedAttachments((prev) => {
+        prev.forEach((a) => {
+          if (a.previewUrl && a.previewUrl.startsWith('blob:')) {
+            URL.revokeObjectURL(a.previewUrl);
+          }
+        });
+        return [];
+      });
+
+      // Reset linked context if it was general or linked to another context
+      if (contextType !== 'GENERAL' && !linkedPaymentId && !linkedReportId) {
+        setContextType('GENERAL');
+        setContextId('');
+        setContextSummary('');
+      }
+
+      setMobileView('chat');
+      navigate(`/messages/${targetProjectId}`);
+    },
+    [activeProjectId, contextType, linkedPaymentId, linkedReportId, navigate]
+  );
 
   // Socket room join / leave lifecycle & mark seen
   useEffect(() => {
-    if (selectedProjectId) {
-      joinProject(selectedProjectId);
+    if (!activeProjectId) return;
 
-      // Tell backend & peers that messages are read
-      api
-        .put(`/projects/${selectedProjectId}/messages/read`)
-        .then(() => {
-          socket?.emit('messages:mark_seen', { projectId: selectedProjectId });
-          queryClient.invalidateQueries({ queryKey: ['notifications'] });
-          queryClient.invalidateQueries({ queryKey: ['notifications-unread-count'] });
-        })
-        .catch(() => {});
+    joinProject(activeProjectId);
 
-      return () => {
-        leaveProject(selectedProjectId);
-      };
-    }
-  }, [selectedProjectId, joinProject, leaveProject, socket, queryClient]);
+    // Tell backend & peers that messages are read
+    api
+      .put(`/projects/${activeProjectId}/messages/read`)
+      .then(() => {
+        socket?.emit('messages:mark_seen', { projectId: activeProjectId });
+        queryClient.invalidateQueries({ queryKey: ['notifications'] });
+        queryClient.invalidateQueries({ queryKey: ['notifications-unread-count'] });
+        queryClient.invalidateQueries({ queryKey: ['unread-messages-count'] });
+      })
+      .catch(() => {});
+
+    return () => {
+      leaveProject(activeProjectId);
+    };
+  }, [activeProjectId, joinProject, leaveProject, socket, queryClient]);
 
   // Handle ESC key for Lightbox
   useEffect(() => {
@@ -201,12 +239,12 @@ export const ProjectMessagesPage: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Fetch Presence & Online participants for active project
-  const { data: presenceData } = useQuery({
-    queryKey: ['project-presence', selectedProjectId],
-    queryFn: () =>
-      api.get<ProjectPresenceData>(`/projects/${selectedProjectId}/messages/presence`),
-    enabled: Boolean(selectedProjectId),
+  // Fetch Presence & Online participants for active project (with request cancellation)
+  const { data: presenceData, isLoading: isLoadingPresence } = useQuery({
+    queryKey: ['project-presence', activeProjectId],
+    queryFn: ({ signal }) =>
+      api.get<ProjectPresenceData>(`/projects/${activeProjectId}/messages/presence`, { signal }),
+    enabled: Boolean(activeProjectId),
     refetchInterval: 5000,
   });
 
@@ -217,28 +255,84 @@ export const ProjectMessagesPage: React.FC = () => {
   const otherOnlineParticipants = otherParticipants.filter((p) => p.isOnline);
   const isOtherPartyOnline = otherOnlineParticipants.length > 0;
 
-  // Fetch Messages for active project
-  const { data: messagesData, isLoading: isLoadingMessages } = useQuery({
-    queryKey: ['project-messages', selectedProjectId],
-    queryFn: () =>
+  // Fetch Messages for active project (with request cancellation via AbortSignal)
+  const {
+    data: messagesData,
+    isLoading: isLoadingMessages,
+    isFetching: isFetchingMessages,
+    isError: isMessagesError,
+    error: messagesError,
+    refetch: refetchMessages,
+  } = useQuery({
+    queryKey: ['project-messages', activeProjectId],
+    queryFn: ({ signal }) =>
       api.get<{ success: boolean; messages: ProjectMessage[] }>(
-        `/projects/${selectedProjectId}/messages`
+        `/projects/${activeProjectId}/messages`,
+        { signal }
       ),
-    enabled: Boolean(selectedProjectId),
+    enabled: Boolean(activeProjectId),
     refetchInterval: 6000,
   });
-  const messages = messagesData?.messages || [];
 
-  // Scroll to bottom on new messages
+  // Strict message isolation: guarantees no previous or cross-project messages ever render
+  const rawMessages = messagesData?.messages || [];
+  const messages = useMemo(() => {
+    if (!activeProjectId) return [];
+    return rawMessages.filter((m: ProjectMessage) => {
+      const pId =
+        typeof m.project === 'object' && m.project !== null
+          ? (m.project as any)._id || (m.project as any).id
+          : m.project;
+      return !pId || String(pId) === String(activeProjectId);
+    });
+  }, [rawMessages, activeProjectId]);
+
+  // Scroll management:
+  // 1. Channel switch: immediate scroll to bottom
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages.length]);
+    if (activeProjectId && activeProjectId !== prevProjectIdRef.current) {
+      prevProjectIdRef.current = activeProjectId;
+      isNearBottomRef.current = true;
+      requestAnimationFrame(() => {
+        if (messagesContainerRef.current) {
+          messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+        }
+      });
+    }
+  }, [activeProjectId]);
+
+  // Track if user is near bottom
+  const handleScroll = useCallback(() => {
+    const el = messagesContainerRef.current;
+    if (!el) return;
+    const threshold = 120;
+    const isBottom = el.scrollHeight - el.scrollTop - el.clientHeight <= threshold;
+    isNearBottomRef.current = isBottom;
+  }, []);
+
+  // 2. Incoming or updated messages: smooth scroll ONLY if user is near bottom or sent own message
+  const prevMessagesCountRef = useRef(messages.length);
+  useEffect(() => {
+    if (messages.length > prevMessagesCountRef.current) {
+      const lastMsg = messages[messages.length - 1];
+      const sId =
+        typeof lastMsg?.sender === 'object' && lastMsg?.sender !== null
+          ? (lastMsg?.sender as any)._id || (lastMsg?.sender as any).id
+          : lastMsg?.sender;
+      const isMine = String(sId) === String(currentUserId);
+
+      if (isMine || isNearBottomRef.current) {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }
+    }
+    prevMessagesCountRef.current = messages.length;
+  }, [messages, currentUserId]);
 
   // Send message mutation
   const sendMessageMutation = useMutation({
     mutationFn: (data: any) =>
-      api.post(`/projects/${selectedProjectId}/messages`, data),
-    onSuccess: () => {
+      api.post(`/projects/${activeProjectId}/messages`, data),
+    onSuccess: (res: any) => {
       setContent('');
       // Clean up previews
       stagedAttachments.forEach((a) => {
@@ -252,7 +346,34 @@ export const ProjectMessagesPage: React.FC = () => {
         setContextId('');
         setContextSummary('');
       }
-      queryClient.invalidateQueries({ queryKey: ['project-messages', selectedProjectId] });
+
+      // If backend returned the created message, add to cache immediately if not already present
+      const createdMsg = res?.data?._id ? res.data : res?.message?._id ? res.message : null;
+      if (createdMsg) {
+        queryClient.setQueriesData<any>(
+          { queryKey: ['project-messages', activeProjectId] },
+          (old: any) => {
+            if (!old || !Array.isArray(old.messages)) return old;
+            const exists = old.messages.some(
+              (m: any) => String(m._id || m.id) === String(createdMsg._id || createdMsg.id)
+            );
+            if (exists) return old;
+            return {
+              ...old,
+              messages: [...old.messages, createdMsg],
+              count: (old.count || old.messages.length) + 1,
+            };
+          }
+        );
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['project-messages', activeProjectId] });
+      queryClient.invalidateQueries({ queryKey: ['unread-messages-count'] });
+
+      // Immediate scroll to bottom on own message
+      requestAnimationFrame(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      });
     },
     onError: (err: any) => {
       showToast(err.message || 'Failed to deliver message', 'error');
@@ -261,11 +382,12 @@ export const ProjectMessagesPage: React.FC = () => {
 
   // Upload files to backend
   const uploadFiles = async (filesToUpload: File[]) => {
-    if (!selectedProjectId) {
+    if (!activeProjectId) {
       showToast('Please select a project channel first', 'error');
       return;
     }
 
+    const currentChannelId = activeProjectId;
     const newStaged: StagedAttachment[] = [];
 
     for (const file of filesToUpload) {
@@ -278,7 +400,12 @@ export const ProjectMessagesPage: React.FC = () => {
           showToast(`"${file.name}" exceeds 10 MB limit for images`, 'error');
           continue;
         }
-      } else if (ALLOWED_VIDEO_TYPES.includes(mime) || file.name.endsWith('.mp4') || file.name.endsWith('.webm') || file.name.endsWith('.mov')) {
+      } else if (
+        ALLOWED_VIDEO_TYPES.includes(mime) ||
+        file.name.endsWith('.mp4') ||
+        file.name.endsWith('.webm') ||
+        file.name.endsWith('.mov')
+      ) {
         mediaType = 'video';
         if (file.size > MAX_VIDEO_SIZE) {
           showToast(`"${file.name}" exceeds 100 MB limit for videos`, 'error');
@@ -291,7 +418,10 @@ export const ProjectMessagesPage: React.FC = () => {
           continue;
         }
       } else {
-        showToast(`"${file.name}" has an unsupported format. Allowed: JPG, PNG, WEBP, MP4, WEBM, PDF`, 'error');
+        showToast(
+          `"${file.name}" has an unsupported format. Allowed: JPG, PNG, WEBP, MP4, WEBM, PDF`,
+          'error'
+        );
         continue;
       }
 
@@ -305,7 +435,13 @@ export const ProjectMessagesPage: React.FC = () => {
         name: file.name,
         size: file.size,
         type: mediaType,
-        mimeType: mime || (mediaType === 'image' ? 'image/jpeg' : mediaType === 'video' ? 'video/mp4' : 'application/pdf'),
+        mimeType:
+          mime ||
+          (mediaType === 'image'
+            ? 'image/jpeg'
+            : mediaType === 'video'
+            ? 'video/mp4'
+            : 'application/pdf'),
         uploading: true,
         progress: 10,
       });
@@ -325,7 +461,12 @@ export const ProjectMessagesPage: React.FC = () => {
           success: boolean;
           message?: string;
           attachments: MessageAttachment[];
-        }>(`/projects/${selectedProjectId}/messages/upload`, formData);
+        }>(`/projects/${currentChannelId}/messages/upload`, formData);
+
+        // Discard if user switched projects during upload
+        if (activeProjectId !== currentChannelId) {
+          return;
+        }
 
         if (res.success && res.attachments && res.attachments.length > 0) {
           const uploaded = res.attachments[0];
@@ -347,6 +488,7 @@ export const ProjectMessagesPage: React.FC = () => {
           throw new Error(res.message || 'Server rejected media upload');
         }
       } catch (err: any) {
+        if (activeProjectId !== currentChannelId) return;
         setStagedAttachments((prev) =>
           prev.map((item) =>
             item.id === staged.id
@@ -358,7 +500,10 @@ export const ProjectMessagesPage: React.FC = () => {
               : item
           )
         );
-        showToast(`Failed to upload "${staged.name}": ${err.message || 'Network error'}`, 'error');
+        showToast(
+          `Failed to upload "${staged.name}": ${err.message || 'Network error'}`,
+          'error'
+        );
       }
     }
   };
@@ -502,17 +647,50 @@ export const ProjectMessagesPage: React.FC = () => {
     document.body.removeChild(link);
   };
 
-  const activeProject = projects.find(
-    (p: any) =>
-      (p._id || p.id) === selectedProjectId ||
-      (p.code && p.code.toLowerCase() === selectedProjectId.toLowerCase())
-  );
+  const filteredProjects = useMemo(() => {
+    return projects.filter((p: any) => {
+      if (!projectSearch) return true;
+      const q = projectSearch.toLowerCase();
+      return p.name?.toLowerCase().includes(q) || p.code?.toLowerCase().includes(q);
+    });
+  }, [projects, projectSearch]);
 
-  const filteredProjects = projects.filter((p: any) => {
-    if (!projectSearch) return true;
-    const q = projectSearch.toLowerCase();
-    return p.name?.toLowerCase().includes(q) || p.code?.toLowerCase().includes(q);
-  });
+  // Fallbacks to eliminate flickering "No Site In-Charge assigned yet" warning when switching
+  const hasAssignedInCharge = useMemo(() => {
+    if (presenceData && typeof presenceData.hasAssignedInCharge === 'boolean') {
+      return presenceData.hasAssignedInCharge;
+    }
+    if (activeProject) {
+      if (Array.isArray(activeProject.assignedInCharges) && activeProject.assignedInCharges.length > 0) {
+        return true;
+      }
+      if (activeProject.assignedInCharge) return true;
+    }
+    return false;
+  }, [presenceData, activeProject]);
+
+  const assignedInChargeNames = useMemo(() => {
+    if (presenceData?.linkedInCharges && presenceData.linkedInCharges.length > 0) {
+      return presenceData.linkedInCharges.map((ic) => ic.name).join(', ');
+    }
+    if (activeProject?.assignedInCharge) {
+      if (typeof activeProject.assignedInCharge === 'object' && activeProject.assignedInCharge.name) {
+        return activeProject.assignedInCharge.name;
+      }
+    }
+    return '';
+  }, [presenceData, activeProject]);
+
+  const mdName = useMemo(() => {
+    if (presenceData?.linkedMD?.name) return presenceData.linkedMD.name;
+    if (activeProject?.owner && typeof activeProject.owner === 'object' && activeProject.owner.name) {
+      return activeProject.owner.name;
+    }
+    if (activeProject?.createdBy && typeof activeProject.createdBy === 'object' && activeProject.createdBy.name) {
+      return activeProject.createdBy.name;
+    }
+    return 'Managing Director';
+  }, [presenceData, activeProject]);
 
   // Last outgoing message seen check for bottom thread indicator
   const outgoingMessages = messages.filter((m: ProjectMessage) => {
@@ -541,7 +719,13 @@ export const ProjectMessagesPage: React.FC = () => {
   const lastSeenAt = lastSeenReaders[0]?.readAt;
 
   const isAnyStagedUploading = stagedAttachments.some((a) => a.uploading);
-  const canSend = (content.trim().length > 0 || stagedAttachments.some((a) => a.uploadedUrl)) && !isAnyStagedUploading;
+  const canSend =
+    (content.trim().length > 0 || stagedAttachments.some((a) => a.uploadedUrl)) &&
+    !isAnyStagedUploading;
+
+  // Determine error status
+  const errorStatus = (messagesError as any)?.status;
+  const isForbidden = errorStatus === 403 || String((messagesError as any)?.message || '').includes('Forbidden');
 
   return (
     <div
@@ -587,7 +771,11 @@ export const ProjectMessagesPage: React.FC = () => {
       />
 
       {/* LEFT SIDEBAR: PROJECTS CHAT LIST */}
-      <div className="w-full md:w-80 border-r border-slate-200/90 flex flex-col bg-slate-50/50">
+      <div
+        className={`w-full md:w-80 border-r border-slate-200/90 flex flex-col bg-slate-50/50 ${
+          mobileView === 'chat' ? 'hidden md:flex' : 'flex flex-1'
+        }`}
+      >
         <div className="p-4 border-b border-slate-200/90 space-y-3 bg-white">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -596,9 +784,17 @@ export const ProjectMessagesPage: React.FC = () => {
               </div>
               <h2 className="text-sm font-black text-navy-950">Project Channels</h2>
             </div>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
-              {projects.length}
-            </span>
+            <div className="flex items-center gap-1.5">
+              {!isConnected && (
+                <span
+                  title="Reconnecting to real-time chat..."
+                  className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"
+                />
+              )}
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                {projects.length}
+              </span>
+            </div>
           </div>
 
           {/* Search channel */}
@@ -625,13 +821,15 @@ export const ProjectMessagesPage: React.FC = () => {
           ) : (
             filteredProjects.map((p: any) => {
               const id = p._id || p.id;
-              const isSelected = id === selectedProjectId;
+              const isSelected = id === activeProjectId;
               return (
                 <button
                   key={id}
-                  onClick={() => setSelectedProjectId(id)}
-                  className={`w-full text-left p-3.5 transition-colors flex items-start gap-3 ${
-                    isSelected ? 'bg-amber-500/10 border-l-4 border-amber-500' : 'hover:bg-slate-100/70'
+                  onClick={() => handleSelectProject(id)}
+                  className={`w-full text-left p-3.5 transition-colors flex items-start gap-3 cursor-pointer ${
+                    isSelected
+                      ? 'bg-amber-500/10 border-l-4 border-amber-500'
+                      : 'hover:bg-slate-100/70 border-l-4 border-transparent'
                   }`}
                 >
                   <div className="relative flex-shrink-0">
@@ -673,10 +871,42 @@ export const ProjectMessagesPage: React.FC = () => {
       </div>
 
       {/* RIGHT MAIN AREA: PROJECT CHAT CONVERSATION */}
-      <div className="flex-1 flex flex-col bg-white overflow-hidden">
+      <div
+        className={`flex-1 flex flex-col bg-white overflow-hidden ${
+          mobileView === 'channels' ? 'hidden md:flex' : 'flex'
+        }`}
+      >
+        {/* Connection status banner if socket is disconnected */}
+        {!isConnected && (
+          <div className="bg-amber-50 border-b border-amber-200 px-4 py-1.5 flex items-center justify-between text-[11px] text-amber-800 animate-in fade-in">
+            <div className="flex items-center gap-1.5">
+              <WifiOff className="w-3.5 h-3.5 text-amber-600 animate-pulse" />
+              <span>Real-time updates paused. Reconnecting to SiteTrack server...</span>
+            </div>
+            <button
+              onClick={() => {
+                socket?.connect();
+                refetchMessages();
+              }}
+              className="text-amber-900 font-bold underline hover:text-amber-950 cursor-pointer"
+            >
+              Reconnect
+            </button>
+          </div>
+        )}
+
         {/* Chat Header with ONLINE presence */}
-        <div className="h-16 px-6 border-b border-slate-200 flex items-center justify-between bg-white flex-shrink-0">
-          <div className="flex items-center gap-3 min-w-0">
+        <div className="h-16 px-3 sm:px-6 border-b border-slate-200 flex items-center justify-between bg-white flex-shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            {/* Back to Channels button on mobile */}
+            <button
+              type="button"
+              onClick={() => setMobileView('channels')}
+              className="md:hidden p-2 -ml-1 text-slate-500 hover:text-navy-950 rounded-xl hover:bg-slate-100 min-w-[38px] min-h-[38px] flex items-center justify-center shrink-0 cursor-pointer"
+              aria-label="Back to channels"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
             <div className="relative flex-shrink-0">
               <div className="w-10 h-10 rounded-xl bg-navy-900 text-amber-500 flex items-center justify-center font-bold text-xs shadow-xs">
                 {activeProject?.code?.substring(0, 3) || 'PRJ'}
@@ -698,7 +928,7 @@ export const ProjectMessagesPage: React.FC = () => {
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-extrabold text-navy-950 truncate">
-                  {activeProject?.name || 'Select a project channel'}
+                  {activeProject?.name || (activeProjectId ? `Project #${activeProjectId.substring(0, 8)}` : 'Select a project channel')}
                 </h3>
 
                 {/* ONLINE / OFFLINE Status Badge */}
@@ -717,17 +947,15 @@ export const ProjectMessagesPage: React.FC = () => {
 
               {/* Subtitle: Linked Accounts status */}
               <div className="text-[11px] text-slate-500 truncate flex items-center gap-1.5">
-                {presenceData?.linkedMD && (
-                  <span className="font-medium text-slate-700">
-                    MD: <strong className="text-navy-950">{presenceData.linkedMD.name}</strong>
-                  </span>
-                )}
+                <span className="font-medium text-slate-700">
+                  MD: <strong className="text-navy-950">{mdName}</strong>
+                </span>
                 <span className="text-slate-300">•</span>
-                {presenceData?.hasAssignedInCharge && presenceData.linkedInCharges && presenceData.linkedInCharges.length > 0 ? (
+                {hasAssignedInCharge ? (
                   <span className="font-medium text-slate-700">
                     In-Charge:{' '}
                     <strong className="text-navy-950">
-                      {presenceData.linkedInCharges.map((ic) => ic.name).join(', ')}
+                      {assignedInChargeNames || 'Assigned Site Engineer'}
                     </strong>
                     {isOtherPartyOnline ? (
                       <span className="ml-1 text-emerald-600 font-bold">
@@ -742,7 +970,7 @@ export const ProjectMessagesPage: React.FC = () => {
                     <span>⚠️ No Site In-Charge assigned yet</span>
                     {(user?.role === 'MD' || user?.role === 'OWNER') && (
                       <button
-                        onClick={() => navigate(`/projects/${selectedProjectId}`)}
+                        onClick={() => navigate(`/projects/${activeProjectId}`)}
                         className="text-amber-800 underline font-bold hover:text-amber-950 ml-1 cursor-pointer"
                       >
                         Assign now
@@ -757,67 +985,78 @@ export const ProjectMessagesPage: React.FC = () => {
           {/* Right Header: Strictly Linked Accounts Chips (MD and their linked In-Charges) */}
           <div className="hidden sm:flex items-center gap-2">
             {/* Linked MD */}
-            {presenceData?.linkedMD && (
-              <div
-                key={presenceData.linkedMD.userId}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold border transition-all ${
-                  presenceData.linkedMD.isOnline
-                    ? 'bg-emerald-50 border-emerald-200 text-emerald-950 shadow-2xs'
-                    : 'bg-slate-50 border-slate-200 text-slate-500'
+            <div
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold border transition-all ${
+                presenceData?.linkedMD?.isOnline
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-950 shadow-2xs'
+                  : 'bg-slate-50 border-slate-200 text-slate-500'
+              }`}
+              title={`${mdName} (Managing Director) - ${
+                presenceData?.linkedMD?.isOnline ? 'Active on SiteTrack' : 'Offline'
+              }`}
+            >
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  presenceData?.linkedMD?.isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'
                 }`}
-                title={`${presenceData.linkedMD.name} (Managing Director) - ${
-                  presenceData.linkedMD.isOnline ? 'Active on SiteTrack' : 'Offline'
-                }`}
-              >
-                <span
-                  className={`w-2 h-2 rounded-full ${
-                    presenceData.linkedMD.isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'
-                  }`}
-                />
-                <span className="truncate max-w-[120px]">
-                  {presenceData.linkedMD.name}
-                  {presenceData.linkedMD.userId === currentUserId && ' (You)'}
-                </span>
-                <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 border border-amber-300 uppercase">
-                  MD
-                </span>
-              </div>
-            )}
+              />
+              <span className="truncate max-w-[120px]">
+                {mdName}
+                {presenceData?.linkedMD?.userId === currentUserId && ' (You)'}
+              </span>
+              <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 border border-amber-300 uppercase">
+                MD
+              </span>
+            </div>
 
             {/* Linked In-Charges (strictly for this project) */}
-            {presenceData?.hasAssignedInCharge && presenceData.linkedInCharges && presenceData.linkedInCharges.length > 0 ? (
-              presenceData.linkedInCharges.map((ic) => {
-                const isCurrentUser = ic.userId === currentUserId;
-                return (
-                  <div
-                    key={ic.userId}
-                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold border transition-all ${
-                      ic.isOnline
-                        ? 'bg-emerald-50 border-emerald-200 text-emerald-950 shadow-2xs'
-                        : 'bg-slate-50 border-slate-200 text-slate-500'
-                    }`}
-                    title={`${ic.name} (Site In-Charge) - ${ic.isOnline ? 'Active on SiteTrack' : 'Offline'}`}
-                  >
-                    <span
-                      className={`w-2 h-2 rounded-full ${
-                        ic.isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'
+            {hasAssignedInCharge ? (
+              presenceData?.linkedInCharges && presenceData.linkedInCharges.length > 0 ? (
+                presenceData.linkedInCharges.map((ic) => {
+                  const isCurrentUser = ic.userId === currentUserId;
+                  return (
+                    <div
+                      key={ic.userId}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold border transition-all ${
+                        ic.isOnline
+                          ? 'bg-emerald-50 border-emerald-200 text-emerald-950 shadow-2xs'
+                          : 'bg-slate-50 border-slate-200 text-slate-500'
                       }`}
-                    />
-                    <span className="truncate max-w-[120px]">
-                      {ic.name}
-                      {isCurrentUser && ' (You)'}
-                    </span>
-                    <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-navy-100 text-navy-900 border border-navy-200 uppercase">
-                      In-Charge
-                    </span>
-                  </div>
-                );
-              })
+                      title={`${ic.name} (Site In-Charge) - ${ic.isOnline ? 'Active on SiteTrack' : 'Offline'}`}
+                    >
+                      <span
+                        className={`w-2 h-2 rounded-full ${
+                          ic.isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'
+                        }`}
+                      />
+                      <span className="truncate max-w-[120px]">
+                        {ic.name}
+                        {isCurrentUser && ' (You)'}
+                      </span>
+                      <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-navy-100 text-navy-900 border border-navy-200 uppercase">
+                        In-Charge
+                      </span>
+                    </div>
+                  );
+                })
+              ) : (
+                <div
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold bg-slate-50 border border-slate-200 text-slate-600"
+                >
+                  <span className="w-2 h-2 rounded-full bg-slate-300" />
+                  <span className="truncate max-w-[120px]">
+                    {assignedInChargeNames || 'In-Charge'}
+                  </span>
+                  <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-navy-100 text-navy-900 border border-navy-200 uppercase">
+                    In-Charge
+                  </span>
+                </div>
+              )
             ) : (
               <button
                 onClick={() => {
                   if (user?.role === 'MD' || user?.role === 'OWNER') {
-                    navigate(`/projects/${selectedProjectId}`);
+                    navigate(`/projects/${activeProjectId}`);
                   }
                 }}
                 className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold bg-amber-50 border border-amber-300 text-amber-900 shadow-2xs hover:bg-amber-100 transition-colors cursor-pointer"
@@ -836,9 +1075,13 @@ export const ProjectMessagesPage: React.FC = () => {
         </div>
 
         {/* Messages Feed */}
-        <div className="flex-1 p-6 overflow-y-auto space-y-4 bg-slate-50/30">
+        <div
+          ref={messagesContainerRef}
+          onScroll={handleScroll}
+          className="flex-1 p-6 overflow-y-auto space-y-4 bg-slate-50/30"
+        >
           {/* Informational banner when project has no assigned in-charge */}
-          {presenceData && !presenceData.hasAssignedInCharge && activeProject && (
+          {!hasAssignedInCharge && activeProject && (
             <div className="bg-amber-50 border border-amber-200/90 rounded-2xl p-3 mb-2 flex items-center justify-between gap-3 text-xs shadow-2xs">
               <div className="flex items-center gap-2.5 min-w-0">
                 <div className="w-8 h-8 rounded-xl bg-amber-500 text-navy-950 flex items-center justify-center font-bold flex-shrink-0 shadow-xs">
@@ -855,7 +1098,7 @@ export const ProjectMessagesPage: React.FC = () => {
               </div>
               {(user?.role === 'MD' || user?.role === 'OWNER') && (
                 <button
-                  onClick={() => navigate(`/projects/${selectedProjectId}`)}
+                  onClick={() => navigate(`/projects/${activeProjectId}`)}
                   className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-navy-950 font-bold text-xs rounded-xl flex-shrink-0 transition-colors shadow-2xs cursor-pointer"
                 >
                   Assign In-Charge
@@ -864,22 +1107,66 @@ export const ProjectMessagesPage: React.FC = () => {
             </div>
           )}
 
-          {isLoadingMessages ? (
+          {/* Conditional message content / loading / error states */}
+          {isLoadingMessages || (isFetchingMessages && !messagesData) ? (
             <LoadingSkeleton rows={5} height="h-16" />
+          ) : isForbidden ? (
+            <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-4 animate-in fade-in">
+              <div className="w-16 h-16 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center border border-rose-200 shadow-xs">
+                <AlertCircle className="w-8 h-8" />
+              </div>
+              <div className="max-w-md space-y-1">
+                <h4 className="text-base font-extrabold text-navy-950">Access Denied (403 Forbidden)</h4>
+                <p className="text-xs text-slate-500">
+                  You do not have authorization to view this project channel. Access is restricted to the assigned Site In-Charge and Managing Director.
+                </p>
+              </div>
+              {projects.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleSelectProject(projects[0]._id || projects[0].id)}
+                  className="rounded-xl cursor-pointer"
+                >
+                  Go to Authorized Channel
+                </Button>
+              )}
+            </div>
+          ) : isMessagesError ? (
+            <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-4 animate-in fade-in">
+              <div className="w-16 h-16 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-200 shadow-xs">
+                <AlertCircle className="w-8 h-8" />
+              </div>
+              <div className="max-w-md space-y-1">
+                <h4 className="text-base font-extrabold text-navy-950">Failed to load conversation</h4>
+                <p className="text-xs text-slate-500">
+                  {(messagesError as any)?.message || 'A network error occurred while loading project messages.'}
+                </p>
+              </div>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => refetchMessages()}
+                className="flex items-center gap-1.5 rounded-xl cursor-pointer"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Retry</span>
+              </Button>
+            </div>
           ) : messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-3">
               <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center shadow-xs">
                 <MessageSquare className="w-7 h-7" />
               </div>
               <h4 className="text-sm font-bold text-navy-950">
-                {!presenceData?.hasAssignedInCharge
+                {!hasAssignedInCharge
                   ? 'No Site In-Charge Assigned Yet'
                   : 'Start the conversation'}
               </h4>
               <p className="text-xs text-slate-400 max-w-sm">
-                {!presenceData?.hasAssignedInCharge
+                {!hasAssignedInCharge
                   ? 'Assign an In-Charge to this project to share photos, walkthrough videos, payment requests, and daily report discussions.'
-                  : `Coordinate operations between MD (${presenceData?.linkedMD?.name || 'Managing Director'}) and Site In-Charge (${presenceData?.linkedInCharges?.map((i) => i.name).join(', ')}).`}
+                  : `Coordinate operations between MD (${mdName}) and Site In-Charge (${assignedInChargeNames || 'Assigned In-Charge'}).`}
               </p>
               <div className="flex items-center gap-2 pt-1 text-[11px] text-slate-500 bg-slate-100/80 px-3 py-1.5 rounded-xl border border-slate-200">
                 <UploadCloud className="w-4 h-4 text-amber-500" />
@@ -978,7 +1265,7 @@ export const ProjectMessagesPage: React.FC = () => {
                               if (m.contextType === 'DAILY_REPORT') navigate(`/reports/${m.contextId}`);
                               if (m.contextType === 'EXPENSE') navigate('/expenses');
                             }}
-                            className="flex items-center gap-1 text-[10px] font-bold hover:underline flex-shrink-0"
+                            className="flex items-center gap-1 text-[10px] font-bold hover:underline flex-shrink-0 cursor-pointer"
                           >
                             <span>Open</span>
                             <ExternalLink className="w-3 h-3" />
@@ -1091,7 +1378,7 @@ export const ProjectMessagesPage: React.FC = () => {
                                       <button
                                         type="button"
                                         onClick={(e) => handleDownload(e, att.url, att.name)}
-                                        className="flex items-center gap-1 text-[10px] font-bold text-amber-400 hover:text-amber-300 transition-colors ml-2 flex-shrink-0"
+                                        className="flex items-center gap-1 text-[10px] font-bold text-amber-400 hover:text-amber-300 transition-colors ml-2 flex-shrink-0 cursor-pointer"
                                       >
                                         <Download className="w-3 h-3" />
                                         <span>Download</span>
@@ -1139,7 +1426,7 @@ export const ProjectMessagesPage: React.FC = () => {
                                   <button
                                     type="button"
                                     onClick={(e) => handleDownload(e, att.url, att.name)}
-                                    className="p-1.5 rounded-lg hover:bg-white/10 text-amber-400 hover:text-amber-300 ml-2"
+                                    className="p-1.5 rounded-lg hover:bg-white/10 text-amber-400 hover:text-amber-300 ml-2 cursor-pointer"
                                     title="Download document"
                                   >
                                     <Download className="w-3.5 h-3.5" />
@@ -1372,7 +1659,7 @@ export const ProjectMessagesPage: React.FC = () => {
               type="submit"
               isLoading={sendMessageMutation.isPending || isAnyStagedUploading}
               disabled={!canSend}
-              className="rounded-2xl"
+              className="rounded-2xl cursor-pointer"
             >
               <Send className="w-4 h-4" />
             </Button>

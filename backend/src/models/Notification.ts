@@ -9,6 +9,9 @@ export type NotificationType =
   | 'PROJECT_MESSAGE'
   | 'DAILY_REPORT_SUBMITTED'
   | 'DAILY_REPORT_VIEWED'
+  | 'DAILY_REPORT_COMMENT'
+  | 'DAILY_REPORT_CHANGES_REQUESTED'
+  | 'DAILY_REPORT_REJECTED'
   | 'SYSTEM';
 
 export type NotificationRelatedEntity =

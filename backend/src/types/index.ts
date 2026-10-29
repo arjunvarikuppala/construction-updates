@@ -49,6 +49,7 @@ export interface WorkItem {
   description: string;
   quantity: number;
   unit: string;
+  budget?: number;
 }
 
 export interface LabourCountItem {
@@ -60,4 +61,44 @@ export interface SitePhoto {
   url: string;
   caption?: string;
   uploadedAt: Date;
+}
+
+export interface WeatherAlert {
+  type: 'HEAVY_RAIN' | 'THUNDERSTORM' | 'EXCESSIVE_HEAT' | 'STRONG_WINDS';
+  severity: 'INFO' | 'WARNING' | 'CRITICAL';
+  headline: string;
+  description: string;
+  actionableAdvice: string;
+}
+
+export interface WeatherData {
+  temperature: number;
+  feelsLike: number;
+  condition: string;
+  conditionCode: number;
+  icon: string;
+  humidity: number;
+  windSpeed: number;
+  windDirection?: number;
+  precipitationProbability?: number;
+  precipitation?: number;
+  observationTime: Date;
+  alerts: WeatherAlert[];
+}
+
+export interface ProjectWeatherSummary {
+  projectId: string;
+  projectName: string;
+  projectCode: string;
+  location: string;
+  coordinates: {
+    latitude: number | null;
+    longitude: number | null;
+  };
+  isConfigured: boolean;
+  weather?: WeatherData;
+  isStale?: boolean;
+  cached?: boolean;
+  fetchedAt?: Date;
+  statusMessage?: string;
 }

@@ -45,7 +45,7 @@ export const LabourBreakdownInput: React.FC<LabourBreakdownInputProps> = ({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
         <div>
           <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
             Site Labour & Headcount
@@ -82,6 +82,16 @@ export const LabourBreakdownInput: React.FC<LabourBreakdownInputProps> = ({
               key={index}
               className="flex items-center gap-2 p-2.5 bg-slate-50 rounded-xl border border-slate-200"
             >
+              <button
+                type="button"
+                onClick={() => removeLabour(index)}
+                title="Delete trade row"
+                aria-label="Delete trade row"
+                className="p-2 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-slate-200 transition-colors shrink-0"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+
               <div className="flex-1">
                 <Select
                   value={item.role}
@@ -90,7 +100,7 @@ export const LabourBreakdownInput: React.FC<LabourBreakdownInputProps> = ({
                 />
               </div>
 
-              <div className="w-24">
+              <div className="w-20 sm:w-24">
                 <Input
                   type="number"
                   min="0"
@@ -100,14 +110,6 @@ export const LabourBreakdownInput: React.FC<LabourBreakdownInputProps> = ({
                   required
                 />
               </div>
-
-              <button
-                type="button"
-                onClick={() => removeLabour(index)}
-                className="p-2 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-slate-200 transition-colors"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
             </div>
           ))}
         </div>

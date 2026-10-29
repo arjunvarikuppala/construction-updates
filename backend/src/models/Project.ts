@@ -5,6 +5,12 @@ export interface IProject extends Document {
   name: string;
   code: string;
   location: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  latitude?: number | null;
+  longitude?: number | null;
   description?: string;
   budget: number; // Stored as integer PAISE (e.g. ₹50,00,000 = 500000000 paise)
   assignedInCharge?: mongoose.Types.ObjectId;
@@ -38,6 +44,42 @@ const ProjectSchema = new Schema<IProject>(
       required: [true, 'Location is required'],
       trim: true,
       maxlength: 200,
+    },
+    address: {
+      type: String,
+      trim: true,
+      maxlength: 300,
+      default: '',
+    },
+    city: {
+      type: String,
+      trim: true,
+      maxlength: 100,
+      default: '',
+    },
+    state: {
+      type: String,
+      trim: true,
+      maxlength: 100,
+      default: '',
+    },
+    country: {
+      type: String,
+      trim: true,
+      maxlength: 100,
+      default: 'India',
+    },
+    latitude: {
+      type: Number,
+      min: [-90, 'Latitude must be between -90 and 90'],
+      max: [90, 'Latitude must be between -90 and 90'],
+      default: null,
+    },
+    longitude: {
+      type: Number,
+      min: [-180, 'Longitude must be between -180 and 180'],
+      max: [180, 'Longitude must be between -180 and 180'],
+      default: null,
     },
     description: {
       type: String,

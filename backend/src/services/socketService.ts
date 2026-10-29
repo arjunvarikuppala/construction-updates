@@ -1,7 +1,7 @@
 import { Server as HttpServer } from 'http';
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
-import { verifyUserProjectAccess } from '../middleware/auth.js';
+import { verifyUserProjectAccess, getJwtSecret } from '../middleware/auth.js';
 import { User } from '../models/User.js';
 
 interface AuthenticatedSocket extends Socket {
@@ -44,21 +44,36 @@ export function isUserOnline(userId: string): boolean {
 
 export function isUserInProject(userId: string, projectId: string): boolean {
   const u = activeUsers.get(String(userId));
-  return Boolean(u && u.socketIds.size > 0 && u.activeProjects.has(String(projectId)));
+  if (!u || u.socketIds.size === 0) return false;
+  const pStr = String(projectId).toLowerCase();
+  for (const active of u.activeProjects) {
+    if (active.toLowerCase() === pStr) return true;
+  }
+  return false;
 }
 
 export function getProjectOnlineUsers(projectId: string): OnlineUserInfo[] {
   const list: OnlineUserInfo[] = [];
+  const target = String(projectId).toLowerCase();
   activeUsers.forEach((u) => {
-    if (u.socketIds.size > 0 && u.activeProjects.has(String(projectId))) {
-      list.push({
-        userId: u.userId,
-        name: u.name,
-        role: u.role,
-        isOnline: true,
-        isInChannel: true,
-        lastSeen: u.lastSeen.toISOString(),
-      });
+    if (u.socketIds.size > 0) {
+      let inProject = false;
+      for (const p of u.activeProjects) {
+        if (p.toLowerCase() === target) {
+          inProject = true;
+          break;
+        }
+      }
+      if (inProject) {
+        list.push({
+          userId: u.userId,
+          name: u.name,
+          role: u.role,
+          isOnline: true,
+          isInChannel: true,
+          lastSeen: u.lastSeen.toISOString(),
+        });
+      }
     }
   });
   return list;
@@ -93,7 +108,7 @@ export function initSocketService(httpServer: HttpServer): SocketIOServer {
         return next(new Error('Authentication required for real-time connection.'));
       }
 
-      const secret = process.env.JWT_SECRET || 'sitetrack_jwt_secret_key_2026';
+      const secret = getJwtSecret();
       const decoded = jwt.verify(rawToken, secret) as any;
 
       const user = await User.findById(decoded.userId).select('name email role isActive');
@@ -164,29 +179,60 @@ export function initSocketService(httpServer: HttpServer): SocketIOServer {
           return;
         }
 
-        socket.join(`project:${projectId}`);
-        presence?.activeProjects.add(projectId);
+        const canonicalId = access.project ? access.project._id.toString() : String(projectId);
+        const passedId = String(projectId);
+
+        socket.join(`project:${canonicalId}`);
+        presence?.activeProjects.add(canonicalId);
+
+        if (canonicalId !== passedId) {
+          socket.join(`project:${passedId}`);
+          presence?.activeProjects.add(passedId);
+        }
 
         // Broadcast updated project presence
-        emitToProject(projectId, 'presence:project_users', {
-          projectId,
-          onlineUsers: getProjectOnlineUsers(projectId),
+        emitToProject(canonicalId, 'presence:project_users', {
+          projectId: canonicalId,
+          onlineUsers: getProjectOnlineUsers(canonicalId),
         });
+        if (canonicalId !== passedId) {
+          emitToProject(passedId, 'presence:project_users', {
+            projectId: canonicalId,
+            onlineUsers: getProjectOnlineUsers(canonicalId),
+          });
+        }
 
-        if (callback) callback({ success: true, room: `project:${projectId}` });
+        if (callback) callback({ success: true, room: `project:${canonicalId}`, canonicalId });
       } catch (err: any) {
         if (callback) callback({ success: false, message: err.message });
       }
     };
 
     // Helper for leaving a project channel
-    const handleLeaveProject = (projectId: string) => {
-      socket.leave(`project:${projectId}`);
-      presence?.activeProjects.delete(projectId);
+    const handleLeaveProject = async (projectId: string) => {
+      const passedId = String(projectId);
+      socket.leave(`project:${passedId}`);
+      presence?.activeProjects.delete(passedId);
 
-      emitToProject(projectId, 'presence:project_users', {
-        projectId,
-        onlineUsers: getProjectOnlineUsers(projectId),
+      try {
+        const access = await verifyUserProjectAccess(projectId, user.userId, user.role);
+        if (access.project) {
+          const canonicalId = access.project._id.toString();
+          socket.leave(`project:${canonicalId}`);
+          presence?.activeProjects.delete(canonicalId);
+
+          emitToProject(canonicalId, 'presence:project_users', {
+            projectId: canonicalId,
+            onlineUsers: getProjectOnlineUsers(canonicalId),
+          });
+        }
+      } catch {
+        // Safe leave
+      }
+
+      emitToProject(passedId, 'presence:project_users', {
+        projectId: passedId,
+        onlineUsers: getProjectOnlineUsers(passedId),
       });
     };
 
@@ -261,6 +307,19 @@ export function emitToMDs(event: string, data: any): void {
   }
 }
 
+export function broadcastReportCreated(data: {
+  reportId: string;
+  projectId: string;
+  submittedBy: string;
+  titleOfWork: string;
+}): void {
+  if (io) {
+    io.emit('daily-report:new', data);
+    io.to(`project:${data.projectId}`).emit('daily-report:new', data);
+    io.to('role:MD').emit('daily-report:new', data);
+  }
+}
+
 export function broadcastReportViewed(data: {
   reportId: string;
   projectId: string;
@@ -271,7 +330,9 @@ export function broadcastReportViewed(data: {
   if (io) {
     // 1. Broadcast globally to all connected clients (so In-Charge on /reports or dashboard gets it instantly)
     io.emit('report:viewed', data);
+    io.emit('daily-report:viewed', data);
     // 2. Also emit to specific project channel room
     io.to(`project:${data.projectId}`).emit('report:viewed', data);
+    io.to(`project:${data.projectId}`).emit('daily-report:viewed', data);
   }
 }

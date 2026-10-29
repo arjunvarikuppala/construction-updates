@@ -226,18 +226,32 @@ export const ExpenseFormPage: React.FC = () => {
               <CardTitle>Receipt / Invoice Photo Attachment</CardTitle>
               <p className="text-xs text-slate-500">Attach stamped tax invoice, weighbridge receipt, or voucher</p>
             </div>
-            <label className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-navy-900 text-white text-xs font-semibold cursor-pointer hover:bg-navy-800 transition-colors">
-              <Camera className="w-4 h-4 text-amber-400" />
-              <span>{isUploading ? 'Uploading...' : 'Take Photo / Upload'}</span>
-              <input
-                type="file"
-                accept="image/*,application/pdf"
-                capture="environment"
-                className="hidden"
-                onChange={handleFileUpload}
-                disabled={isUploading}
-              />
-            </label>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500 text-navy-950 text-xs font-bold cursor-pointer hover:bg-amber-400 transition-colors min-h-[38px]">
+                <Camera className="w-4 h-4" />
+                <span>{isUploading ? 'Uploading...' : 'Camera'}</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={handleFileUpload}
+                  disabled={isUploading}
+                />
+              </label>
+
+              <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-navy-900 text-white text-xs font-semibold cursor-pointer hover:bg-navy-800 transition-colors min-h-[38px]">
+                <Upload className="w-4 h-4 text-amber-400" />
+                <span>{isUploading ? 'Uploading...' : 'File / PDF'}</span>
+                <input
+                  type="file"
+                  accept="image/*,application/pdf"
+                  className="hidden"
+                  onChange={handleFileUpload}
+                  disabled={isUploading}
+                />
+              </label>
+            </div>
           </CardHeader>
           <CardContent>
             {receiptUrl ? (

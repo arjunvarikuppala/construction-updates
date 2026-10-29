@@ -5,12 +5,10 @@ import {
   Building2,
   DollarSign,
   Clock,
-  AlertCircle,
   FileText,
   FileCheck2,
   ArrowRight,
   FileSpreadsheet,
-  AlertTriangle,
   UserX,
   ExternalLink,
   Plus,
@@ -22,18 +20,19 @@ import { Button } from '../components/common/Button.js';
 import { Badge } from '../components/common/Badge.js';
 import { Select } from '../components/common/Input.js';
 import { LoadingSkeleton } from '../components/common/LoadingSkeleton.js';
-import { ProjectBudgetBarChart } from '../components/charts/ProjectBudgetBarChart.js';
-import { CategoryExpensePieChart } from '../components/charts/CategoryExpensePieChart.js';
-import { ExpenditureTrendChart } from '../components/charts/ExpenditureTrendChart.js';
 import { OwnerDashboardData, Project } from '../types/index.js';
 import { formatCompactINR, formatINR } from '../utils/currency.js';
 import { formatDate } from '../utils/dates.js';
 import { downloadExpensesExcel } from '../utils/exportExcel.js';
+import { WeatherSummaryGrid } from '../components/weather/WeatherSummaryGrid.js';
+import { useUnreadReports } from '../hooks/useUnreadReports.js';
+import { UnreadDot } from '../components/common/UnreadDot.js';
 import { api } from '../api/client.js';
 
 export const OwnerDashboard: React.FC = () => {
   const navigate = useNavigate();
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
+  const { isProjectUnread, getProjectUnreadCount, isReportUnread } = useUnreadReports();
   const [selectedDateRange, setSelectedDateRange] = useState<string>('ALL');
 
   // Query projects for filter dropdown & workspace switcher
@@ -68,7 +67,6 @@ export const OwnerDashboard: React.FC = () => {
   const kpis = dashboardData?.kpis;
   const projects = projectsData?.projects || [];
   const projectExpenditures = dashboardData?.projectExpenditures || [];
-  const attentionProjects = projectExpenditures.filter((p) => p.requiresAttention);
   const unassignedCount = kpis?.unassignedProjectsCount || 0;
   const recentlyUpdatedProjects = dashboardData?.recentlyUpdatedProjects || [];
   const recentReports = dashboardData?.recentReports || [];
@@ -116,21 +114,25 @@ export const OwnerDashboard: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2.5 w-full md:w-auto">
           {/* Workspace Quick Switcher */}
-          <div className="flex items-center gap-1.5 bg-navy-900/5 p-1 rounded-xl border border-navy-900/10">
-            <div className="w-48">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5 bg-navy-900/5 p-1 rounded-xl border border-navy-900/10 w-full sm:w-auto">
+            <div className="w-full sm:w-48">
               <Select
                 value={selectedProjectId}
                 onChange={(e) => setSelectedProjectId(e.target.value)}
-                className="py-1.5 text-xs bg-white font-medium"
+                className="py-1.5 text-xs bg-white font-medium w-full"
               >
                 <option value="">All Authorized Projects</option>
-                {projects.map((p) => (
-                  <option key={p._id || p.id} value={p._id || p.id}>
-                    {p.code} - {p.name}
-                  </option>
-                ))}
+                {projects.map((p) => {
+                  const pid = p._id || p.id;
+                  const unreadCount = pid ? getProjectUnreadCount(pid) : 0;
+                  return (
+                    <option key={pid} value={pid}>
+                      {p.code} - {p.name} {unreadCount > 0 ? `(${unreadCount} unread)` : ''}
+                    </option>
+                  );
+                })}
               </Select>
             </div>
             {selectedProjectId && (
@@ -138,7 +140,7 @@ export const OwnerDashboard: React.FC = () => {
                 size="sm"
                 variant="amber"
                 onClick={handleOpenWorkspace}
-                className="text-xs px-2.5 py-1.5"
+                className="text-xs px-2.5 py-1.5 w-full sm:w-auto shrink-0"
                 rightIcon={<ExternalLink className="w-3.5 h-3.5" />}
               >
                 Open Workspace
@@ -146,11 +148,11 @@ export const OwnerDashboard: React.FC = () => {
             )}
           </div>
 
-          <div className="w-36">
+          <div className="w-full sm:w-36">
             <Select
               value={selectedDateRange}
               onChange={(e) => setSelectedDateRange(e.target.value)}
-              className="py-1.5 text-xs"
+              className="py-1.5 text-xs w-full"
               options={[
                 { value: 'ALL', label: 'All Time' },
                 { value: 'THIS_MONTH', label: 'This Month' },
@@ -163,6 +165,7 @@ export const OwnerDashboard: React.FC = () => {
             size="sm"
             variant="outline"
             onClick={handleExportExcel}
+            className="w-full sm:w-auto"
             leftIcon={<FileSpreadsheet className="w-4 h-4 text-emerald-600" />}
           >
             Export Excel
@@ -172,6 +175,7 @@ export const OwnerDashboard: React.FC = () => {
             size="sm"
             variant="primary"
             onClick={() => navigate('/projects')}
+            className="w-full sm:w-auto"
             leftIcon={<Plus className="w-4 h-4 text-amber-400" />}
           >
             New Project
@@ -181,7 +185,7 @@ export const OwnerDashboard: React.FC = () => {
 
       {/* Unassigned Projects Warning Banner if any */}
       {unassignedCount > 0 && (
-        <div className="bg-amber-500/15 border-2 border-amber-500/30 rounded-2xl p-4 flex items-center justify-between gap-4">
+        <div className="bg-amber-500/15 border-2 border-amber-500/30 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-amber-500 text-navy-950 flex items-center justify-center font-bold flex-shrink-0 shadow-sm">
               <UserX className="w-5 h-5" />
@@ -199,6 +203,7 @@ export const OwnerDashboard: React.FC = () => {
             size="sm"
             variant="amber"
             onClick={() => navigate('/projects')}
+            className="w-full sm:w-auto shrink-0 font-bold"
             rightIcon={<ArrowRight className="w-3.5 h-3.5" />}
           >
             Assign In-Charge
@@ -219,7 +224,7 @@ export const OwnerDashboard: React.FC = () => {
                 <Building2 className="w-4 h-4" />
               </div>
             </div>
-            <div className="text-2xl font-black text-navy-950">
+            <div className="text-xl sm:text-2xl font-black text-navy-950 truncate">
               {kpis?.totalProjectsCount || 0}
             </div>
             <div className="text-xs text-slate-500 flex items-center justify-between">
@@ -246,7 +251,7 @@ export const OwnerDashboard: React.FC = () => {
                 <DollarSign className="w-4 h-4" />
               </div>
             </div>
-            <div className="text-2xl font-black text-emerald-700">
+            <div className="text-xl sm:text-2xl font-black text-emerald-700 truncate">
               {formatCompactINR(kpis?.approvedPaise || 0)}
             </div>
             <div className="text-xs text-slate-500 flex items-center justify-between">
@@ -270,7 +275,7 @@ export const OwnerDashboard: React.FC = () => {
                 <Clock className="w-4 h-4" />
               </div>
             </div>
-            <div className="text-2xl font-black text-amber-700">
+            <div className="text-xl sm:text-2xl font-black text-amber-700 truncate">
               {formatCompactINR(kpis?.pendingPaise || 0)}
             </div>
             <div className="text-xs text-slate-500 flex items-center justify-between">
@@ -295,7 +300,7 @@ export const OwnerDashboard: React.FC = () => {
                 <FileCheck2 className="w-4 h-4" />
               </div>
             </div>
-            <div className="text-2xl font-black text-sky-800">
+            <div className="text-xl sm:text-2xl font-black text-sky-800 truncate">
               {formatCompactINR(kpis?.remainingBudgetPaise || 0)}
             </div>
             <div className="text-xs text-slate-500 flex items-center justify-between">
@@ -308,81 +313,8 @@ export const OwnerDashboard: React.FC = () => {
         </Card>
       </div>
 
-      {/* Compliance & Attention Alerts */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Missing Daily Reports Banner */}
-        <div className="bg-amber-50/90 border border-amber-200/90 rounded-2xl p-4 flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <h4 className="text-xs font-bold text-amber-950 uppercase tracking-wider">
-                Daily Report Compliance (Last 7 Days)
-              </h4>
-              {kpis?.missingReportsCount && kpis.missingReportsCount > 0 ? (
-                <span className="text-[10px] bg-amber-500 text-navy-950 font-bold px-2 py-0.5 rounded-full">
-                  {kpis.missingReportsCount} Missing
-                </span>
-              ) : (
-                <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">
-                  100% Up to Date
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-amber-900">
-              {kpis?.submittedReportsLast7Days || 0} of {kpis?.expectedReportsLast7Days || 0} expected site reports submitted across active construction projects.
-            </p>
-            <button
-              onClick={() => navigate('/reports')}
-              className="text-xs font-bold text-amber-900 hover:text-amber-950 underline inline-flex items-center gap-1 pt-1"
-            >
-              <span>View Report History</span>
-              <ArrowRight className="w-3 h-3" />
-            </button>
-          </div>
-        </div>
-
-        {/* Projects Requiring Attention */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-2">
-          <div className="flex items-center justify-between">
-            <h4 className="text-xs font-bold text-navy-950 uppercase tracking-wider flex items-center gap-1.5">
-              <AlertTriangle className="w-4 h-4 text-amber-600" />
-              <span>Projects Requiring Attention</span>
-            </h4>
-            <span className="text-xs text-slate-500">{attentionProjects.length} projects flagged</span>
-          </div>
-
-          {attentionProjects.length === 0 ? (
-            <p className="text-xs text-slate-500 italic py-1">
-              All projects operating within normal budget thresholds and zero pending backlogs.
-            </p>
-          ) : (
-            <div className="space-y-2 pt-1">
-              {attentionProjects.slice(0, 2).map((p) => (
-                <div
-                  key={p.id}
-                  onClick={() => navigate(`/projects/${p.id}`)}
-                  className="flex items-center justify-between p-2 rounded-xl bg-slate-50 hover:bg-slate-100 cursor-pointer text-xs transition-colors"
-                >
-                  <div>
-                    <span className="font-bold text-navy-950">{p.name}</span>
-                    <span className="text-slate-500 text-[11px] block">{p.code} • {p.inCharge}</span>
-                  </div>
-                  <div className="text-right">
-                    <span className={`font-bold ${p.burnRate >= 80 ? 'text-rose-600' : 'text-slate-700'}`}>
-                      {p.burnRate}% spent
-                    </span>
-                    {p.pending > 0 && (
-                      <span className="text-[10px] text-amber-700 block font-semibold">
-                        {formatCompactINR(p.pending)} pending
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
+      {/* Weather Across Projects Section */}
+      <WeatherSummaryGrid />
 
       {/* Recently Updated Projects & Real-Time Site Submissions */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -420,6 +352,9 @@ export const OwnerDashboard: React.FC = () => {
                       <span className="font-mono text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">
                         {p.code}
                       </span>
+                      {isProjectUnread(p.id) && (
+                        <UnreadDot count={getProjectUnreadCount(p.id)} title={`${getProjectUnreadCount(p.id)} unread daily report(s)`} />
+                      )}
                     </div>
                     <div className="text-[11px] text-slate-500 flex items-center gap-2">
                       <span>{p.location}</span>
@@ -474,7 +409,15 @@ export const OwnerDashboard: React.FC = () => {
                         <FileText className="w-3.5 h-3.5" />
                       </div>
                       <div>
-                        <span className="font-bold text-navy-950 block">{r.titleOfWork || 'Site Daily Log'}</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-navy-950 block">{r.titleOfWork || 'Site Daily Log'}</span>
+                          {isReportUnread(r._id || r.id) && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                              New
+                            </span>
+                          )}
+                        </div>
                         <span className="text-[11px] text-slate-500">
                           {r.project?.code} • {r.submittedBy?.name || 'In-Charge'} • {formatDate(r.workDate)}
                         </span>
@@ -512,48 +455,6 @@ export const OwnerDashboard: React.FC = () => {
         </Card>
       </div>
 
-      {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Budget vs Actual Expenditure Chart */}
-        <Card>
-          <CardHeader>
-            <div>
-              <CardTitle>Budget vs. Actual Expenditure</CardTitle>
-              <p className="text-xs text-slate-500">Comparison of allocated budget vs verified spend per project</p>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <ProjectBudgetBarChart data={projectExpenditures} />
-          </CardContent>
-        </Card>
-
-        {/* Expense Category Breakdown Pie Chart */}
-        <Card>
-          <CardHeader>
-            <div>
-              <CardTitle>Verified Expenditure by Category</CardTitle>
-              <p className="text-xs text-slate-500">Materials, labour, fuel, and equipment cost distribution</p>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <CategoryExpensePieChart data={dashboardData?.categoryBreakdown || []} />
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Expenditure Trend Over Time */}
-      <Card>
-        <CardHeader>
-          <div>
-            <CardTitle>Expenditure Trend Over Time</CardTitle>
-            <p className="text-xs text-slate-500">Monthly financial flow across all active project sites</p>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <ExpenditureTrendChart data={dashboardData?.expenditureTrend || []} />
-        </CardContent>
-      </Card>
-
       {/* Multi-Project Financial Summary Table */}
       <Card>
         <CardHeader>
@@ -570,8 +471,79 @@ export const OwnerDashboard: React.FC = () => {
             Manage Projects
           </Button>
         </CardHeader>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs">
+        {/* Mobile View: Cards */}
+        <div className="md:hidden divide-y divide-slate-100 p-3 space-y-3">
+          {projectExpenditures.map((p) => (
+            <div key={p.id} className="p-3.5 rounded-xl bg-slate-50/70 border border-slate-200/80 space-y-2.5">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-navy-950 text-sm block">{p.name}</span>
+                    {isProjectUnread(p.id) && (
+                      <UnreadDot count={getProjectUnreadCount(p.id)} title={`${getProjectUnreadCount(p.id)} unread daily report(s)`} />
+                    )}
+                  </div>
+                  <span className="font-mono text-[11px] text-slate-500">{p.code} • {p.location}</span>
+                </div>
+                <Badge status={p.status} size="sm" />
+              </div>
+
+              <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-200/60">
+                <span className="text-slate-500 font-medium">Site In-Charge:</span>
+                {p.inCharge && p.inCharge !== 'Unassigned' ? (
+                  <span className="font-semibold text-slate-800 flex items-center gap-1">
+                    <Users className="w-3.5 h-3.5 text-navy-800" />
+                    {p.inCharge}
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">
+                    <UserX className="w-3 h-3" />
+                    Unassigned
+                  </span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-xs bg-white p-2.5 rounded-lg border border-slate-200/60">
+                <div>
+                  <span className="text-[10px] text-slate-400 uppercase font-bold block">Budget</span>
+                  <span className="font-bold text-navy-950">{formatINR(p.budget)}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-emerald-700 uppercase font-bold block">Approved Spend</span>
+                  <span className="font-bold text-emerald-700">{formatINR(p.approved)}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-amber-700 uppercase font-bold block">Pending</span>
+                  <span className="font-semibold text-amber-700">{p.pending > 0 ? formatINR(p.pending) : '—'}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 uppercase font-bold block">Burn Rate</span>
+                  <span className={`inline-block px-1.5 py-0.2 rounded font-bold text-xs ${
+                    p.burnRate >= 80 ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-800'
+                  }`}>
+                    {p.burnRate}%
+                  </span>
+                </div>
+              </div>
+
+              <div className="pt-1 flex justify-end">
+                <Button
+                  size="sm"
+                  variant="amber"
+                  onClick={() => navigate(`/projects/${p.id}`)}
+                  className="w-full text-xs font-bold"
+                  rightIcon={<ArrowRight className="w-3.5 h-3.5" />}
+                >
+                  Open Project Workspace
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Desktop View: Table */}
+        <div className="hidden md:block overflow-x-auto">
+          <table className="w-full text-left border-collapse text-xs min-w-[720px]">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50/80 text-slate-500 font-bold uppercase tracking-wider">
                 <th className="py-3 px-4">Project</th>
@@ -588,7 +560,12 @@ export const OwnerDashboard: React.FC = () => {
               {projectExpenditures.map((p) => (
                 <tr key={p.id} className="hover:bg-slate-50/60 transition-colors">
                   <td className="py-3.5 px-4">
-                    <span className="font-bold text-navy-950 block">{p.name}</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-bold text-navy-950 block">{p.name}</span>
+                      {isProjectUnread(p.id) && (
+                        <UnreadDot count={getProjectUnreadCount(p.id)} title={`${getProjectUnreadCount(p.id)} unread daily report(s)`} />
+                      )}
+                    </div>
                     <span className="font-mono text-[11px] text-slate-500">{p.code} • {p.location}</span>
                   </td>
                   <td className="py-3.5 px-4">

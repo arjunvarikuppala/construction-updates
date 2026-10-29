@@ -31,3 +31,14 @@ export function formatCompactINR(paise: number): string {
   }
   return formatINR(paise);
 }
+
+export function formatRupees(rupees: number | string): string {
+  const numeric = typeof rupees === 'string' ? parseFloat(rupees) : rupees;
+  if (isNaN(numeric) || numeric < 0) return '₹0';
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 2,
+    minimumFractionDigits: 0,
+  }).format(numeric);
+}

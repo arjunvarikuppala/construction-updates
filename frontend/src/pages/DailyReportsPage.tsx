@@ -8,12 +8,15 @@ import { Select, Input } from '../components/common/Input.js';
 import { LoadingSkeleton } from '../components/common/LoadingSkeleton.js';
 import { EmptyState } from '../components/common/EmptyState.js';
 import { useAuth } from '../context/AuthContext.js';
+import { useUnreadReports } from '../hooks/useUnreadReports.js';
 import { DailyReport, Project } from '../types/index.js';
 import { api } from '../api/client.js';
 
 export const DailyReportsPage: React.FC = () => {
   const navigate = useNavigate();
-  const { isOwner } = useAuth();
+  const { isOwner, isMD } = useAuth();
+  const isMDOrOwner = isOwner || isMD;
+  const { totalUnread, getProjectUnreadCount } = useUnreadReports();
 
   const [selectedProject, setSelectedProject] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
@@ -57,9 +60,17 @@ export const DailyReportsPage: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-navy-950 tracking-tight">
-            Daily Construction Progress Reports
-          </h1>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-xl sm:text-2xl font-bold text-navy-950 tracking-tight">
+              Daily Construction Progress Reports
+            </h1>
+            {isMDOrOwner && totalUnread > 0 && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-900 border border-amber-300">
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                {totalUnread} Unread
+              </span>
+            )}
+          </div>
           <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
             Verified logs of completed work, quantities, labour attendance, equipment, and on-site photos.
           </p>
@@ -68,6 +79,7 @@ export const DailyReportsPage: React.FC = () => {
         <Button
           variant="amber"
           onClick={() => navigate('/reports/new')}
+          className="w-full sm:w-auto font-bold"
           leftIcon={<Plus className="w-4 h-4" />}
         >
           Submit Daily Report
@@ -90,7 +102,7 @@ export const DailyReportsPage: React.FC = () => {
       )}
 
       {/* Filters Bar */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="sm:col-span-1">
           <Input
             placeholder="Search by Title of Work..."
@@ -104,11 +116,15 @@ export const DailyReportsPage: React.FC = () => {
           onChange={(e) => setSelectedProject(e.target.value)}
         >
           <option value="">All Construction Projects</option>
-          {projects.map((p) => (
-            <option key={p._id || p.id} value={p._id || p.id}>
-              {p.code} - {p.name}
-            </option>
-          ))}
+          {projects.map((p) => {
+            const pid = p._id || p.id;
+            const uCount = pid ? getProjectUnreadCount(pid) : 0;
+            return (
+              <option key={pid} value={pid}>
+                {p.code} - {p.name} {isMDOrOwner && uCount > 0 ? `(${uCount} unread)` : ''}
+              </option>
+            );
+          })}
         </Select>
 
         <Input

@@ -4,7 +4,10 @@ import { Users, Wrench, AlertTriangle, ArrowRight, FileDown, Image as ImageIcon,
 import { DailyReport } from '../../types/index.js';
 import { Badge } from '../common/Badge.js';
 import { Button } from '../common/Button.js';
+import { UnreadDot } from '../common/UnreadDot.js';
 import { ReadReceiptBadge } from './ReadReceiptBadge.js';
+import { useAuth } from '../../context/AuthContext.js';
+import { useUnreadReports } from '../../hooks/useUnreadReports.js';
 import { formatDate } from '../../utils/dates.js';
 import { exportDailyReportPdf } from '../../utils/exportPdf.js';
 
@@ -14,7 +17,12 @@ interface DailyReportCardProps {
 
 export const DailyReportCard: React.FC<DailyReportCardProps> = ({ report }) => {
   const navigate = useNavigate();
+  const { isMD, isOwner } = useAuth();
+  const isMDOrOwner = isMD || isOwner;
+  const { isReportUnread } = useUnreadReports();
   const id = report._id || report.id;
+  const unread = id ? isReportUnread(id) : false;
+  const showUnread = isMDOrOwner && unread;
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-card hover:shadow-card-hover transition-all space-y-3.5">
@@ -29,6 +37,12 @@ export const DailyReportCard: React.FC<DailyReportCardProps> = ({ report }) => {
           </span>
         </div>
         <div className="flex items-center gap-2">
+          {showUnread && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-900 border border-amber-300">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+              New Report
+            </span>
+          )}
           <Badge status={report.status} size="sm" />
           <span className="text-xs text-slate-500 font-medium">
             {formatDate(report.workDate, 'EEEE, dd MMM yyyy')}
@@ -38,13 +52,16 @@ export const DailyReportCard: React.FC<DailyReportCardProps> = ({ report }) => {
 
       {/* Prominent Title of Work & Read Receipt */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-        <h3
-          onClick={() => navigate(`/reports/${id}`)}
-          className="text-base font-extrabold text-navy-950 tracking-tight hover:text-amber-600 transition-colors cursor-pointer"
-          title="Click to view full report"
-        >
-          {report.titleOfWork || 'Daily Construction Work Log'}
-        </h3>
+        <div className="flex items-center gap-2 flex-wrap">
+          <h3
+            onClick={() => navigate(`/reports/${id}`)}
+            className="text-base font-extrabold text-navy-950 tracking-tight hover:text-amber-600 transition-colors cursor-pointer"
+            title="Click to view full report"
+          >
+            {report.titleOfWork || 'Daily Construction Work Log'}
+          </h3>
+          {showUnread && <UnreadDot title="Unread daily report" />}
+        </div>
         <ReadReceiptBadge readReceipt={report.readReceipt} />
       </div>
 
@@ -112,12 +129,12 @@ export const DailyReportCard: React.FC<DailyReportCardProps> = ({ report }) => {
       )}
 
       {/* Footer Actions */}
-      <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-2 border-t border-slate-100 text-xs">
         <span className="text-slate-500 font-medium">
           By {report.submittedBy?.name || 'In-Charge'}
         </span>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-1.5 w-full sm:w-auto [&>button]:flex-1 [&>button]:sm:flex-initial">
           <Button
             size="sm"
             variant="ghost"

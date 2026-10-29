@@ -44,7 +44,7 @@ export const Modal: React.FC<ModalProps> = ({
   }[size];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
       {/* Backdrop */}
       <div
         className="fixed inset-0 bg-navy-950/60 backdrop-blur-sm transition-opacity"
@@ -53,30 +53,31 @@ export const Modal: React.FC<ModalProps> = ({
 
       {/* Modal Dialog */}
       <div
-        className={`relative w-full ${sizeClasses} bg-white rounded-2xl shadow-modal border border-slate-200/90 overflow-hidden z-10 my-auto animate-in zoom-in-95 duration-200`}
+        className={`relative w-full ${sizeClasses} max-h-[90vh] flex flex-col bg-white rounded-2xl shadow-modal border border-slate-200/90 overflow-hidden z-10 my-auto animate-in zoom-in-95 duration-200`}
         role="dialog"
         aria-modal="true"
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-slate-100 bg-white">
-          <div>
-            <h3 className="text-lg font-bold text-navy-950">{title}</h3>
-            {description && <p className="text-xs text-slate-500 mt-0.5">{description}</p>}
+        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-slate-100 bg-white flex-shrink-0">
+          <div className="pr-2">
+            <h3 className="text-base sm:text-lg font-bold text-navy-950">{title}</h3>
+            {description && <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{description}</p>}
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 rounded-lg p-1.5 hover:bg-slate-100 transition-colors"
+            className="text-slate-400 hover:text-slate-600 rounded-lg min-w-[44px] min-h-[44px] flex items-center justify-center hover:bg-slate-100 transition-colors flex-shrink-0"
+            aria-label="Close dialog"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Body */}
-        <div className="p-5 max-h-[75vh] overflow-y-auto">{children}</div>
+        <div className="p-4 sm:p-5 overflow-y-auto flex-1">{children}</div>
 
         {/* Footer */}
         {footer && (
-          <div className="p-4 sm:p-5 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3 rounded-b-2xl">
+          <div className="p-3 sm:p-4 bg-slate-50 border-t border-slate-100 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2 sm:gap-3 rounded-b-2xl flex-shrink-0 [&>button]:w-full [&>button]:sm:w-auto">
             {footer}
           </div>
         )}

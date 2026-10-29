@@ -107,10 +107,10 @@ export const BeneficiaryModal: React.FC<BeneficiaryModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-navy-950/70 backdrop-blur-xs flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 bg-navy-950/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
       <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95 duration-150">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/60">
+        <div className="px-4 sm:px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/60">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-amber-500 text-navy-950 flex items-center justify-center font-bold">
               <Users className="w-5 h-5" />
@@ -129,7 +129,7 @@ export const BeneficiaryModal: React.FC<BeneficiaryModalProps> = ({
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 overflow-y-auto space-y-4">
           {/* Payee Category */}
           <div>
             <label className="block text-xs font-bold text-navy-950 uppercase tracking-wider mb-1.5">
@@ -301,7 +301,7 @@ export const BeneficiaryModal: React.FC<BeneficiaryModalProps> = ({
           </div>
 
           {/* Footer Actions */}
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="flex flex-col-reverse sm:flex-row sm:items-center justify-end gap-2 pt-2 [&>button]:w-full [&>button]:sm:w-auto">
             <Button variant="ghost" onClick={onClose} type="button">
               Cancel
             </Button>

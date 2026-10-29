@@ -25,7 +25,7 @@ export const ExpenseTable: React.FC<ExpenseTableProps> = ({
 }) => {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-left border-collapse text-xs">
+      <table className="w-full text-left border-collapse text-xs min-w-[750px]">
         <thead>
           <tr className="border-b border-slate-200 bg-slate-50/80 text-slate-500 font-bold uppercase tracking-wider">
             <th className="py-3 px-4">Date</th>

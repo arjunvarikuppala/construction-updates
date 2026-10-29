@@ -1,24 +1,46 @@
 import React from 'react';
-import { HardHat, RefreshCw, LogOut } from 'lucide-react';
+import { HardHat, RefreshCw, LogOut, Menu } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.js';
 import { useSync } from '../../hooks/useSync.js';
+import { useUnreadReports } from '../../hooks/useUnreadReports.js';
 import { Badge } from '../common/Badge.js';
 import { NotificationCenter } from './NotificationCenter.js';
 
-export const TopHeader: React.FC = () => {
-  const { user, logout } = useAuth();
+interface TopHeaderProps {
+  onOpenMobileDrawer?: () => void;
+}
+
+export const TopHeader: React.FC<TopHeaderProps> = ({ onOpenMobileDrawer }) => {
+  const { user, activeRole, isMD, isOwner, logout } = useAuth();
   const { isSyncing, syncAll } = useSync();
+  const { totalUnread } = useUnreadReports();
 
   return (
-    <header className="h-16 bg-white border-b border-slate-200/90 px-4 sm:px-6 flex items-center justify-between sticky top-0 z-30 shadow-xs">
+    <header className="h-16 bg-white border-b border-slate-200/90 px-3 sm:px-6 flex items-center justify-between sticky top-0 z-30 shadow-xs flex-shrink-0">
       {/* Mobile Brand / Desktop Title */}
-      <div className="flex items-center gap-3">
-        <div className="md:hidden flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-navy-900 text-amber-500 flex items-center justify-center font-bold">
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+        {/* Mobile Hamburger Drawer Trigger */}
+        <button
+          onClick={onOpenMobileDrawer}
+          aria-label="Open navigation menu"
+          className="relative md:hidden p-2 rounded-xl text-slate-600 hover:text-navy-950 hover:bg-slate-100 min-w-[44px] min-h-[44px] flex items-center justify-center transition-colors -ml-1"
+        >
+          <Menu className="w-5 h-5" />
+          {(isMD || isOwner) && totalUnread > 0 && (
+            <span
+              className="absolute top-2 right-2 w-2.5 h-2.5 rounded-full bg-amber-500 ring-2 ring-white animate-pulse"
+              title={`${totalUnread} unread daily report(s)`}
+            />
+          )}
+        </button>
+
+        <div className="md:hidden flex items-center gap-2 truncate">
+          <div className="w-8 h-8 rounded-lg bg-navy-900 text-amber-500 flex items-center justify-center font-bold flex-shrink-0">
             <HardHat className="w-4 h-4" />
           </div>
-          <span className="font-bold text-navy-950 text-base">SiteTrack</span>
+          <span className="font-bold text-navy-950 text-base truncate">SiteTrack</span>
         </div>
+
         <div className="hidden md:flex items-center gap-2 text-xs text-slate-500">
           <span className="font-semibold text-navy-900">Enterprise Workspace</span>
           <span>/</span>
@@ -27,7 +49,7 @@ export const TopHeader: React.FC = () => {
       </div>
 
       {/* Right Actions */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0">
         {/* Notification Bell Center */}
         <NotificationCenter />
 
@@ -36,22 +58,40 @@ export const TopHeader: React.FC = () => {
           onClick={syncAll}
           disabled={isSyncing}
           title="Force near-real-time synchronization"
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 active:bg-slate-100 transition-colors"
+          aria-label="Synchronize data"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 min-h-[38px] rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 active:bg-slate-100 transition-colors"
         >
           <RefreshCw className={`w-3.5 h-3.5 text-amber-500 ${isSyncing ? 'animate-spin' : ''}`} />
           <span className="hidden sm:inline">{isSyncing ? 'Syncing...' : 'Sync Now'}</span>
         </button>
 
-        {/* User Role Badge */}
-        <div className="hidden sm:block">
-          <Badge role={user?.role} size="sm" />
+        {/* User Identity & Role Badge */}
+        <div className="hidden sm:flex items-center gap-2">
+          {user?.name && (
+            <span className="text-xs font-semibold text-slate-700 truncate max-w-[160px]" title={user.email}>
+              {user.name}
+            </span>
+          )}
+          <Badge role={activeRole} size="sm" />
         </div>
+
+        {/* Desktop Logout / Switch Account */}
+        <button
+          onClick={logout}
+          title="Sign out / Switch account"
+          aria-label="Sign out"
+          className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 min-h-[38px] rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-200 transition-colors"
+        >
+          <LogOut className="w-3.5 h-3.5" />
+          <span>Logout</span>
+        </button>
 
         {/* Mobile Logout */}
         <button
           onClick={logout}
           title="Sign out"
-          className="md:hidden p-2 text-slate-500 hover:text-rose-600 rounded-lg hover:bg-slate-100"
+          aria-label="Sign out"
+          className="md:hidden p-2 min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-500 hover:text-rose-600 rounded-lg hover:bg-slate-100"
         >
           <LogOut className="w-4 h-4" />
         </button>

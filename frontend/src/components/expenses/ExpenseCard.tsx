@@ -72,7 +72,7 @@ export const ExpenseCard: React.FC<ExpenseCardProps> = ({
       )}
 
       {/* Action Buttons */}
-      <div className="pt-1 flex items-center justify-end gap-2 border-t border-slate-100">
+      <div className="pt-1 flex flex-wrap items-center justify-end gap-2 border-t border-slate-100">
         <Button
           size="sm"
           variant="ghost"

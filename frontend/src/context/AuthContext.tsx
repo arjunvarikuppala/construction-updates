@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { User } from '../types/index.js';
 import { api } from '../api/client.js';
 
@@ -13,23 +13,51 @@ interface AuthContextValue {
   isInCharge: boolean;
   isMD: boolean;
   isSiteInCharge: boolean;
+  activeRole: string | undefined;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+function parseJwtPayload(token: string | null): { userId?: string; role?: string; email?: string; name?: string } | null {
+  if (!token) return null;
+  try {
+    const parts = token.split('.');
+    if (parts.length < 2) return null;
+    const base64Url = parts[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      window
+        .atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    return JSON.parse(jsonPayload);
+  } catch {
+    return null;
+  }
+}
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('sitetrack_user');
-    return saved ? JSON.parse(saved) : null;
+    try {
+      const saved = localStorage.getItem('sitetrack_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
   });
   const [token, setToken] = useState<string | null>(() => {
     return localStorage.getItem('sitetrack_token');
   });
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(() => {
+    return Boolean(localStorage.getItem('sitetrack_token'));
+  });
 
   const login = useCallback((newToken: string, newUser: User) => {
     setToken(newToken);
     setUser(newUser);
+    setIsLoading(false);
     localStorage.setItem('sitetrack_token', newToken);
     localStorage.setItem('sitetrack_user', JSON.stringify(newUser));
   }, []);
@@ -37,24 +65,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = useCallback(() => {
     setToken(null);
     setUser(null);
+    setIsLoading(false);
     localStorage.removeItem('sitetrack_token');
     localStorage.removeItem('sitetrack_user');
     window.location.href = '/login';
   }, []);
 
   const refreshUser = useCallback(async () => {
+    const storedToken = localStorage.getItem('sitetrack_token');
+    if (!storedToken) {
+      setUser(null);
+      setToken(null);
+      setIsLoading(false);
+      return;
+    }
+
     try {
-      if (!localStorage.getItem('sitetrack_token')) {
-        setIsLoading(false);
-        return;
-      }
       const res = await api.get<{ success: boolean; user: User }>('/auth/me');
       if (res.success && res.user) {
         setUser(res.user);
+        setToken(storedToken);
         localStorage.setItem('sitetrack_user', JSON.stringify(res.user));
       }
-    } catch (err) {
+    } catch (err: any) {
       console.warn('Failed to refresh user profile:', err);
+      if (err?.status === 401) {
+        setUser(null);
+        setToken(null);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -64,8 +102,48 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     refreshUser();
   }, [refreshUser]);
 
-  const isOwner = user?.role === 'MD' || user?.role === 'OWNER';
-  const isInCharge = user?.role === 'SITE_INCHARGE' || user?.role === 'IN_CHARGE';
+  // Synchronize authentication state across browser tabs in real time
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'sitetrack_token' || e.key === 'sitetrack_user') {
+        const latestToken = localStorage.getItem('sitetrack_token');
+        const latestUserStr = localStorage.getItem('sitetrack_user');
+        setToken(latestToken);
+        if (latestUserStr) {
+          try {
+            setUser(JSON.parse(latestUserStr));
+          } catch {
+            setUser(null);
+          }
+        } else {
+          setUser(null);
+        }
+        if (!latestToken) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
+  // Derive authority directly from verified token header credential and current user profile
+  const tokenPayload = useMemo(() => parseJwtPayload(token), [token]);
+  const activeRole = tokenPayload?.role || user?.role;
+
+  // Auto-refresh profile if localStorage user object drifts from active token
+  useEffect(() => {
+    if (tokenPayload && user) {
+      const currentUserId = user.id || (user as any)._id;
+      if (tokenPayload.userId !== currentUserId || tokenPayload.role !== user.role) {
+        refreshUser();
+      }
+    }
+  }, [tokenPayload, user, refreshUser]);
+
+  const isOwner = activeRole === 'MD' || activeRole === 'OWNER';
+  const isInCharge = activeRole === 'SITE_INCHARGE' || activeRole === 'IN_CHARGE';
   const isMD = isOwner;
   const isSiteInCharge = isInCharge;
 
@@ -82,6 +160,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isInCharge,
         isMD,
         isSiteInCharge,
+        activeRole,
       }}
     >
       {children}

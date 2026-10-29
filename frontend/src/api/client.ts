@@ -20,50 +20,66 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  // If body is NOT FormData, set application/json
+  // If body is NOT FormData and not GET/HEAD, set application/json
   if (options.body && !(options.body instanceof FormData)) {
     headers.set('Content-Type', 'application/json');
   }
 
-  const response = await fetch(`${BASE_URL}${endpoint}`, {
-    ...options,
-    headers,
-  });
+  try {
+    const response = await fetch(`${BASE_URL}${endpoint}`, {
+      ...options,
+      headers,
+    });
 
-  if (response.status === 401) {
-    localStorage.removeItem('sitetrack_token');
-    localStorage.removeItem('sitetrack_user');
-    if (!window.location.pathname.includes('/login')) {
-      window.location.href = '/login';
+    if (response.status === 401) {
+      const isAuthEndpoint = endpoint.includes('/auth/login') || endpoint.includes('/auth/register');
+      if (!isAuthEndpoint) {
+        localStorage.removeItem('sitetrack_token');
+        localStorage.removeItem('sitetrack_user');
+        sessionStorage.setItem('sitetrack_auth_message', 'Your session has expired or is invalid. Please sign in again.');
+        if (!window.location.pathname.includes('/login')) {
+          window.location.href = '/login';
+        }
+      }
     }
+
+    // Handle Excel download responses
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('spreadsheetml')) {
+      return (await response.blob()) as unknown as T;
+    }
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new ApiError(data.message || `Request failed with status ${response.status}`, response.status, data);
+    }
+
+    return data;
+  } catch (err: any) {
+    if (err.name === 'AbortError') {
+      // Outdated or cancelled request: let caller handle abort cleanly
+      throw err;
+    }
+    throw err;
   }
-
-  // Handle Excel download responses
-  const contentType = response.headers.get('content-type');
-  if (contentType && contentType.includes('spreadsheetml')) {
-    return (await response.blob()) as unknown as T;
-  }
-
-  const data = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    throw new ApiError(data.message || `Request failed with status ${response.status}`, response.status, data);
-  }
-
-  return data;
 }
 
 export const api = {
-  get: <T>(endpoint: string) => request<T>(endpoint, { method: 'GET' }),
-  post: <T>(endpoint: string, body?: any) =>
+  get: <T>(endpoint: string, options?: RequestInit) =>
+    request<T>(endpoint, { method: 'GET', ...options }),
+  post: <T>(endpoint: string, body?: any, options?: RequestInit) =>
     request<T>(endpoint, {
       method: 'POST',
-      body: body instanceof FormData ? body : JSON.stringify(body),
+      body: body instanceof FormData ? body : body !== undefined ? JSON.stringify(body) : undefined,
+      ...options,
     }),
-  put: <T>(endpoint: string, body?: any) =>
+  put: <T>(endpoint: string, body?: any, options?: RequestInit) =>
     request<T>(endpoint, {
       method: 'PUT',
-      body: body instanceof FormData ? body : JSON.stringify(body),
+      body: body instanceof FormData ? body : body !== undefined ? JSON.stringify(body) : undefined,
+      ...options,
     }),
-  delete: <T>(endpoint: string) => request<T>(endpoint, { method: 'DELETE' }),
+  delete: <T>(endpoint: string, options?: RequestInit) =>
+    request<T>(endpoint, { method: 'DELETE', ...options }),
 };

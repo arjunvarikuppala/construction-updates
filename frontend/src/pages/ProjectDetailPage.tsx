@@ -36,7 +36,10 @@ import { DailyReportCard } from '../components/reports/DailyReportCard.js';
 import { ProjectModal } from '../components/projects/ProjectModal.js';
 import { AssignInChargeModal } from '../components/projects/AssignInChargeModal.js';
 import { useAuth } from '../context/AuthContext.js';
-import { Project, Expense, DailyReport } from '../types/index.js';
+import { useUnreadReports } from '../hooks/useUnreadReports.js';
+import { UnreadDot } from '../components/common/UnreadDot.js';
+import { Project, Expense, DailyReport, ProjectWeatherResponse } from '../types/index.js';
+import { WeatherCard } from '../components/weather/WeatherCard.js';
 import { formatCompactINR, formatINR } from '../utils/currency.js';
 import { formatDate } from '../utils/dates.js';
 import { exportProjectExpensesPdf } from '../utils/exportPdf.js';
@@ -47,6 +50,9 @@ export const ProjectDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { isOwner, isMD } = useAuth();
+  const isMDOrOwner = isOwner || isMD;
+  const { isProjectUnread, getProjectUnreadCount } = useUnreadReports();
+  const projectUnreadCount = id ? getProjectUnreadCount(id) : 0;
 
   type WorkspaceModule =
     | 'overview'
@@ -91,6 +97,19 @@ export const ProjectDetailPage: React.FC = () => {
     queryFn: () => api.get<{ count: number; reports: DailyReport[] }>(`/daily-reports?projectId=${id}`),
     enabled: Boolean(id),
     refetchInterval: 15000,
+  });
+
+  // Fetch project site weather
+  const {
+    data: weatherData,
+    isLoading: isWeatherLoading,
+    isRefetching: isWeatherRefetching,
+    refetch: refetchWeather,
+  } = useQuery({
+    queryKey: ['project-weather', id],
+    queryFn: () => api.get<ProjectWeatherResponse>(`/projects/${id}/weather`),
+    enabled: Boolean(id),
+    refetchInterval: 10 * 60 * 1000, // 10 minutes automatic refresh
   });
 
   if (isProjectLoading || !projectData) {
@@ -179,15 +198,20 @@ export const ProjectDetailPage: React.FC = () => {
               </span>
               <Badge status={project.status} size="sm" />
             </div>
-            <h1 className="text-xl sm:text-2xl font-bold text-navy-950 mt-1">{project.name}</h1>
+            <div className="flex items-center gap-2 mt-1">
+              <h1 className="text-xl sm:text-2xl font-bold text-navy-950">{project.name}</h1>
+              {projectUnreadCount > 0 && (
+                <UnreadDot count={projectUnreadCount} title={`${projectUnreadCount} unread daily report(s)`} />
+              )}
+            </div>
           </div>
         </div>
 
         {/* Project Switcher & Actions */}
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto [&>button]:flex-1 [&>button]:sm:flex-initial">
           {/* Switch Project Dropdown */}
           {authorizedProjects.length > 1 && (
-            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 w-full sm:w-auto">
               <span className="text-[11px] font-bold text-slate-600 px-2 flex items-center gap-1">
                 <ArrowRightLeft className="w-3 h-3 text-navy-900" />
                 Switch Project:
@@ -195,13 +219,17 @@ export const ProjectDetailPage: React.FC = () => {
               <select
                 value={project._id || project.id}
                 onChange={(e) => navigate(`/projects/${e.target.value}`)}
-                className="text-xs bg-white border border-slate-300 rounded-lg py-1 px-2 font-medium text-navy-950 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                className="text-xs bg-white border border-slate-300 rounded-lg py-1 px-2 font-medium text-navy-950 focus:outline-none focus:ring-1 focus:ring-amber-500 flex-1 sm:flex-initial"
               >
-                {authorizedProjects.map((p) => (
-                  <option key={p._id || p.id} value={p._id || p.id}>
-                    {p.code} - {p.name}
-                  </option>
-                ))}
+                {authorizedProjects.map((p) => {
+                  const pid = p._id || p.id;
+                  const uCount = pid ? getProjectUnreadCount(pid) : 0;
+                  return (
+                    <option key={pid} value={pid}>
+                      {p.code} - {p.name} {isMDOrOwner && uCount > 0 ? `(${uCount} unread)` : ''}
+                    </option>
+                  );
+                })}
               </select>
             </div>
           )}
@@ -239,7 +267,7 @@ export const ProjectDetailPage: React.FC = () => {
 
       {/* Unassigned Warning Alert Banner if no in-charge */}
       {!hasInCharges && (
-        <div className="bg-amber-500/15 border-2 border-amber-500/40 rounded-2xl p-4 flex items-center justify-between gap-4">
+        <div className="bg-amber-500/15 border-2 border-amber-500/40 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-amber-500 text-navy-950 flex items-center justify-center font-bold flex-shrink-0 shadow-sm">
               <UserX className="w-5 h-5" />
@@ -255,6 +283,7 @@ export const ProjectDetailPage: React.FC = () => {
             size="sm"
             variant="amber"
             onClick={() => setIsAssignModalOpen(true)}
+            className="w-full sm:w-auto shrink-0 font-bold"
             leftIcon={<Users className="w-4 h-4" />}
           >
             Assign In-Charge Now
@@ -264,25 +293,25 @@ export const ProjectDetailPage: React.FC = () => {
 
       {/* Financial Health & KPI Strip - Strictly visible to MD only */}
       {isMD ? (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-card">
             <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
               Total Budget
             </span>
-            <span className="text-xl sm:text-2xl font-extrabold text-navy-950 block mt-1">
+            <span className="text-xl sm:text-2xl font-extrabold text-navy-950 block mt-1 truncate">
               {formatCompactINR(project.budget)}
             </span>
-            <span className="text-[11px] text-slate-500 mt-0.5 block">{formatINR(project.budget)}</span>
+            <span className="text-[11px] text-slate-500 mt-0.5 block truncate">{formatINR(project.budget)}</span>
           </div>
 
           <div className="bg-white p-4 rounded-2xl border border-emerald-200 shadow-card bg-emerald-50/20">
             <span className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider block">
               Approved Spend
             </span>
-            <span className="text-xl sm:text-2xl font-extrabold text-emerald-700 block mt-1">
+            <span className="text-xl sm:text-2xl font-extrabold text-emerald-700 block mt-1 truncate">
               {financials ? formatCompactINR(financials.approvedPaise) : '₹0'}
             </span>
-            <span className="text-[11px] text-emerald-600 mt-0.5 block">
+            <span className="text-[11px] text-emerald-600 mt-0.5 block truncate">
               {financials?.burnPercentage || 0}% budget utilized
             </span>
           </div>
@@ -291,10 +320,10 @@ export const ProjectDetailPage: React.FC = () => {
             <span className="text-[11px] font-bold text-amber-800 uppercase tracking-wider block">
               Pending Approval
             </span>
-            <span className="text-xl sm:text-2xl font-extrabold text-amber-700 block mt-1">
+            <span className="text-xl sm:text-2xl font-extrabold text-amber-700 block mt-1 truncate">
               {financials ? formatCompactINR(financials.pendingPaise) : '₹0'}
             </span>
-            <span className="text-[11px] text-amber-600 mt-0.5 block">
+            <span className="text-[11px] text-amber-600 mt-0.5 block truncate">
               {financials?.pendingCount || 0} bills pending review
             </span>
           </div>
@@ -303,15 +332,15 @@ export const ProjectDetailPage: React.FC = () => {
             <span className="text-[11px] font-bold text-sky-800 uppercase tracking-wider block">
               Remaining Budget
             </span>
-            <span className="text-xl sm:text-2xl font-extrabold text-sky-800 block mt-1">
+            <span className="text-xl sm:text-2xl font-extrabold text-sky-800 block mt-1 truncate">
               {financials ? formatCompactINR(financials.remainingPaise || 0) : '₹0'}
             </span>
-            <span className="text-[11px] text-sky-600 mt-0.5 block">Available uncommitted</span>
+            <span className="text-[11px] text-sky-600 mt-0.5 block truncate">Available uncommitted</span>
           </div>
         </div>
       ) : (
         /* Operational Strip for Site In-Charge */
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-card">
             <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
               Daily Construction Logs
@@ -348,7 +377,7 @@ export const ProjectDetailPage: React.FC = () => {
       <div className="flex items-center gap-1.5 overflow-x-auto pb-2 border-b border-slate-200 scrollbar-none">
         <button
           onClick={() => setActiveTab('overview')}
-          className={`py-2 px-3 text-xs font-bold rounded-xl whitespace-nowrap transition-colors ${
+          className={`py-2 px-3 text-xs font-bold rounded-xl whitespace-nowrap shrink-0 transition-colors ${
             activeTab === 'overview'
               ? 'bg-navy-900 text-white'
               : 'text-slate-600 hover:bg-slate-100 hover:text-navy-950'
@@ -359,7 +388,7 @@ export const ProjectDetailPage: React.FC = () => {
 
         <button
           onClick={() => setActiveTab('reports')}
-          className={`py-2 px-3 text-xs font-bold rounded-xl whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+          className={`py-2 px-3 text-xs font-bold rounded-xl whitespace-nowrap shrink-0 transition-colors flex items-center gap-1.5 ${
             activeTab === 'reports'
               ? 'bg-navy-900 text-white'
               : 'text-slate-600 hover:bg-slate-100 hover:text-navy-950'
@@ -370,11 +399,14 @@ export const ProjectDetailPage: React.FC = () => {
           <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-200/80 text-navy-950 font-bold">
             {reports.length}
           </span>
+          {projectUnreadCount > 0 && (
+            <UnreadDot count={projectUnreadCount} title={`${projectUnreadCount} unread daily report(s)`} />
+          )}
         </button>
 
         <button
           onClick={() => setActiveTab('workItems')}
-          className={`py-2 px-3 text-xs font-bold rounded-xl whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+          className={`py-2 px-3 text-xs font-bold rounded-xl whitespace-nowrap shrink-0 transition-colors flex items-center gap-1.5 ${
             activeTab === 'workItems'
               ? 'bg-navy-900 text-white'
               : 'text-slate-600 hover:bg-slate-100 hover:text-navy-950'
@@ -389,7 +421,7 @@ export const ProjectDetailPage: React.FC = () => {
 
         <button
           onClick={() => setActiveTab('expenses')}
-          className={`py-2 px-3 text-xs font-bold rounded-xl whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+          className={`py-2 px-3 text-xs font-bold rounded-xl whitespace-nowrap shrink-0 transition-colors flex items-center gap-1.5 ${
             activeTab === 'expenses'
               ? 'bg-navy-900 text-white'
               : 'text-slate-600 hover:bg-slate-100 hover:text-navy-950'
@@ -404,7 +436,7 @@ export const ProjectDetailPage: React.FC = () => {
 
         <button
           onClick={() => setActiveTab('labour')}
-          className={`py-2 px-3 text-xs font-bold rounded-xl whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+          className={`py-2 px-3 text-xs font-bold rounded-xl whitespace-nowrap shrink-0 transition-colors flex items-center gap-1.5 ${
             activeTab === 'labour'
               ? 'bg-navy-900 text-white'
               : 'text-slate-600 hover:bg-slate-100 hover:text-navy-950'
@@ -416,7 +448,7 @@ export const ProjectDetailPage: React.FC = () => {
 
         <button
           onClick={() => setActiveTab('materials')}
-          className={`py-2 px-3 text-xs font-bold rounded-xl whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+          className={`py-2 px-3 text-xs font-bold rounded-xl whitespace-nowrap shrink-0 transition-colors flex items-center gap-1.5 ${
             activeTab === 'materials'
               ? 'bg-navy-900 text-white'
               : 'text-slate-600 hover:bg-slate-100 hover:text-navy-950'
@@ -428,7 +460,7 @@ export const ProjectDetailPage: React.FC = () => {
 
         <button
           onClick={() => setActiveTab('machinery')}
-          className={`py-2 px-3 text-xs font-bold rounded-xl whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+          className={`py-2 px-3 text-xs font-bold rounded-xl whitespace-nowrap shrink-0 transition-colors flex items-center gap-1.5 ${
             activeTab === 'machinery'
               ? 'bg-navy-900 text-white'
               : 'text-slate-600 hover:bg-slate-100 hover:text-navy-950'
@@ -440,7 +472,7 @@ export const ProjectDetailPage: React.FC = () => {
 
         <button
           onClick={() => setActiveTab('issues')}
-          className={`py-2 px-3 text-xs font-bold rounded-xl whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+          className={`py-2 px-3 text-xs font-bold rounded-xl whitespace-nowrap shrink-0 transition-colors flex items-center gap-1.5 ${
             activeTab === 'issues'
               ? 'bg-navy-900 text-white'
               : 'text-slate-600 hover:bg-slate-100 hover:text-navy-950'
@@ -457,7 +489,7 @@ export const ProjectDetailPage: React.FC = () => {
 
         <button
           onClick={() => setActiveTab('exports')}
-          className={`py-2 px-3 text-xs font-bold rounded-xl whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+          className={`py-2 px-3 text-xs font-bold rounded-xl whitespace-nowrap shrink-0 transition-colors flex items-center gap-1.5 ${
             activeTab === 'exports'
               ? 'bg-navy-900 text-white'
               : 'text-slate-600 hover:bg-slate-100 hover:text-navy-950'
@@ -525,8 +557,27 @@ export const ProjectDetailPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Right Column: In-Charge Card */}
+          {/* Right Column: Site Weather & In-Charge Card */}
           <div className="space-y-6">
+            <WeatherCard
+              projectId={project._id || project.id || id!}
+              projectName={project.name}
+              projectCode={project.code}
+              location={project.location}
+              weather={weatherData?.weather}
+              isConfigured={weatherData?.isConfigured}
+              cached={weatherData?.cached}
+              isStale={weatherData?.isStale}
+              fetchedAt={weatherData?.fetchedAt}
+              statusMessage={weatherData?.statusMessage}
+              variant="dashboard"
+              isLoading={isWeatherLoading && !weatherData}
+              isRefreshing={isWeatherRefetching}
+              onRefresh={() => refetchWeather()}
+              canConfigureLocation={isOwner || isMD}
+              onConfigureLocation={() => setIsEditModalOpen(true)}
+            />
+
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>
@@ -622,7 +673,15 @@ export const ProjectDetailPage: React.FC = () => {
         <Card>
           <CardHeader>
             <div>
-              <CardTitle>Project Daily Site Register</CardTitle>
+              <div className="flex items-center gap-2">
+                <CardTitle>Project Daily Site Register</CardTitle>
+                {isMDOrOwner && projectUnreadCount > 0 && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-900 border border-amber-300">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                    {projectUnreadCount} New Report{projectUnreadCount > 1 ? 's' : ''}
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-slate-500">Every daily report submitted for this project with Work Titles</p>
             </div>
             <Button
@@ -665,7 +724,7 @@ export const ProjectDetailPage: React.FC = () => {
                 No specific work item quantities recorded yet in daily reports.
               </div>
             ) : (
-              <table className="w-full text-left border-collapse text-xs">
+              <table className="w-full text-left border-collapse text-xs min-w-[550px]">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50/80 text-slate-500 font-bold uppercase tracking-wider">
                     <th className="py-3 px-4">Date</th>
@@ -730,7 +789,7 @@ export const ProjectDetailPage: React.FC = () => {
                 No labour breakdowns recorded yet in daily reports.
               </div>
             ) : (
-              <table className="w-full text-left border-collapse text-xs">
+              <table className="w-full text-left border-collapse text-xs min-w-[550px]">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50/80 text-slate-500 font-bold uppercase tracking-wider">
                     <th className="py-3 px-4">Date</th>

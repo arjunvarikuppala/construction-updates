@@ -1,7 +1,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Expense, Project, DailyReport } from '../types/index.js';
-import { formatINR, paiseToRupees } from './currency.js';
+import { formatINR, formatRupees, paiseToRupees } from './currency.js';
 import { formatDate } from './dates.js';
 
 export function exportProjectExpensesPdf(project: Project, expenses: Expense[]) {
@@ -148,23 +148,25 @@ export function exportDailyReportPdf(report: DailyReport) {
 
   // Meta info
   doc.setFillColor(246, 248, 251);
-  doc.roundedRect(14, 42, 182, 28, 2, 2, 'F');
+  doc.roundedRect(14, 42, 182, 30, 2, 2, 'F');
   doc.setTextColor(51, 65, 85);
   doc.setFontSize(9);
   doc.text(`Title of Work: ${report.titleOfWork || 'N/A'}`, 18, 50);
   doc.text(`Submitted By: ${report.submittedBy?.name || 'In-Charge'}`, 18, 57);
+  doc.text(`Report Status: ${report.status}`, 18, 64);
   doc.text(`Total Labour Count: ${report.totalLabourCount} workers`, 115, 50);
-  doc.text(`Report Status: ${report.status}`, 115, 57);
+  const totalBudget = report.totalWorkBudget ?? report.workItems?.reduce((s, i) => s + (i.budget || 0), 0) ?? 0;
+  doc.text(`Total Work Budget: ${formatRupees(totalBudget)}`, 115, 57);
 
   // Work Summary
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(20, 43, 74);
-  doc.text('Work Summary & Details:', 14, 78);
+  doc.text('Work Summary & Details:', 14, 80);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(51, 65, 85);
-  doc.text(doc.splitTextToSize(report.workSummary || 'No summary provided.', 182), 14, 84);
+  doc.text(doc.splitTextToSize(report.workSummary || 'No summary provided.', 182), 14, 86);
 
-  let currentY = 104;
+  let currentY = 106;
 
   // Work Items Table
   if (report.workItems && report.workItems.length > 0) {
@@ -172,13 +174,16 @@ export function exportDailyReportPdf(report: DailyReport) {
       item.description,
       item.quantity.toString(),
       item.unit,
+      formatRupees(item.budget || 0),
     ]);
 
     autoTable(doc, {
       startY: currentY,
-      head: [['Work Item / Activity', 'Quantity', 'Unit']],
+      head: [['Work Item / Activity', 'Quantity', 'Unit', 'Budget (INR)']],
       body: itemsData,
+      foot: [['Total Work Budget (Estimated)', '', '', formatRupees(totalBudget)]],
       headStyles: { fillColor: [20, 43, 74], fontSize: 9 },
+      footStyles: { fillColor: [240, 243, 246], textColor: [20, 43, 74], fontStyle: 'bold', fontSize: 8.5 },
       styles: { fontSize: 8.5 },
     });
 

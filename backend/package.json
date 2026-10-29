@@ -10,7 +10,8 @@
     "dev": "tsx watch src/server.ts",
     "seed": "tsx src/scripts/seed.ts",
     "verify:full": "tsx src/scripts/verify-full-system.ts",
-    "test": "tsx src/scripts/verify-md-linking.ts"
+    "verify:weather": "tsx src/scripts/verify-weather-integration.ts",
+    "test": "tsx src/scripts/verify-weather-integration.ts"
   },
   "keywords": [
     "construction",

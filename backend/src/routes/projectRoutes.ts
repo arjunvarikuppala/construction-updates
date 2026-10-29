@@ -8,15 +8,31 @@ import {
   assignProjectInCharge,
   removeProjectAssignment,
 } from '../controllers/projectController.js';
+import {
+  getProjectWeather,
+  getWeatherSummary,
+  updateProjectLocation,
+  geocodeLocationQuery,
+} from '../controllers/weatherController.js';
 import { authenticate, requireMD } from '../middleware/auth.js';
 
 const router = Router();
 
 router.use(authenticate);
 
+// Specific routes registered before parameterized /:id routes
+router.get('/weather-summary', getWeatherSummary);
+router.post('/geocode', geocodeLocationQuery);
+
 // Listing accessible to both MD and In-Charge (filtered per role)
 router.get('/', listProjects);
 router.get('/:id', getProjectById);
+
+// Weather for a specific project
+router.get('/:id/weather', getProjectWeather);
+
+// Location configuration for a project (MD only)
+router.put('/:id/location', requireMD, updateProjectLocation);
 
 // Creation and modification restricted to MD
 router.post('/', requireMD, createProject);

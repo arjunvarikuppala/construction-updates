@@ -1,6 +1,16 @@
 import mongoose, { Schema, Document } from 'mongoose';
 import { ReportStatus, WorkItem, LabourCountItem, SitePhoto } from '../types/index.js';
 
+export interface IReportComment {
+  _id?: mongoose.Types.ObjectId;
+  author: mongoose.Types.ObjectId;
+  authorName: string;
+  authorRole: string;
+  message: string;
+  type: 'COMMENT' | 'CHANGES_REQUESTED' | 'CORRECTION_REQUIRED';
+  createdAt: Date;
+}
+
 export interface IDailyReport extends Document {
   project: mongoose.Types.ObjectId;
   submittedBy: mongoose.Types.ObjectId;
@@ -11,12 +21,14 @@ export interface IDailyReport extends Document {
   workItems: WorkItem[];
   labourBreakdown: LabourCountItem[];
   totalLabourCount: number;
+  totalWorkBudget?: number;
   equipmentDetails?: string;
   issuesAndDelays?: string;
   nextDayPlan?: string;
   photos: SitePhoto[];
   status: ReportStatus;
   version: number;
+  comments?: IReportComment[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -62,6 +74,7 @@ const DailyReportSchema = new Schema<IDailyReport>(
         description: { type: String, required: true, trim: true },
         quantity: { type: Number, required: true, min: 0 },
         unit: { type: String, required: true, trim: true },
+        budget: { type: Number, default: 0, min: 0 },
       },
     ],
     labourBreakdown: [
@@ -75,6 +88,11 @@ const DailyReportSchema = new Schema<IDailyReport>(
       required: true,
       min: 0,
       default: 0,
+    },
+    totalWorkBudget: {
+      type: Number,
+      default: 0,
+      min: 0,
     },
     equipmentDetails: {
       type: String,
@@ -110,6 +128,20 @@ const DailyReportSchema = new Schema<IDailyReport>(
       default: 1,
       min: 1,
     },
+    comments: [
+      {
+        author: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+        authorName: { type: String, required: true },
+        authorRole: { type: String, required: true },
+        message: { type: String, required: true, trim: true },
+        type: {
+          type: String,
+          enum: ['COMMENT', 'CHANGES_REQUESTED', 'CORRECTION_REQUIRED'],
+          default: 'COMMENT',
+        },
+        createdAt: { type: Date, default: Date.now },
+      },
+    ],
   },
   {
     timestamps: true,

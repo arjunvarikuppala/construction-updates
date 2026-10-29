@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useMemo, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useAuth } from './AuthContext.js';
 import { useToast } from './ToastContext.js';
@@ -24,6 +24,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const queryClient = useQueryClient();
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+  const activeProjectIdRef = useRef<string>('');
 
   useEffect(() => {
     if (!token || !user) {
@@ -40,12 +41,18 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       path: '/socket.io',
       auth: { token },
       transports: ['websocket', 'polling'],
-      reconnectionAttempts: 15,
-      reconnectionDelay: 1500,
+      reconnectionAttempts: 20,
+      reconnectionDelay: 1200,
     });
 
     socketInstance.on('connect', () => {
       setIsConnected(true);
+      // Auto-rejoin active project channel on reconnect
+      if (activeProjectIdRef.current) {
+        socketInstance.emit('project:join', activeProjectIdRef.current);
+        queryClient.invalidateQueries({ queryKey: ['project-messages', activeProjectIdRef.current] });
+        queryClient.invalidateQueries({ queryKey: ['project-presence', activeProjectIdRef.current] });
+      }
     });
 
     socketInstance.on('disconnect', () => {
@@ -58,10 +65,29 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       queryClient.invalidateQueries({ queryKey: ['notifications-unread-count'] });
     });
 
-    // Real-time project message updates
+    // Real-time project message updates (with message deduplication)
     socketInstance.on('message:new', (message) => {
       if (message?.project) {
-        queryClient.invalidateQueries({ queryKey: ['project-messages', message.project] });
+        const projId =
+          typeof message.project === 'object' && message.project !== null
+            ? String((message.project as any)._id || (message.project as any).id)
+            : String(message.project);
+
+        queryClient.setQueriesData(
+          { queryKey: ['project-messages', projId] },
+          (old: any) => {
+            if (!old || !Array.isArray(old.messages)) return old;
+            const msgId = String(message._id || message.id);
+            const exists = old.messages.some((m: any) => String(m._id || m.id) === msgId);
+            if (exists) return old;
+            return {
+              ...old,
+              messages: [...old.messages, message],
+              count: (old.count || old.messages.length) + 1,
+            };
+          }
+        );
+
         queryClient.invalidateQueries({ queryKey: ['unread-messages-count'] });
       }
     });
@@ -69,7 +95,8 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     // Real-time message seen updates (blue checkmarks)
     socketInstance.on('messages:seen', (data) => {
       if (data?.projectId) {
-        queryClient.invalidateQueries({ queryKey: ['project-messages', data.projectId] });
+        const pId = String(data.projectId);
+        queryClient.invalidateQueries({ queryKey: ['project-messages', pId] });
         queryClient.invalidateQueries({ queryKey: ['unread-messages-count'] });
       }
     });
@@ -77,7 +104,8 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     // Real-time presence updates (online indicators)
     socketInstance.on('presence:project_users', (data) => {
       if (data?.projectId) {
-        queryClient.invalidateQueries({ queryKey: ['project-presence', data.projectId] });
+        const pId = String(data.projectId);
+        queryClient.invalidateQueries({ queryKey: ['project-presence', pId] });
       }
     });
 
@@ -151,6 +179,28 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       queryClient.invalidateQueries({ queryKey: ['in-charge-dashboard'] });
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
       queryClient.invalidateQueries({ queryKey: ['notifications-unread-count'] });
+      queryClient.invalidateQueries({ queryKey: ['daily-reports-unread-summary'] });
+    });
+
+    socketInstance.on('daily-report:new', () => {
+      queryClient.invalidateQueries({ queryKey: ['daily-reports'] });
+      queryClient.invalidateQueries({ queryKey: ['daily-reports-unread-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications-unread-count'] });
+    });
+
+    socketInstance.on('daily-report:updated', () => {
+      queryClient.invalidateQueries({ queryKey: ['daily-reports'] });
+      queryClient.invalidateQueries({ queryKey: ['daily-reports-unread-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications-unread-count'] });
+    });
+
+    socketInstance.on('daily-report:viewed', () => {
+      queryClient.invalidateQueries({ queryKey: ['daily-reports'] });
+      queryClient.invalidateQueries({ queryKey: ['daily-reports-unread-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications-unread-count'] });
     });
 
     // Real-time payment status updates
@@ -168,6 +218,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const joinProject = useCallback(
     (projectId: string) => {
+      activeProjectIdRef.current = projectId;
       if (socket && isConnected && projectId) {
         socket.emit('project:join', projectId);
       }
@@ -177,6 +228,9 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const leaveProject = useCallback(
     (projectId: string) => {
+      if (activeProjectIdRef.current === projectId) {
+        activeProjectIdRef.current = '';
+      }
       if (socket && isConnected && projectId) {
         socket.emit('project:leave', projectId);
       }

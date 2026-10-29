@@ -14,6 +14,21 @@ export async function createNotification(params: {
   relatedId?: string;
 }) {
   try {
+    // Deduplication check: prevent identical notification spam within 2 minutes
+    const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000);
+    const existingDuplicate = await Notification.findOne({
+      recipient: params.recipient,
+      type: params.type,
+      relatedEntity: params.relatedEntity,
+      relatedId: params.relatedId,
+      message: params.message,
+      createdAt: { $gte: twoMinutesAgo },
+    });
+
+    if (existingDuplicate) {
+      return existingDuplicate;
+    }
+
     const notif = await Notification.create({
       recipient: params.recipient,
       sender: params.sender,
