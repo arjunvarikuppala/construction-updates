@@ -184,22 +184,23 @@ export const ProjectDetailPage: React.FC = () => {
     <div className="space-y-6">
       {/* Top Header: Breadcrumbs, Switch Project Selector, and Actions */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-3 border-b border-slate-200">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0">
           <button
             onClick={() => navigate('/projects')}
-            className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors"
+            aria-label="Back to projects"
+            className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors min-w-[40px] min-h-[40px] flex items-center justify-center shrink-0"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <div>
-            <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="font-mono text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">
                 {project.code}
               </span>
               <Badge status={project.status} size="sm" />
             </div>
-            <div className="flex items-center gap-2 mt-1">
-              <h1 className="text-xl sm:text-2xl font-bold text-navy-950">{project.name}</h1>
+            <div className="flex items-center gap-2 mt-1 min-w-0">
+              <h1 className="text-xl sm:text-2xl font-bold text-navy-950 truncate">{project.name}</h1>
               {projectUnreadCount > 0 && (
                 <UnreadDot count={projectUnreadCount} title={`${projectUnreadCount} unread daily report(s)`} />
               )}
@@ -374,7 +375,7 @@ export const ProjectDetailPage: React.FC = () => {
       )}
 
       {/* Project Workspace Module Navigation Bar */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-2 border-b border-slate-200 scrollbar-none">
+      <div className="-mx-3 px-3 sm:mx-0 sm:px-0 flex items-center gap-1.5 overflow-x-auto pb-2 border-b border-slate-200 scrollbar-none scroll-smooth">
         <button
           onClick={() => setActiveTab('overview')}
           className={`py-2 px-3 text-xs font-bold rounded-xl whitespace-nowrap shrink-0 transition-colors ${
@@ -530,7 +531,7 @@ export const ProjectDetailPage: React.FC = () => {
             </Card>
 
             {/* Quick Actions Strip */}
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2.5 [&>button]:w-full [&>button]:sm:w-auto">
               <Button
                 variant="amber"
                 onClick={() => navigate('/reports/new')}
@@ -718,36 +719,64 @@ export const ProjectDetailPage: React.FC = () => {
               <p className="text-xs text-slate-500">Chronological register of all construction work items and units</p>
             </div>
           </CardHeader>
-          <div className="overflow-x-auto">
+          <div>
             {allWorkItems.length === 0 ? (
               <div className="p-8 text-center text-xs text-slate-500">
                 No specific work item quantities recorded yet in daily reports.
               </div>
             ) : (
-              <table className="w-full text-left border-collapse text-xs min-w-[550px]">
-                <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50/80 text-slate-500 font-bold uppercase tracking-wider">
-                    <th className="py-3 px-4">Date</th>
-                    <th className="py-3 px-4">Daily Report Title</th>
-                    <th className="py-3 px-4">Item Description</th>
-                    <th className="py-3 px-4 text-right">Quantity</th>
-                    <th className="py-3 px-4 text-left">Unit</th>
-                    <th className="py-3 px-4">Submitted By</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 bg-white">
+              <>
+                {/* Mobile Card List (< 640px) */}
+                <div className="sm:hidden divide-y divide-slate-100">
                   {allWorkItems.map((item, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50/60">
-                      <td className="py-3 px-4 font-semibold text-slate-700">{formatDate(item.workDate)}</td>
-                      <td className="py-3 px-4 font-bold text-navy-950">{item.reportTitle}</td>
-                      <td className="py-3 px-4 text-slate-800">{item.description}</td>
-                      <td className="py-3 px-4 text-right font-black text-navy-950">{item.quantity}</td>
-                      <td className="py-3 px-4 font-semibold text-slate-600">{item.unit}</td>
-                      <td className="py-3 px-4 text-slate-500">{item.submittedBy}</td>
-                    </tr>
+                    <div key={idx} className="p-3.5 space-y-2">
+                      <div className="flex justify-between items-start gap-2">
+                        <span className="font-bold text-xs text-navy-950">{item.description}</span>
+                        <span className="font-mono text-xs font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200/80 shrink-0">
+                          {item.quantity} {item.unit}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-[11px] text-slate-500">
+                        <span className="truncate pr-2">{item.reportTitle}</span>
+                        <span className="shrink-0">{formatDate(item.workDate)}</span>
+                      </div>
+                      {item.budget !== undefined && item.budget > 0 && (
+                        <div className="text-[11px] font-semibold text-emerald-700 text-right">
+                          Budget: {formatINR(item.budget)}
+                        </div>
+                      )}
+                    </div>
                   ))}
-                </tbody>
-              </table>
+                </div>
+
+                {/* Desktop Responsive Table (>= 640px) */}
+                <div className="hidden sm:block overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs min-w-[550px]">
+                    <thead>
+                      <tr className="border-b border-slate-200 bg-slate-50/80 text-slate-500 font-bold uppercase tracking-wider">
+                        <th className="py-3 px-4">Date</th>
+                        <th className="py-3 px-4">Daily Report Title</th>
+                        <th className="py-3 px-4">Item Description</th>
+                        <th className="py-3 px-4 text-right">Quantity</th>
+                        <th className="py-3 px-4 text-left">Unit</th>
+                        <th className="py-3 px-4">Submitted By</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {allWorkItems.map((item, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50/60">
+                          <td className="py-3 px-4 font-semibold text-slate-700">{formatDate(item.workDate)}</td>
+                          <td className="py-3 px-4 font-bold text-navy-950">{item.reportTitle}</td>
+                          <td className="py-3 px-4 text-slate-800">{item.description}</td>
+                          <td className="py-3 px-4 text-right font-black text-navy-950">{item.quantity}</td>
+                          <td className="py-3 px-4 font-semibold text-slate-600">{item.unit}</td>
+                          <td className="py-3 px-4 text-slate-500">{item.submittedBy}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </div>
         </Card>
@@ -783,32 +812,54 @@ export const ProjectDetailPage: React.FC = () => {
               <p className="text-xs text-slate-500">Masons, carpenters, bar benders, electricians, and helpers</p>
             </div>
           </CardHeader>
-          <div className="overflow-x-auto">
+          <div>
             {allLabourItems.length === 0 ? (
               <div className="p-8 text-center text-xs text-slate-500">
                 No labour breakdowns recorded yet in daily reports.
               </div>
             ) : (
-              <table className="w-full text-left border-collapse text-xs min-w-[550px]">
-                <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50/80 text-slate-500 font-bold uppercase tracking-wider">
-                    <th className="py-3 px-4">Date</th>
-                    <th className="py-3 px-4">Daily Report</th>
-                    <th className="py-3 px-4">Labour Trade / Role</th>
-                    <th className="py-3 px-4 text-right">Headcount</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 bg-white">
+              <>
+                {/* Mobile Card List (< 640px) */}
+                <div className="sm:hidden divide-y divide-slate-100">
                   {allLabourItems.map((labour, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50/60">
-                      <td className="py-3 px-4 font-semibold text-slate-700">{formatDate(labour.workDate)}</td>
-                      <td className="py-3 px-4 font-bold text-navy-950">{labour.reportTitle}</td>
-                      <td className="py-3 px-4 font-medium text-slate-800">{labour.role}</td>
-                      <td className="py-3 px-4 text-right font-black text-amber-700">{labour.count} workers</td>
-                    </tr>
+                    <div key={idx} className="p-3 flex justify-between items-center text-xs">
+                      <div className="min-w-0 pr-2">
+                        <span className="font-bold text-navy-950 block truncate">{labour.role}</span>
+                        <span className="text-[11px] text-slate-500 truncate block">
+                          {labour.reportTitle} • {formatDate(labour.workDate)}
+                        </span>
+                      </div>
+                      <span className="font-black text-amber-700 bg-amber-50 px-2 py-1 rounded-lg border border-amber-200 shrink-0">
+                        {labour.count} workers
+                      </span>
+                    </div>
                   ))}
-                </tbody>
-              </table>
+                </div>
+
+                {/* Desktop Responsive Table (>= 640px) */}
+                <div className="hidden sm:block overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs min-w-[550px]">
+                    <thead>
+                      <tr className="border-b border-slate-200 bg-slate-50/80 text-slate-500 font-bold uppercase tracking-wider">
+                        <th className="py-3 px-4">Date</th>
+                        <th className="py-3 px-4">Daily Report</th>
+                        <th className="py-3 px-4">Labour Trade / Role</th>
+                        <th className="py-3 px-4 text-right">Headcount</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {allLabourItems.map((labour, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50/60">
+                          <td className="py-3 px-4 font-semibold text-slate-700">{formatDate(labour.workDate)}</td>
+                          <td className="py-3 px-4 font-bold text-navy-950">{labour.reportTitle}</td>
+                          <td className="py-3 px-4 font-medium text-slate-800">{labour.role}</td>
+                          <td className="py-3 px-4 text-right font-black text-amber-700">{labour.count} workers</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </div>
         </Card>

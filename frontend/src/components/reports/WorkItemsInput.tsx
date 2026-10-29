@@ -68,67 +68,73 @@ export const WorkItemsInput: React.FC<WorkItemsInputProps> = ({ items, onChange 
           {items.map((item, index) => (
             <div
               key={index}
-              className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 p-3 bg-slate-50 rounded-xl border border-slate-200"
+              className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2.5 sm:space-y-0 sm:flex sm:items-center sm:gap-2"
             >
-              {/* 1. Delete button on the far left */}
-              <button
-                type="button"
-                onClick={() => removeItem(index)}
-                title="Delete work item"
-                aria-label="Delete work item"
-                className="p-2 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-slate-200 transition-colors self-start sm:self-center shrink-0"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+              {/* Row 1 on mobile: Delete button + Task Description */}
+              <div className="flex items-center gap-2 flex-1 sm:contents">
+                {/* 1. Delete button on the far left */}
+                <button
+                  type="button"
+                  onClick={() => removeItem(index)}
+                  title="Delete work item"
+                  aria-label="Delete work item"
+                  className="p-2 min-w-[40px] min-h-[40px] flex items-center justify-center text-slate-400 hover:text-rose-600 rounded-lg hover:bg-slate-200 transition-colors shrink-0 sm:order-1"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
 
-              {/* 2. Task Description */}
-              <div className="flex-1">
-                <Input
-                  placeholder="Task Description (e.g. Slab Rebar Tied)"
-                  value={item.description}
-                  onChange={(e) => updateItem(index, 'description', e.target.value)}
-                  required
-                />
+                {/* 2. Task Description */}
+                <div className="flex-1 sm:order-2">
+                  <Input
+                    placeholder="Task Description (e.g. Slab Rebar Tied)"
+                    value={item.description}
+                    onChange={(e) => updateItem(index, 'description', e.target.value)}
+                    required
+                  />
+                </div>
               </div>
 
-              {/* 3. Quantity */}
-              <div className="w-full sm:w-28">
-                <Input
-                  type="number"
-                  placeholder="Qty"
-                  min="0"
-                  step="0.01"
-                  value={item.quantity === 0 && !item.description ? '' : item.quantity ?? ''}
-                  onChange={(e) => updateItem(index, 'quantity', parseFloat(e.target.value) || 0)}
-                  required
-                />
-              </div>
+              {/* Row 2 on mobile: Quantity, Unit, and Budget */}
+              <div className="grid grid-cols-2 xs:grid-cols-3 gap-2 sm:contents">
+                {/* 3. Quantity */}
+                <div className="w-full sm:w-28 sm:order-3">
+                  <Input
+                    type="number"
+                    placeholder="Qty"
+                    min="0"
+                    step="0.01"
+                    value={item.quantity === 0 && !item.description ? '' : item.quantity ?? ''}
+                    onChange={(e) => updateItem(index, 'quantity', parseFloat(e.target.value) || 0)}
+                    required
+                  />
+                </div>
 
-              {/* 4. Unit dropdown */}
-              <div className="w-full sm:w-32">
-                <Select
-                  value={item.unit}
-                  onChange={(e) => updateItem(index, 'unit', e.target.value)}
-                  options={COMMON_UNITS.map((u) => ({ value: u, label: u }))}
-                />
-              </div>
+                {/* 4. Unit dropdown */}
+                <div className="w-full sm:w-32 sm:order-4">
+                  <Select
+                    value={item.unit}
+                    onChange={(e) => updateItem(index, 'unit', e.target.value)}
+                    options={COMMON_UNITS.map((u) => ({ value: u, label: u }))}
+                  />
+                </div>
 
-              {/* 5. Budget (₹) */}
-              <div className="w-full sm:w-36">
-                <Input
-                  type="number"
-                  placeholder="Budget (₹)"
-                  min="0"
-                  step="any"
-                  aria-label="Work item budget in Indian Rupees"
-                  leftIcon={<span className="text-xs font-bold text-slate-500">₹</span>}
-                  value={item.budget === undefined || item.budget === null || (item.budget === 0 && !item.description) ? '' : item.budget}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    const parsed = val === '' ? 0 : parseFloat(val);
-                    updateItem(index, 'budget', isNaN(parsed) || parsed < 0 ? 0 : parsed);
-                  }}
-                />
+                {/* 5. Budget (₹) */}
+                <div className="col-span-2 xs:col-span-1 w-full sm:w-36 sm:order-5">
+                  <Input
+                    type="number"
+                    placeholder="Budget (₹)"
+                    min="0"
+                    step="any"
+                    aria-label="Work item budget in Indian Rupees"
+                    leftIcon={<span className="text-xs font-bold text-slate-500">₹</span>}
+                    value={item.budget === undefined || item.budget === null || (item.budget === 0 && !item.description) ? '' : item.budget}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const parsed = val === '' ? 0 : parseFloat(val);
+                      updateItem(index, 'budget', isNaN(parsed) || parsed < 0 ? 0 : parsed);
+                    }}
+                  />
+                </div>
               </div>
             </div>
           ))}

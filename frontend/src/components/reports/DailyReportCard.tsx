@@ -25,18 +25,18 @@ export const DailyReportCard: React.FC<DailyReportCardProps> = ({ report }) => {
   const showUnread = isMDOrOwner && unread;
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-card hover:shadow-card-hover transition-all space-y-3.5">
+    <div className="bg-white rounded-2xl border border-slate-200/90 p-4 sm:p-5 shadow-card hover:shadow-card-hover transition-all space-y-3.5 min-w-0">
       {/* Top Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-xs font-bold text-navy-900 bg-navy-50 border border-navy-200/80 px-2 py-0.5 rounded-md">
+      <div className="flex flex-wrap items-center justify-between gap-1.5">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="font-mono text-xs font-bold text-navy-900 bg-navy-50 border border-navy-200/80 px-2 py-0.5 rounded-md shrink-0">
             {report.project?.code}
           </span>
-          <span className="font-bold text-xs text-slate-600 truncate max-w-xs">
+          <span className="font-bold text-xs text-slate-600 truncate max-w-[140px] sm:max-w-xs">
             {report.project?.name}
           </span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
           {showUnread && (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-900 border border-amber-300">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
@@ -44,8 +44,8 @@ export const DailyReportCard: React.FC<DailyReportCardProps> = ({ report }) => {
             </span>
           )}
           <Badge status={report.status} size="sm" />
-          <span className="text-xs text-slate-500 font-medium">
-            {formatDate(report.workDate, 'EEEE, dd MMM yyyy')}
+          <span className="text-xs text-slate-500 font-medium whitespace-nowrap">
+            {formatDate(report.workDate, 'dd MMM yyyy')}
           </span>
         </div>
       </div>

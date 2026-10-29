@@ -196,10 +196,10 @@ export const PaymentsPage: React.FC = () => {
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-2 border-b border-slate-200">
         <div>
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-navy-900 text-amber-500 flex items-center justify-center font-bold">
+            <div className="w-8 h-8 rounded-lg bg-navy-900 text-amber-500 flex items-center justify-center font-bold shrink-0">
               <CreditCard className="w-4 h-4" />
             </div>
-            <h1 className="text-2xl font-black text-navy-950 tracking-tight">
+            <h1 className="text-xl sm:text-2xl font-black text-navy-950 tracking-tight">
               Payments & Financial Transfers
             </h1>
           </div>
@@ -304,10 +304,10 @@ export const PaymentsPage: React.FC = () => {
       </div>
 
       {/* Main Tabs Navigation */}
-      <div className="flex border-b border-slate-200">
+      <div className="-mx-3 px-3 sm:mx-0 sm:px-0 flex border-b border-slate-200 overflow-x-auto scrollbar-none scroll-smooth">
         <button
           onClick={() => setActiveTab('requests')}
-          className={`py-3 px-6 text-xs font-bold border-b-2 transition-colors flex items-center gap-2 ${
+          className={`py-2.5 sm:py-3 px-3.5 sm:px-6 text-xs font-bold border-b-2 whitespace-nowrap transition-colors flex items-center gap-1.5 sm:gap-2 shrink-0 ${
             activeTab === 'requests'
               ? 'border-amber-500 text-navy-950 font-black'
               : 'border-transparent text-slate-500 hover:text-slate-700'
@@ -319,7 +319,7 @@ export const PaymentsPage: React.FC = () => {
 
         <button
           onClick={() => setActiveTab('beneficiaries')}
-          className={`py-3 px-6 text-xs font-bold border-b-2 transition-colors flex items-center gap-2 ${
+          className={`py-2.5 sm:py-3 px-3.5 sm:px-6 text-xs font-bold border-b-2 whitespace-nowrap transition-colors flex items-center gap-1.5 sm:gap-2 shrink-0 ${
             activeTab === 'beneficiaries'
               ? 'border-amber-500 text-navy-950 font-black'
               : 'border-transparent text-slate-500 hover:text-slate-700'

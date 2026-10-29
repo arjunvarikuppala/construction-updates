@@ -53,14 +53,14 @@ export const Modal: React.FC<ModalProps> = ({
 
       {/* Modal Dialog */}
       <div
-        className={`relative w-full ${sizeClasses} max-h-[90vh] flex flex-col bg-white rounded-2xl shadow-modal border border-slate-200/90 overflow-hidden z-10 my-auto animate-in zoom-in-95 duration-200`}
+        className={`relative w-full ${sizeClasses} max-h-[88dvh] sm:max-h-[90vh] flex flex-col bg-white rounded-2xl shadow-modal border border-slate-200/90 overflow-hidden z-10 my-auto animate-in zoom-in-95 duration-200`}
         role="dialog"
         aria-modal="true"
       >
         {/* Header */}
         <div className="flex items-center justify-between p-4 sm:p-5 border-b border-slate-100 bg-white flex-shrink-0">
-          <div className="pr-2">
-            <h3 className="text-base sm:text-lg font-bold text-navy-950">{title}</h3>
+          <div className="min-w-0 flex-1 pr-2">
+            <h3 className="text-base sm:text-lg font-bold text-navy-950 truncate" title={title}>{title}</h3>
             {description && <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{description}</p>}
           </div>
           <button
@@ -73,7 +73,7 @@ export const Modal: React.FC<ModalProps> = ({
         </div>
 
         {/* Body */}
-        <div className="p-4 sm:p-5 overflow-y-auto flex-1">{children}</div>
+        <div className="p-4 sm:p-5 overflow-y-auto flex-1 overscroll-contain">{children}</div>
 
         {/* Footer */}
         {footer && (

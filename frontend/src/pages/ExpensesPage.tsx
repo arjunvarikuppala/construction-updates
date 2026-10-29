@@ -157,7 +157,7 @@ export const ExpensesPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto [&>button]:flex-1 [&>button]:sm:flex-initial">
           {isOwner && (
             <Button
               size="sm"
@@ -215,7 +215,7 @@ export const ExpensesPage: React.FC = () => {
       </div>
 
       {/* Status Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-200 overflow-x-auto pb-1">
+      <div className="-mx-3 px-3 sm:mx-0 sm:px-0 flex items-center gap-2 border-b border-slate-200 overflow-x-auto pb-1 scrollbar-none scroll-smooth">
         {['ALL', 'PENDING', 'APPROVED', 'REJECTED'].map((tab) => (
           <button
             key={tab}

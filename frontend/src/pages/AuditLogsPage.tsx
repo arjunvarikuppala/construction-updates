@@ -50,8 +50,8 @@ export const AuditLogsPage: React.FC = () => {
                 </div>
 
                 <div className="flex-1 space-y-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-bold text-navy-950 text-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-1.5">
+                    <span className="font-bold text-navy-950 text-sm truncate">
                       {log.action.replace(/_/g, ' ')}
                     </span>
                     <span className="text-[11px] text-slate-400 font-medium whitespace-nowrap">

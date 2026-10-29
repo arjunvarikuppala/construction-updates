@@ -266,9 +266,9 @@ export const NotificationCenter: React.FC = () => {
 
       {/* Dropdown Popover */}
       {isOpen && (
-        <div className="fixed inset-x-3 top-16 sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:mt-2 sm:w-[420px] bg-white rounded-2xl shadow-2xl border border-slate-200/90 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150">
+        <div className="fixed inset-x-2 xs:inset-x-3 top-16 max-h-[calc(100dvh-5rem)] flex flex-col sm:max-h-none sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:mt-2 sm:w-[420px] bg-white rounded-2xl shadow-2xl border border-slate-200/90 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150">
           {/* Header */}
-          <div className="px-4 py-3 bg-slate-50/90 border-b border-slate-100 flex items-center justify-between">
+          <div className="px-4 py-3 bg-slate-50/90 border-b border-slate-100 flex items-center justify-between flex-shrink-0">
             <div className="flex items-center gap-2">
               <span className="text-sm font-bold text-navy-950">Notifications</span>
               <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-500 bg-slate-200/70 px-1.5 py-0.5 rounded">
@@ -298,7 +298,7 @@ export const NotificationCenter: React.FC = () => {
           </div>
 
           {/* List */}
-          <div className="max-h-[380px] overflow-y-auto divide-y divide-slate-100">
+          <div className="max-h-[58dvh] sm:max-h-[380px] overflow-y-auto flex-1 overscroll-contain divide-y divide-slate-100">
             {isLoading ? (
               <div className="p-8 text-center text-xs text-slate-400">Loading notifications...</div>
             ) : notifications.length === 0 ? (
@@ -373,7 +373,7 @@ export const NotificationCenter: React.FC = () => {
           </div>
 
           {/* Footer with "View All Notifications" action */}
-          <div className="p-2.5 bg-slate-50/90 border-t border-slate-100 flex items-center justify-between">
+          <div className="p-2.5 bg-slate-50/90 border-t border-slate-100 flex items-center justify-between flex-shrink-0">
             <button
               onClick={() => {
                 setIsOpen(false);

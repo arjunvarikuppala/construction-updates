@@ -179,7 +179,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
       description="Define the construction site name, code, and location for real-time weather monitoring."
       size="lg"
     >
-      <form onSubmit={handleSubmit} className="space-y-4 max-h-[80vh] overflow-y-auto pr-1">
+      <form onSubmit={handleSubmit} className="space-y-4">
         {!isOwner && (
           <div className="p-3.5 bg-amber-50 border border-amber-300 rounded-xl text-xs text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
@@ -391,7 +391,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
           />
         </div>
 
-        <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+        <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2 sm:gap-3 pt-3 border-t border-slate-100 [&>button]:w-full [&>button]:sm:w-auto">
           <Button type="button" variant="outline" onClick={onClose} disabled={isLoading}>
             Cancel
           </Button>

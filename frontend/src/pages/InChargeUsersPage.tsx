@@ -175,13 +175,13 @@ export const InChargeUsersPage: React.FC = () => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {users.map((user) => (
-            <Card key={user.id || user._id} className="p-5 space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-navy-900 text-amber-400 flex items-center justify-center font-bold text-lg shadow-sm">
+            <Card key={user.id || user._id} className="p-4 sm:p-5 space-y-4 min-w-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-12 h-12 rounded-2xl bg-navy-900 text-amber-400 flex items-center justify-center font-bold text-lg shadow-sm shrink-0">
                   {user.name.charAt(0)}
                 </div>
-                <div>
-                  <h3 className="font-bold text-navy-950 text-sm">{user.name}</h3>
+                <div className="min-w-0">
+                  <h3 className="font-bold text-navy-950 text-sm truncate">{user.name}</h3>
                   <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
                     Site In-Charge
                   </span>
@@ -189,14 +189,14 @@ export const InChargeUsersPage: React.FC = () => {
               </div>
 
               <div className="space-y-2 text-xs pt-2 border-t border-slate-100">
-                <div className="flex items-center gap-2 text-slate-600">
-                  <Mail className="w-3.5 h-3.5 text-slate-400" />
+                <div className="flex items-center gap-2 text-slate-600 min-w-0">
+                  <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                   <span className="truncate">{user.email}</span>
                 </div>
                 {user.phone && (
-                  <div className="flex items-center gap-2 text-slate-600">
-                    <Phone className="w-3.5 h-3.5 text-slate-400" />
-                    <span>{user.phone}</span>
+                  <div className="flex items-center gap-2 text-slate-600 min-w-0">
+                    <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <span className="truncate">{user.phone}</span>
                   </div>
                 )}
               </div>
@@ -218,7 +218,7 @@ export const InChargeUsersPage: React.FC = () => {
                   variant="outline"
                   onClick={() => handleOpenEditSalary(user)}
                   leftIcon={<Edit3 className="w-3.5 h-3.5 text-navy-800" />}
-                  className="text-xs py-1 px-2.5 h-7"
+                  className="text-xs py-1.5 px-3 min-h-[38px] sm:min-h-0 sm:h-7 w-full sm:w-auto"
                 >
                   Edit Salary
                 </Button>
@@ -258,7 +258,7 @@ export const InChargeUsersPage: React.FC = () => {
         size="md"
       >
         <div className="space-y-4">
-          <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
+          <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2 [&>button]:flex-1 [&>button]:sm:flex-initial">
             <button
               type="button"
               onClick={() => {

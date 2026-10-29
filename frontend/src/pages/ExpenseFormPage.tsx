@@ -134,15 +134,16 @@ export const ExpenseFormPage: React.FC = () => {
   return (
     <div className="space-y-6 max-w-3xl mx-auto pb-12">
       {/* Top Header */}
-      <div className="flex items-center gap-3 pb-2 border-b border-slate-200">
+      <div className="flex items-center gap-3 pb-2 border-b border-slate-200 min-w-0">
         <button
           onClick={() => navigate('/expenses')}
-          className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors"
+          aria-label="Back to expenses"
+          className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors min-w-[40px] min-h-[40px] flex items-center justify-center shrink-0"
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-navy-950">Record On-Site Expense</h1>
+        <div className="min-w-0 flex-1">
+          <h1 className="text-xl sm:text-2xl font-bold text-navy-950 truncate">Record On-Site Expense</h1>
           <p className="text-xs text-slate-500 mt-0.5">
             Submit material purchase bills, equipment hire vouchers, fuel receipts, or labour payouts.
           </p>
@@ -289,11 +290,10 @@ export const ExpenseFormPage: React.FC = () => {
         </div>
 
         {/* Action Buttons */}
-        <div className="flex flex-col sm:flex-row items-center justify-end gap-3 pt-2">
+        <div className="flex flex-col-reverse sm:flex-row items-center justify-end gap-2.5 sm:gap-3 pt-2 [&>button]:w-full [&>button]:sm:w-auto">
           <Button
             type="button"
             variant="outline"
-            className="w-full sm:w-auto"
             onClick={() => handleSubmit('DRAFT')}
             disabled={isSubmitting}
           >
@@ -303,7 +303,7 @@ export const ExpenseFormPage: React.FC = () => {
           <Button
             type="button"
             variant="amber"
-            className="w-full sm:w-auto font-bold"
+            className="font-bold"
             onClick={() => handleSubmit('PENDING')}
             isLoading={isSubmitting}
             leftIcon={<CheckCircle2 className="w-4 h-4 text-navy-950" />}

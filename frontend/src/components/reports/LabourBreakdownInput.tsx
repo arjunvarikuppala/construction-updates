@@ -87,7 +87,7 @@ export const LabourBreakdownInput: React.FC<LabourBreakdownInputProps> = ({
                 onClick={() => removeLabour(index)}
                 title="Delete trade row"
                 aria-label="Delete trade row"
-                className="p-2 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-slate-200 transition-colors shrink-0"
+                className="p-2 min-w-[40px] min-h-[40px] flex items-center justify-center text-slate-400 hover:text-rose-600 rounded-lg hover:bg-slate-200 transition-colors shrink-0"
               >
                 <Trash2 className="w-4 h-4" />
               </button>

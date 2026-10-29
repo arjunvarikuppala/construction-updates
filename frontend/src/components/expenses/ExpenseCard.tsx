@@ -33,9 +33,9 @@ export const ExpenseCard: React.FC<ExpenseCardProps> = ({
 
       {/* Amount & Vendor */}
       <div className="flex items-baseline justify-between gap-2">
-        <div>
-          <h4 className="font-bold text-navy-950 text-base leading-snug">{expense.vendor}</h4>
-          <span className="text-xs text-slate-500 font-medium block">
+        <div className="min-w-0 flex-1">
+          <h4 className="font-bold text-navy-950 text-base leading-snug truncate">{expense.vendor}</h4>
+          <span className="text-xs text-slate-500 font-medium block truncate">
             {expense.project?.code} • {expense.project?.name}
           </span>
         </div>
@@ -72,7 +72,7 @@ export const ExpenseCard: React.FC<ExpenseCardProps> = ({
       )}
 
       {/* Action Buttons */}
-      <div className="pt-1 flex flex-wrap items-center justify-end gap-2 border-t border-slate-100">
+      <div className="pt-1 flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 [&>button]:flex-1 [&>button]:sm:flex-initial w-full sm:w-auto">
         <Button
           size="sm"
           variant="ghost"

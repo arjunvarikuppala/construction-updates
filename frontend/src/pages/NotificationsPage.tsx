@@ -231,7 +231,7 @@ export const NotificationsPage: React.FC = () => {
               <Bell className="w-6 h-6" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                 <h1 className="text-xl font-black text-navy-950">Notifications History</h1>
                 <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
                   {notifications.length} total
@@ -276,7 +276,7 @@ export const NotificationsPage: React.FC = () => {
 
         {/* Filter Tabs */}
         <div className="mt-6 pt-5 border-t border-slate-100 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+          <div className="-mx-3 px-3 sm:mx-0 sm:px-0 flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none scroll-smooth">
             <button
               onClick={() => setActiveTab('ALL')}
               className={`px-3 py-1.5 text-xs font-bold rounded-xl whitespace-nowrap transition-colors ${

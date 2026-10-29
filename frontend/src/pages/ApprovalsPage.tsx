@@ -73,7 +73,7 @@ export const ApprovalsPage: React.FC = () => {
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-xl sm:text-2xl font-bold text-navy-950 tracking-tight">
               Expense Approval Queue
             </h1>
@@ -137,7 +137,7 @@ export const ApprovalsPage: React.FC = () => {
             return (
               <div
                 key={id}
-                className="bg-white rounded-2xl border border-slate-200 p-5 shadow-card hover:shadow-card-hover transition-all flex flex-col md:flex-row items-stretch md:items-center justify-between gap-5"
+                className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-card hover:shadow-card-hover transition-all flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 sm:gap-5 min-w-0"
               >
                 {/* Left Details */}
                 <div className="space-y-2 flex-1">
@@ -182,7 +182,7 @@ export const ApprovalsPage: React.FC = () => {
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <div className="flex items-center gap-2 w-full sm:w-auto [&>button]:flex-1 [&>button]:sm:flex-initial">
                     <Button
                       size="sm"
                       variant="outline"

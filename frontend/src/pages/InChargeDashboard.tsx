@@ -180,12 +180,12 @@ export const InChargeDashboard: React.FC = () => {
         <>
           {/* Multiple Projects Switcher if assigned to > 1 */}
           {assignedProjects.length > 1 && (
-            <div className="flex items-center justify-between bg-slate-100 p-2 rounded-2xl border border-slate-200">
-              <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5 pl-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-slate-100 p-2.5 rounded-2xl border border-slate-200">
+              <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5 pl-1 shrink-0">
                 <ArrowRightLeft className="w-3.5 h-3.5 text-navy-900" />
                 Assigned Projects ({assignedProjects.length}):
               </span>
-              <div className="flex items-center gap-1 overflow-x-auto">
+              <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-0.5">
                 {assignedProjects.map((p, idx) => {
                   const pId = p.id || (p as any)._id || idx;
                   return (

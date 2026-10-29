@@ -39,7 +39,7 @@ export const ProjectsPage: React.FC = () => {
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200">
         <div>
-          <div className="flex items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-xl sm:text-2xl font-bold text-navy-950 tracking-tight">
               {isOwner ? 'Construction Projects Directory' : 'My Assigned Projects'}
             </h1>

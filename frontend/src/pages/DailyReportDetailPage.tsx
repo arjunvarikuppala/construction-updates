@@ -83,15 +83,16 @@ export const DailyReportDetailPage: React.FC = () => {
     <div className="space-y-6 max-w-4xl mx-auto pb-12">
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0">
           <button
             onClick={() => navigate('/reports')}
-            className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors"
+            aria-label="Back to daily reports"
+            className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors min-w-[40px] min-h-[40px] flex items-center justify-center shrink-0"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <div>
-            <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
               <span className="font-mono text-xs font-bold text-navy-900 bg-navy-50 border border-navy-200 px-2 py-0.5 rounded">
                 {report.project?.code}
               </span>
@@ -102,10 +103,10 @@ export const DailyReportDetailPage: React.FC = () => {
                 </span>
               )}
               <span className="text-xs text-slate-500 font-medium">
-                {formatDate(report.workDate, 'EEEE, dd MMMM yyyy')}
+                {formatDate(report.workDate, 'dd MMM yyyy')}
               </span>
             </div>
-            <h1 className="text-xl sm:text-2xl font-black text-navy-950 mt-1">
+            <h1 className="text-xl sm:text-2xl font-black text-navy-950 mt-1 break-words">
               {report.titleOfWork || 'Daily Construction Progress Log'}
             </h1>
           </div>
