@@ -733,7 +733,7 @@ export const ProjectMessagesPage: React.FC = () => {
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className="relative h-[calc(100vh-5.5rem)] flex flex-col md:flex-row bg-white rounded-3xl border border-slate-200/90 shadow-card overflow-hidden"
+      className="relative h-full flex-1 flex flex-col md:flex-row bg-white rounded-2xl sm:rounded-3xl border border-slate-200/90 shadow-card overflow-hidden min-h-0"
     >
       {/* DRAG AND DROP OVERLAY */}
       {isDragging && (
@@ -872,7 +872,7 @@ export const ProjectMessagesPage: React.FC = () => {
 
       {/* RIGHT MAIN AREA: PROJECT CHAT CONVERSATION */}
       <div
-        className={`flex-1 flex flex-col bg-white overflow-hidden ${
+        className={`flex-1 flex flex-col h-full overflow-hidden bg-white min-h-0 min-w-0 ${
           mobileView === 'channels' ? 'hidden md:flex' : 'flex'
         }`}
       >
@@ -896,7 +896,7 @@ export const ProjectMessagesPage: React.FC = () => {
         )}
 
         {/* Chat Header with ONLINE presence */}
-        <div className="h-16 px-3 sm:px-6 border-b border-slate-200 flex items-center justify-between bg-white flex-shrink-0">
+        <div className="h-16 px-3 sm:px-6 border-b border-slate-200 flex items-center justify-between gap-2 sm:gap-4 bg-white shrink-0 min-w-0">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             {/* Back to Channels button on mobile */}
             <button
@@ -1229,7 +1229,7 @@ export const ProjectMessagesPage: React.FC = () => {
 
                   {/* Message Bubble */}
                   <div
-                    className={`max-w-xl rounded-2xl p-3.5 shadow-xs space-y-2 ${
+                    className={`max-w-[85%] sm:max-w-xl rounded-2xl p-3 sm:p-3.5 shadow-xs space-y-2 break-words overflow-hidden ${
                       isMine
                         ? 'bg-navy-950 text-white rounded-tr-none'
                         : 'bg-white text-navy-950 border border-slate-200/90 rounded-tl-none'
@@ -1441,7 +1441,7 @@ export const ProjectMessagesPage: React.FC = () => {
 
                     {/* Content text */}
                     {m.content && (
-                      <p className="text-xs leading-relaxed whitespace-pre-wrap">{m.content}</p>
+                      <p className="text-xs sm:text-sm leading-relaxed whitespace-pre-wrap break-words">{m.content}</p>
                     )}
 
                     {/* MESSAGE FOOTER: TIME + SEEN STATUS */}
@@ -1630,14 +1630,15 @@ export const ProjectMessagesPage: React.FC = () => {
         )}
 
         {/* Message Input Box */}
-        <div className="p-4 border-t border-slate-200 bg-white">
+        <div className="p-3 sm:p-4 border-t border-slate-200 bg-white shrink-0">
           <form onSubmit={handleSend} className="flex items-end gap-2">
             {/* Attachment Button */}
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="p-2.5 text-slate-500 hover:text-navy-900 hover:bg-slate-100 rounded-xl cursor-pointer transition-colors flex-shrink-0"
+              className="p-2.5 min-w-[42px] min-h-[42px] flex items-center justify-center text-slate-500 hover:text-navy-900 hover:bg-slate-100 rounded-xl cursor-pointer transition-colors flex-shrink-0"
               title="Attach photos (JPG, PNG, WebP) or walkthrough videos (MP4, WebM)"
+              aria-label="Attach media"
             >
               <Paperclip className="w-5 h-5 text-slate-600 hover:text-amber-600" />
             </button>
@@ -1649,7 +1650,7 @@ export const ProjectMessagesPage: React.FC = () => {
               onChange={(e) => setContent(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Type your message... (Shift + Enter for newline)"
-              className="flex-1 px-4 py-2.5 rounded-2xl border border-slate-300 text-xs text-navy-950 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none resize-none max-h-32"
+              className="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm text-navy-950 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none resize-none max-h-32 min-h-[42px] leading-relaxed bg-slate-50 focus:bg-white transition-colors"
             />
 
             {/* Send Button */}
@@ -1659,9 +1660,11 @@ export const ProjectMessagesPage: React.FC = () => {
               type="submit"
               isLoading={sendMessageMutation.isPending || isAnyStagedUploading}
               disabled={!canSend}
-              className="rounded-2xl cursor-pointer"
+              className="rounded-xl min-w-[44px] min-h-[42px] cursor-pointer"
+              title="Send message"
+              aria-label="Send message"
             >
-              <Send className="w-4 h-4" />
+              <Send className="w-4 h-4 text-amber-400" />
             </Button>
           </form>
         </div>

@@ -258,7 +258,7 @@ export const DailyReportFormPage: React.FC = () => {
             <Textarea
               label="Work Summary & Progress Highlights"
               placeholder="Detailed description of primary work executed today (e.g. 4th floor slab reinforcement tied, plumbing rough-in completed, column concrete casted)..."
-              rows={3}
+              rows={4}
               value={workSummary}
               onChange={(e) => setWorkSummary(e.target.value)}
               required
@@ -289,7 +289,7 @@ export const DailyReportFormPage: React.FC = () => {
             <Textarea
               label="Machinery & Heavy Equipment Log"
               placeholder="E.g., 1x Tower crane operational (7 hrs), 1x Concrete batching mixer, 2x Needle vibrators..."
-              rows={2}
+              rows={3}
               value={equipmentDetails}
               onChange={(e) => setEquipmentDetails(e.target.value)}
             />
@@ -297,7 +297,7 @@ export const DailyReportFormPage: React.FC = () => {
             <Textarea
               label="Delays, Site Incidents, or Material Shortages"
               placeholder="E.g., 2 hour halt due to sudden unseasonal rain; diesel tanker delivery delayed by vendor..."
-              rows={2}
+              rows={3}
               value={issuesAndDelays}
               onChange={(e) => setIssuesAndDelays(e.target.value)}
             />
@@ -305,7 +305,7 @@ export const DailyReportFormPage: React.FC = () => {
             <Textarea
               label="Next-Day Construction Plan"
               placeholder="E.g., Casting M25 grade concrete on slab 4B starting 07:00 AM; stripping formwork of shear walls..."
-              rows={2}
+              rows={3}
               value={nextDayPlan}
               onChange={(e) => setNextDayPlan(e.target.value)}
             />
