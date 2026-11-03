@@ -87,10 +87,22 @@ export function getAllOnlineUserIds(): string[] {
   return ids;
 }
 
-export function initSocketService(httpServer: HttpServer): SocketIOServer {
+export function initSocketService(httpServer: HttpServer, allowedOrigins?: string[] | string): SocketIOServer {
+  // Resolve CORS origin for Socket.IO — must mirror the Express CORS config so
+  // that the WebSocket upgrade handshake is subject to the same origin policy.
+  const corsOrigin =
+    !allowedOrigins || allowedOrigins === '*'
+      ? '*'
+      : (requestOrigin: string | undefined, cb: (err: Error | null, allow?: boolean) => void) => {
+          if (!requestOrigin) return cb(null, true);
+          const list = Array.isArray(allowedOrigins) ? allowedOrigins : [allowedOrigins];
+          if (list.includes(requestOrigin)) return cb(null, true);
+          cb(new Error(`Socket.IO CORS: origin '${requestOrigin}' is not allowed.`));
+        };
+
   io = new SocketIOServer(httpServer, {
     cors: {
-      origin: '*',
+      origin: corsOrigin,
       credentials: true,
     },
     transports: ['websocket', 'polling'],

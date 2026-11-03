@@ -36,8 +36,27 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return;
     }
 
+    // ---------------------------------------------------------------------------
+    // Socket.IO connection target resolution
+    //
+    // Development (Vite dev server):
+    //   Neither VITE_SOCKET_URL nor VITE_API_URL is set → socketTarget = undefined
+    //   socket.io-client connects to the same origin, which Vite proxies via
+    //   the /socket.io proxy entry in vite.config.ts (ws: true).
+    //
+    // Production (Vercel + Render):
+    //   VITE_SOCKET_URL (preferred) or VITE_API_URL must be set to the full
+    //   Render backend URL, e.g. 'https://sitetrack-api.onrender.com'
+    //   Vercel cannot proxy WebSocket upgrade requests, so the client MUST
+    //   connect directly to the Render backend.
+    // ---------------------------------------------------------------------------
+    const socketTarget =
+      (import.meta.env.VITE_SOCKET_URL as string | undefined)?.replace(/\/$/, '') ||
+      (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') ||
+      undefined;
+
     // Connect to same origin host using configured Vite socket.io proxy
-    const socketInstance: Socket = io({
+    const socketInstance: Socket = io(socketTarget as any, {
       path: '/socket.io',
       auth: { token },
       transports: ['websocket', 'polling'],

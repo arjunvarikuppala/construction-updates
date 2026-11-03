@@ -14,8 +14,11 @@ build/
 .env.local
 .env.*.local
 backend/.env
+backend/.env.local
 frontend/.env
+frontend/.env.local
 *.env
+# .env.example files are intentionally committed (placeholder values only)
 
 # Uploads and media
 backend/uploads/*

@@ -1,4 +1,14 @@
-const BASE_URL = '/api/v1';
+// ---------------------------------------------------------------------------
+// API origin resolution
+//
+// Development (Vite dev server):   VITE_API_URL is NOT set → BASE_URL = '/api/v1'
+//   All requests go to relative paths which Vite proxies to localhost:5000.
+//
+// Production (Vercel):             VITE_API_URL = 'https://<your-service>.onrender.com'
+//   All requests go directly to the Render backend. No server-side proxy needed.
+// ---------------------------------------------------------------------------
+const API_ORIGIN = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') ?? '';
+const BASE_URL = `${API_ORIGIN}/api/v1`;
 
 export class ApiError extends Error {
   status: number;

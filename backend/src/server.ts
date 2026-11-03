@@ -31,8 +31,31 @@ const app = express();
 const httpServer = http.createServer(app);
 const PORT = process.env.PORT || 5000;
 
-// Initialize Socket.IO Server
-initSocketService(httpServer);
+// ---------------------------------------------------------------------------
+// CORS origin resolver — reads CORS_ORIGIN env var (comma-separated list).
+// Falls back to permissive '*' ONLY in non-production environments so that
+// local development continues to work with no configuration.
+// In production, CORS_ORIGIN MUST be set to the exact Vercel origin, e.g.:
+//   CORS_ORIGIN=https://sitetrack.vercel.app,http://localhost:5173
+// ---------------------------------------------------------------------------
+function getAllowedOrigins(): string[] | string {
+  const raw = process.env.CORS_ORIGIN?.trim();
+  if (raw) {
+    return raw.split(',').map((o) => o.trim()).filter(Boolean);
+  }
+  // No CORS_ORIGIN configured — allow any origin in development only
+  if (process.env.NODE_ENV !== 'production') {
+    return '*';
+  }
+  // Production without CORS_ORIGIN set: deny all (fail safe)
+  console.warn('⚠️  CORS_ORIGIN is not set in production. Cross-origin requests will be blocked.');
+  return [];
+}
+
+export const allowedOrigins = getAllowedOrigins();
+
+// Initialize Socket.IO Server (must happen before express middleware)
+initSocketService(httpServer, allowedOrigins);
 
 // Security Middleware
 app.use(
@@ -41,9 +64,24 @@ app.use(
   })
 );
 
+// Dynamic CORS: when credentials are carried (Authorization header), the
+// response 'Access-Control-Allow-Origin' must be the exact requesting origin,
+// not the wildcard '*'. Modern browsers enforce this per the Fetch spec.
 app.use(
   cors({
-    origin: '*',
+    origin: (requestOrigin, callback) => {
+      // Allow server-to-server requests (no Origin header)
+      if (!requestOrigin) return callback(null, true);
+
+      const allowed = allowedOrigins;
+      if (allowed === '*') return callback(null, true);
+
+      if (Array.isArray(allowed) && allowed.includes(requestOrigin)) {
+        return callback(null, true);
+      }
+
+      callback(new Error(`CORS policy: Origin '${requestOrigin}' is not permitted.`));
+    },
     credentials: true,
   })
 );
@@ -119,7 +157,9 @@ async function startServer() {
     await seedInitialData();
   }
 
-  httpServer.listen(PORT, () => {
+  // Bind explicitly to 0.0.0.0 so Render's health check can reach the process
+  // on all network interfaces (not just loopback / IPv6).
+  httpServer.listen(Number(PORT), '0.0.0.0', () => {
     console.log(`\n======================================================`);
     console.log(`🚀 SiteTrack Backend API running on http://localhost:${PORT}`);
     console.log(`📡 Health Check: http://localhost:${PORT}/api/health`);

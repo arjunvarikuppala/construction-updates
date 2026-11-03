@@ -6,9 +6,10 @@ import { formatDate } from './dates.js';
 export async function downloadExpensesExcel(filterParams: Record<string, string> = {}) {
   const query = new URLSearchParams(filterParams).toString();
   const token = localStorage.getItem('sitetrack_token');
+  const apiOrigin = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') ?? '';
 
   try {
-    const res = await fetch(`/api/v1/export/expenses/excel?${query}`, {
+    const res = await fetch(`${apiOrigin}/api/v1/export/expenses/excel?${query}`, {
       headers: {
         Authorization: `Bearer ${token}`,
       },
