@@ -66,7 +66,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project }) => {
       </div>
 
       {/* In-Charge & Timeline */}
-      <div className="grid grid-cols-2 gap-2 text-xs py-2 border-y border-slate-100 bg-slate-50/50 -mx-5 px-5">
+      <div className="grid grid-cols-2 gap-2 text-xs py-2 border-y border-slate-100 bg-slate-50/50 -mx-4 px-4 sm:-mx-5 sm:px-5">
         <div className="flex items-center gap-2 overflow-hidden">
           <User className="w-3.5 h-3.5 text-navy-700 flex-shrink-0" />
           <div className="min-w-0">

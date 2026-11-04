@@ -95,7 +95,7 @@ export const WorkItemsInput: React.FC<WorkItemsInputProps> = ({ items, onChange 
               </div>
 
               {/* Row 2 on mobile: Quantity, Unit, and Budget */}
-              <div className="grid grid-cols-2 xs:grid-cols-3 gap-2 sm:contents">
+              <div className="grid grid-cols-2 gap-2 sm:contents">
                 {/* 3. Quantity */}
                 <div className="w-full sm:w-28 sm:order-3">
                   <Input
@@ -119,7 +119,7 @@ export const WorkItemsInput: React.FC<WorkItemsInputProps> = ({ items, onChange 
                 </div>
 
                 {/* 5. Budget (₹) */}
-                <div className="col-span-2 xs:col-span-1 w-full sm:w-36 sm:order-5">
+                <div className="col-span-2 sm:col-span-1 w-full sm:w-36 sm:order-5">
                   <Input
                     type="number"
                     placeholder="Budget (₹)"

@@ -181,34 +181,34 @@ export const ExpensesPage: React.FC = () => {
       </div>
 
       {/* Financial Totals Strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-card text-xs">
-        <div>
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-card text-xs">
+        <div className="min-w-0">
+          <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider block truncate">
             Total In Register
           </span>
-          <span className="text-lg font-black text-navy-950 block mt-1">{expenses.length} Records</span>
+          <span className="text-base sm:text-lg font-black text-navy-950 block mt-1 truncate">{expenses.length} Records</span>
         </div>
-        <div>
-          <span className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider block">
+        <div className="min-w-0">
+          <span className="text-[10px] sm:text-[11px] font-bold text-emerald-700 uppercase tracking-wider block truncate">
             Approved Spend
           </span>
-          <span className="text-lg font-black text-emerald-700 block mt-1">
+          <span className="text-base sm:text-lg font-black text-emerald-700 block mt-1 truncate">
             {formatCompactINR(approvedTotal)}
           </span>
         </div>
-        <div>
-          <span className="text-[11px] font-bold text-amber-800 uppercase tracking-wider block">
+        <div className="min-w-0">
+          <span className="text-[10px] sm:text-[11px] font-bold text-amber-800 uppercase tracking-wider block truncate">
             Pending Approval
           </span>
-          <span className="text-lg font-black text-amber-700 block mt-1">
+          <span className="text-base sm:text-lg font-black text-amber-700 block mt-1 truncate">
             {formatCompactINR(pendingTotal)}
           </span>
         </div>
-        <div>
-          <span className="text-[11px] font-bold text-rose-700 uppercase tracking-wider block">
+        <div className="min-w-0">
+          <span className="text-[10px] sm:text-[11px] font-bold text-rose-700 uppercase tracking-wider block truncate">
             Rejected
           </span>
-          <span className="text-lg font-black text-rose-700 block mt-1">
+          <span className="text-base sm:text-lg font-black text-rose-700 block mt-1 truncate">
             {formatCompactINR(rejectedTotal)}
           </span>
         </div>

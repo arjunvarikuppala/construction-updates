@@ -48,8 +48,8 @@ export const AppLayout: React.FC = () => {
         <main
           className={`flex-1 min-w-0 ${
             isMessagesPage
-              ? 'overflow-hidden p-2 sm:p-4 md:p-6 pt-16 md:pt-6 pb-20 md:pb-6 flex flex-col min-h-0'
-              : 'overflow-y-auto px-3 py-4 sm:px-6 sm:py-6 pt-20 md:pt-6 pb-28 md:pb-8'
+              ? 'overflow-hidden p-2 sm:p-4 md:p-6 pt-[calc(4.5rem+env(safe-area-inset-top,0px))] md:pt-6 pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] md:pb-6 flex flex-col min-h-0'
+              : 'overflow-y-auto px-3 py-4 sm:px-6 sm:py-6 pt-[calc(4.75rem+env(safe-area-inset-top,0px))] md:pt-6 pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] md:pb-8'
           }`}
         >
           <div className={`max-w-7xl mx-auto w-full ${isMessagesPage ? 'h-full flex flex-col flex-1 min-h-0' : ''}`}>

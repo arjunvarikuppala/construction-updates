@@ -902,7 +902,7 @@ export const ProjectMessagesPage: React.FC = () => {
             <button
               type="button"
               onClick={() => setMobileView('channels')}
-              className="md:hidden p-2 -ml-1 text-slate-500 hover:text-navy-950 rounded-xl hover:bg-slate-100 min-w-[38px] min-h-[38px] flex items-center justify-center shrink-0 cursor-pointer"
+              className="md:hidden p-2 -ml-1 text-slate-500 hover:text-navy-950 rounded-xl hover:bg-slate-100 min-w-[40px] min-h-[40px] flex items-center justify-center shrink-0 cursor-pointer"
               aria-label="Back to channels"
             >
               <ArrowLeft className="w-5 h-5" />

@@ -80,7 +80,7 @@ export const DailyReportDetailPage: React.FC = () => {
   const report = data.report;
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto pb-12">
+    <div className="space-y-6 max-w-4xl mx-auto pb-8 sm:pb-12 min-w-0">
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200">
         <div className="flex items-center gap-3 min-w-0">
@@ -133,24 +133,24 @@ export const DailyReportDetailPage: React.FC = () => {
 
       {/* Meta Strip */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-card text-xs">
-        <div>
+        <div className="min-w-0">
           <span className="text-slate-400 block font-medium">Title of Work:</span>
           <span className="font-bold text-navy-950 block mt-0.5 truncate">{report.titleOfWork || 'General Work'}</span>
         </div>
-        <div>
+        <div className="min-w-0">
           <span className="text-slate-400 block font-medium">Project Name:</span>
           <span className="font-bold text-navy-950 block mt-0.5 truncate">{report.project?.name}</span>
         </div>
-        <div>
+        <div className="min-w-0">
           <span className="text-slate-400 block font-medium">Site In-Charge:</span>
-          <span className="font-bold text-navy-950 block mt-0.5">{report.submittedBy?.name}</span>
+          <span className="font-bold text-navy-950 block mt-0.5 truncate">{report.submittedBy?.name}</span>
           {report.lastEditedBy && report.lastEditedBy?._id !== report.submittedBy?._id && (
-            <span className="text-[10px] text-amber-700 font-semibold block mt-0.5">
+            <span className="text-[10px] text-amber-700 font-semibold block mt-0.5 truncate">
               Last edit: {report.lastEditedBy?.name}
             </span>
           )}
         </div>
-        <div>
+        <div className="min-w-0">
           <span className="text-slate-400 block font-medium">Total Site Labour:</span>
           <span className="font-bold text-amber-700 block mt-0.5">{report.totalLabourCount} Workers</span>
         </div>

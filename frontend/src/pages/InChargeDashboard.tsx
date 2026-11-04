@@ -365,12 +365,12 @@ export const InChargeDashboard: React.FC = () => {
 
           {/* 5. Today's Daily Report Quick Action Status Card */}
           <div className="bg-white rounded-2xl border border-slate-200/90 p-4 sm:p-5 shadow-card space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <FileText className="w-5 h-5 text-amber-600" />
-                <h3 className="text-sm font-bold text-navy-950">Today&apos;s Daily Construction Log</h3>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <FileText className="w-5 h-5 text-amber-600 shrink-0" />
+                <h3 className="text-sm font-bold text-navy-950 truncate">Today&apos;s Daily Construction Log</h3>
               </div>
-              <div>
+              <div className="shrink-0">
                 {todayReportStatus === 'SUBMITTED' ? (
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
                     <CheckCircle2 className="w-3.5 h-3.5" />
@@ -394,7 +394,7 @@ export const InChargeDashboard: React.FC = () => {
               Log manual work titles, completed quantities, labour counts, and site photos for {activeProject.name} ({activeProject.code}).
             </p>
 
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1 [&>button]:flex-1 [&>button]:sm:flex-initial">
               <Button
                 size="sm"
                 variant="amber"

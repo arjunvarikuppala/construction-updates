@@ -161,25 +161,25 @@ export const OwnerDashboard: React.FC = () => {
             />
           </div>
 
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleExportExcel}
-            className="w-full sm:w-auto"
-            leftIcon={<FileSpreadsheet className="w-4 h-4 text-emerald-600" />}
-          >
-            Export Excel
-          </Button>
+          <div className="flex items-center gap-2 w-full sm:w-auto [&>button]:flex-1 [&>button]:sm:flex-initial">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleExportExcel}
+              leftIcon={<FileSpreadsheet className="w-4 h-4 text-emerald-600" />}
+            >
+              Export Excel
+            </Button>
 
-          <Button
-            size="sm"
-            variant="primary"
-            onClick={() => navigate('/projects')}
-            className="w-full sm:w-auto"
-            leftIcon={<Plus className="w-4 h-4 text-amber-400" />}
-          >
-            New Project
-          </Button>
+            <Button
+              size="sm"
+              variant="primary"
+              onClick={() => navigate('/projects')}
+              leftIcon={<Plus className="w-4 h-4 text-amber-400" />}
+            >
+              New Project
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -199,7 +199,7 @@ export const OwnerDashboard: React.FC = () => {
             <div className="text-xl sm:text-2xl font-black text-navy-950 truncate">
               {kpis?.activeProjectsCount || 0}
             </div>
-            <div className="text-xs text-slate-500 flex items-center justify-between">
+            <div className="text-xs text-slate-500 flex flex-wrap items-center justify-between gap-1">
               <span>Total authorized: {kpis?.totalProjectsCount || 0}</span>
               <span className="font-semibold text-navy-800">In-progress</span>
             </div>
@@ -220,7 +220,7 @@ export const OwnerDashboard: React.FC = () => {
             <div className="text-xl sm:text-2xl font-black text-sky-800 truncate">
               {formatCompactINR(kpis?.totalBudgetPaise || 0)}
             </div>
-            <div className="text-xs text-slate-500 flex items-center justify-between">
+            <div className="text-xs text-slate-500 flex flex-wrap items-center justify-between gap-1">
               <span>Remaining: {formatCompactINR(kpis?.remainingBudgetPaise || 0)}</span>
               <span className="font-semibold text-slate-700">
                 {100 - (kpis?.budgetBurnPercentage || 0)}% left
@@ -243,7 +243,7 @@ export const OwnerDashboard: React.FC = () => {
             <div className="text-xl sm:text-2xl font-black text-emerald-700 truncate">
               {formatCompactINR(kpis?.approvedPaise || 0)}
             </div>
-            <div className="text-xs text-slate-500 flex items-center justify-between">
+            <div className="text-xs text-slate-500 flex flex-wrap items-center justify-between gap-1">
               <span>{kpis?.budgetBurnPercentage || 0}% budget utilized</span>
               <span className="font-semibold text-slate-700">{kpis?.approvedCount || 0} approved</span>
             </div>
@@ -268,7 +268,7 @@ export const OwnerDashboard: React.FC = () => {
             }`}>
               {unassignedCount}
             </div>
-            <div className="text-xs text-slate-500 flex items-center justify-between">
+            <div className="text-xs text-slate-500 flex flex-wrap items-center justify-between gap-1">
               {unassignedCount > 0 ? (
                 <span className="font-bold text-amber-800">Requires In-Charge</span>
               ) : (

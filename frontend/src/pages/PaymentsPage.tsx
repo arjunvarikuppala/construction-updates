@@ -259,45 +259,45 @@ export const PaymentsPage: React.FC = () => {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* Total Payments */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-card">
-          <span className="text-[10px] text-slate-400 uppercase font-bold block">Total Requests</span>
-          <span className="text-xl font-black text-navy-950 mt-1 block">
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-card min-w-0">
+          <span className="text-[10px] text-slate-400 uppercase font-bold block truncate">Total Requests</span>
+          <span className="text-xl font-black text-navy-950 mt-1 block truncate">
             ₹{(totalAmountPaise / 100).toLocaleString('en-IN')}
           </span>
-          <span className="text-[11px] text-slate-500 font-medium">
+          <span className="text-[11px] text-slate-500 font-medium block truncate">
             {payments.length} requests recorded
           </span>
         </div>
 
         {/* Pending Authorization */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-card">
-          <span className="text-[10px] text-amber-700 uppercase font-bold block">Awaiting Review</span>
-          <span className="text-xl font-black text-amber-600 mt-1 block">
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-card min-w-0">
+          <span className="text-[10px] text-amber-700 uppercase font-bold block truncate">Awaiting Review</span>
+          <span className="text-xl font-black text-amber-600 mt-1 block truncate">
             ₹{(pendingAuthAmountPaise / 100).toLocaleString('en-IN')}
           </span>
-          <span className="text-[11px] text-amber-800 font-medium">
+          <span className="text-[11px] text-amber-800 font-medium block truncate">
             {pendingAuthPayments.length} awaiting authorization
           </span>
         </div>
 
         {/* Processing */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-card">
-          <span className="text-[10px] text-indigo-700 uppercase font-bold block">In-Flight Processing</span>
-          <span className="text-xl font-black text-indigo-600 mt-1 block">
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-card min-w-0">
+          <span className="text-[10px] text-indigo-700 uppercase font-bold block truncate">In-Flight Processing</span>
+          <span className="text-xl font-black text-indigo-600 mt-1 block truncate">
             {processingPayments.length} Active
           </span>
-          <span className="text-[11px] text-indigo-800 font-medium">With provider/bank</span>
+          <span className="text-[11px] text-indigo-800 font-medium block truncate">With provider/bank</span>
         </div>
 
         {/* Total Paid */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-card">
-          <span className="text-[10px] text-emerald-700 uppercase font-bold block">Total Paid Out</span>
-          <span className="text-xl font-black text-emerald-600 mt-1 block">
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-card min-w-0">
+          <span className="text-[10px] text-emerald-700 uppercase font-bold block truncate">Total Paid Out</span>
+          <span className="text-xl font-black text-emerald-600 mt-1 block truncate">
             ₹{(paidAmountPaise / 100).toLocaleString('en-IN')}
           </span>
-          <span className="text-[11px] text-emerald-800 font-medium">
+          <span className="text-[11px] text-emerald-800 font-medium block truncate">
             {paidPayments.length} completed transfers
           </span>
         </div>

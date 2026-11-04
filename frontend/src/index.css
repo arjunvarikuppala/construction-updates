@@ -9,6 +9,12 @@
     --bg-light: #F6F8FB;
   }
 
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
   html,
   body {
     background-color: #F6F8FB;
@@ -16,16 +22,27 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
     overflow-x: hidden;
     max-width: 100vw;
+    width: 100%;
   }
 
   /* Safe area padding for mobile notch/home indicator */
   .pb-safe {
-    padding-bottom: env(safe-area-inset-bottom, 1rem);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
   .pt-safe {
-    padding-top: env(safe-area-inset-top, 1rem);
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  /* Prevent automatic mobile input zooming in Safari/Chrome by ensuring min 16px font size on small screens */
+  @media (max-width: 639px) {
+    input:not([type="checkbox"]):not([type="radio"]),
+    select,
+    textarea {
+      font-size: 16px !important;
+    }
   }
 }
 
@@ -43,4 +60,13 @@
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #94A3B8;
+}
+
+/* Cross-browser hide scrollbar utility */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }

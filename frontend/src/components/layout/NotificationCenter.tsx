@@ -266,7 +266,7 @@ export const NotificationCenter: React.FC = () => {
 
       {/* Dropdown Popover */}
       {isOpen && (
-        <div className="fixed inset-x-2 xs:inset-x-3 top-16 max-h-[calc(100dvh-5rem)] flex flex-col sm:max-h-none sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:mt-2 sm:w-[420px] bg-white rounded-2xl shadow-2xl border border-slate-200/90 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150">
+        <div className="fixed left-2 right-2 top-[calc(4.25rem+env(safe-area-inset-top,0px))] max-h-[calc(100dvh-5.5rem)] flex flex-col sm:max-h-none sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-2 sm:w-[420px] bg-white rounded-2xl shadow-2xl border border-slate-200/90 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150">
           {/* Header */}
           <div className="px-4 py-3 bg-slate-50/90 border-b border-slate-100 flex items-center justify-between flex-shrink-0">
             <div className="flex items-center gap-2">
