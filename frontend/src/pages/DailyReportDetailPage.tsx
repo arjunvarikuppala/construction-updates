@@ -31,7 +31,14 @@ import { formatDate } from '../utils/dates.js';
 const exportDailyReportPdf = (...args: Parameters<typeof import('../utils/exportPdf.js').exportDailyReportPdf>) =>
   import('../utils/exportPdf.js').then((m) => m.exportDailyReportPdf(...args));
 import { formatRupees, formatINR } from '../utils/currency.js';
-import { expenseCategoryLabel, labourCategoryLabel, shiftLabel, WORK_STATUS_OPTIONS } from '../utils/reportOptions.js';
+import {
+  expenseCategoryLabel,
+  labourCategoryLabel,
+  shiftLabel,
+  WORK_STATUS_OPTIONS,
+  materialCost,
+  machineCost,
+} from '../utils/reportOptions.js';
 import { useAuth } from '../context/AuthContext.js';
 import { api } from '../api/client.js';
 
@@ -117,6 +124,8 @@ export const DailyReportDetailPage: React.FC = () => {
   const expenses = report.expenses || [];
   const expenseTotal = expenses.reduce((s, e) => s + (e.amount || 0), 0);
   const labourHours = (report.labourBreakdown || []).reduce((s, l) => s + (l.count || 0) * (l.hours || 0), 0);
+  const materialTotal = report.totalMaterialCost || (report.materials || []).reduce((s, m) => s + materialCost(m), 0);
+  const machineryTotal = report.totalMachineryCost || (report.machinery || []).reduce((s, m) => s + machineCost(m), 0);
   const labourCost =
     report.totalLabourCost || (report.labourBreakdown || []).reduce((s, l) => s + (l.count || 0) * (l.wagePerDay || 0), 0);
 
@@ -382,13 +391,21 @@ export const DailyReportDetailPage: React.FC = () => {
                 <Package className="w-4 h-4 text-navy-800" />
                 <CardTitle>Materials Used</CardTitle>
               </div>
+              {materialTotal > 0 && <span className="text-xs font-bold text-emerald-800">{formatRupees(materialTotal)}</span>}
             </CardHeader>
             {report.materials && report.materials.length > 0 ? (
               <ul className="divide-y divide-slate-100 text-xs">
                 {report.materials.map((m, i) => (
                   <li key={i} className="flex items-center justify-between gap-3 px-4 py-2.5">
                     <span className="font-semibold text-navy-950 min-w-0 break-words">{m.name}</span>
-                    <span className="font-bold text-slate-700 whitespace-nowrap">{m.quantity} {m.unit}</span>
+                    <span className="text-right whitespace-nowrap">
+                      <span className="font-bold text-slate-700 block">{m.quantity} {m.unit}</span>
+                      {!!m.rate && (
+                        <span className="text-[11px] text-emerald-700 font-semibold block">
+                          {formatRupees(m.rate)}/{m.unit} · {formatRupees(materialCost(m))}
+                        </span>
+                      )}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -402,13 +419,21 @@ export const DailyReportDetailPage: React.FC = () => {
                 <Wrench className="w-4 h-4 text-navy-800" />
                 <CardTitle>Machinery &amp; Equipment</CardTitle>
               </div>
+              {machineryTotal > 0 && <span className="text-xs font-bold text-emerald-800">{formatRupees(machineryTotal)}</span>}
             </CardHeader>
             {report.machinery && report.machinery.length > 0 ? (
               <ul className="divide-y divide-slate-100 text-xs">
                 {report.machinery.map((m, i) => (
                   <li key={i} className="flex items-center justify-between gap-3 px-4 py-2.5">
                     <span className="font-semibold text-navy-950 min-w-0 break-words">{m.quantity}× {m.name}</span>
-                    <span className="font-bold text-slate-700 whitespace-nowrap">{m.hoursUsed ? `${m.hoursUsed} hrs` : '—'}</span>
+                    <span className="text-right whitespace-nowrap">
+                      <span className="font-bold text-slate-700 block">{m.hoursUsed ? `${m.hoursUsed} hrs` : '—'}</span>
+                      {!!m.rate && (
+                        <span className="text-[11px] text-emerald-700 font-semibold block">
+                          {formatRupees(m.rate)}/{m.rateBasis === 'HOUR' ? 'hr' : 'day'} · {formatRupees(machineCost(m))}
+                        </span>
+                      )}
+                    </span>
                   </li>
                 ))}
               </ul>

@@ -50,6 +50,8 @@ export interface SanitizedReportFields {
   labourBreakdown?: any[];
   totalLabourCount?: number;
   totalLabourCost?: number;
+  totalMaterialCost?: number;
+  totalMachineryCost?: number;
   totalWorkBudget?: number;
   equipmentDetails?: string;
   issuesAndDelays?: string;
@@ -67,6 +69,8 @@ export interface SanitizedReportFields {
  * Validate and normalise a report payload.
  * With `partial`, only keys present in the body are returned (for updates).
  */
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
 export function sanitizeReportInput(
   body: any,
   opts: { partial: boolean }
@@ -161,14 +165,18 @@ export function sanitizeReportInput(
       .map((m: any) => {
         const name = cleanText(m?.name, 150);
         if (!name) return null;
+        const rate = nonNegativeNumber(m?.rate);
         return {
           name,
           quantity: nonNegativeNumber(m?.quantity),
           unit: cleanText(m?.unit, 30) || 'units',
+          rate: rate > 0 ? rate : undefined,
           remarks: cleanText(m?.remarks, 300),
         };
       })
       .filter(Boolean) as any[];
+    // Material cost = quantity × rate, always computed on the server
+    data.totalMaterialCost = round2(data.materials.reduce((s, m) => s + m.quantity * (m.rate || 0), 0));
   }
 
   if (has('machinery') || !opts.partial) {
@@ -177,14 +185,24 @@ export function sanitizeReportInput(
         const name = cleanText(m?.name, 150);
         if (!name) return null;
         const hours = m?.hoursUsed;
+        const rate = nonNegativeNumber(m?.rate);
         return {
           name,
           quantity: Math.max(1, Math.floor(nonNegativeNumber(m?.quantity, 1, 1000))),
           hoursUsed: hours === undefined || hours === null || hours === '' ? undefined : Math.min(24, nonNegativeNumber(hours)),
+          rate: rate > 0 ? rate : undefined,
+          rateBasis: rate > 0 ? (m?.rateBasis === 'HOUR' ? 'HOUR' : 'DAY') : undefined,
           remarks: cleanText(m?.remarks, 300),
         };
       })
       .filter(Boolean) as any[];
+    // Machinery cost: per day = machines × rate; per hour = machines × hours × rate
+    data.totalMachineryCost = round2(
+      data.machinery.reduce(
+        (s, m) => s + (m.rate ? m.quantity * m.rate * (m.rateBasis === 'HOUR' ? m.hoursUsed || 0 : 1) : 0),
+        0
+      )
+    );
   }
 
   if (has('photos') || !opts.partial) {

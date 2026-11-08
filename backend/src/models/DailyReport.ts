@@ -30,6 +30,8 @@ export interface IDailyReport extends Document {
   labourBreakdown: LabourCountItem[];
   totalLabourCount: number;
   totalLabourCost?: number;
+  totalMaterialCost?: number;
+  totalMachineryCost?: number;
   totalWorkBudget?: number;
   equipmentDetails?: string;
   issuesAndDelays?: string;
@@ -124,6 +126,7 @@ const DailyReportSchema = new Schema<IDailyReport>(
           name: { type: String, required: true, trim: true, maxlength: 150 },
           quantity: { type: Number, required: true, min: 0 },
           unit: { type: String, required: true, trim: true, maxlength: 30 },
+          rate: { type: Number, min: 0 }, // ₹ per unit
           remarks: { type: String, trim: true, maxlength: 300 },
         },
       ],
@@ -135,6 +138,8 @@ const DailyReportSchema = new Schema<IDailyReport>(
           name: { type: String, required: true, trim: true, maxlength: 150 },
           quantity: { type: Number, required: true, min: 0 },
           hoursUsed: { type: Number, min: 0, max: 24 },
+          rate: { type: Number, min: 0 }, // ₹ per machine per day / per hour
+          rateBasis: { type: String, enum: ['DAY', 'HOUR'] },
           remarks: { type: String, trim: true, maxlength: 300 },
         },
       ],
@@ -162,6 +167,8 @@ const DailyReportSchema = new Schema<IDailyReport>(
       default: 0,
       min: 0,
     },
+    totalMaterialCost: { type: Number, default: 0, min: 0 },
+    totalMachineryCost: { type: Number, default: 0, min: 0 },
     equipmentDetails: {
       type: String,
       trim: true,

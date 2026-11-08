@@ -3,6 +3,7 @@ import autoTable from 'jspdf-autotable';
 import { Expense, Project, DailyReport, WorkItem } from '../types/index.js';
 import { formatINR, formatRupees, paiseToRupees } from './currency.js';
 import { formatDate } from './dates.js';
+import { materialCost, machineCost } from './reportOptions.js';
 
 export function exportProjectExpensesPdf(project: Project, expenses: Expense[]) {
   const doc = new jsPDF();
@@ -248,17 +249,35 @@ export function exportDailyReportPdf(report: DailyReport) {
       : undefined
   );
 
+  const materialTotal = (report.materials || []).reduce((s, m) => s + materialCost(m), 0);
   table(
-    ['Material', 'Quantity', 'Unit'],
-    (report.materials || []).map((m) => [m.name, String(m.quantity), m.unit]),
-    [20, 43, 74]
+    ['Material', 'Quantity', 'Unit', 'Rate (INR)', 'Cost (INR)'],
+    (report.materials || []).map((m) => [
+      m.name,
+      String(m.quantity),
+      m.unit,
+      m.rate ? `${formatRupees(m.rate)} / ${m.unit}` : '—',
+      m.rate ? formatRupees(materialCost(m)) : '—',
+    ]),
+    [20, 43, 74],
+    [255, 255, 255],
+    materialTotal > 0 ? [['Total Material Cost', '', '', '', formatRupees(materialTotal)]] : undefined
   );
 
   if (report.machinery && report.machinery.length > 0) {
+    const machineryTotal = report.machinery.reduce((s, m) => s + machineCost(m), 0);
     table(
-      ['Machinery / Equipment', 'Nos', 'Hours used'],
-      report.machinery.map((m) => [m.name, String(m.quantity), m.hoursUsed !== undefined ? String(m.hoursUsed) : '—']),
-      [20, 43, 74]
+      ['Machinery / Equipment', 'Nos', 'Hours used', 'Rate (INR)', 'Cost (INR)'],
+      report.machinery.map((m) => [
+        m.name,
+        String(m.quantity),
+        m.hoursUsed !== undefined ? String(m.hoursUsed) : '—',
+        m.rate ? `${formatRupees(m.rate)} / ${m.rateBasis === 'HOUR' ? 'hour' : 'day'}` : '—',
+        m.rate ? formatRupees(machineCost(m)) : '—',
+      ]),
+      [20, 43, 74],
+      [255, 255, 255],
+      machineryTotal > 0 ? [['Total Machinery Cost', '', '', '', formatRupees(machineryTotal)]] : undefined
     );
   } else {
     textBlock('Machinery & Equipment:', report.equipmentDetails);

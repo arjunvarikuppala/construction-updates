@@ -303,4 +303,39 @@ describe('daily report workflow', () => {
     assert.equal(r.body.report.totalLabourCount, 9);
     assert.equal(r.body.report.totalLabourCost, 4900);
   });
+
+  test('material and machinery costs are computed on the server (per unit, per day, per hour)', async () => {
+    const r = await api('POST', '/api/v1/daily-reports', {
+      token: ic.token,
+      body: {
+        project: project._id,
+        titleOfWork: 'Foundation PCC',
+        workDate: new Date(Date.now() - 3 * 86400000).toISOString(),
+        workSummary: 'PCC for footings',
+        status: 'DRAFT',
+        totalMaterialCost: 1, // tampered totals must be ignored
+        totalMachineryCost: 1,
+        materials: [
+          { name: 'Cement OPC 53', quantity: 120, unit: 'bags', rate: 380 },
+          { name: 'Sand', quantity: 2, unit: 'Tons', rate: 1450.5 },
+          { name: 'Binding wire', quantity: 5, unit: 'kg' }, // no rate
+        ],
+        machinery: [
+          { name: 'JCB', quantity: 1, hoursUsed: 6, rate: 1200, rateBasis: 'HOUR' },
+          { name: 'Transit mixer', quantity: 2, hoursUsed: 8, rate: 6000, rateBasis: 'DAY' },
+          { name: 'Vibrator', quantity: 1, rate: 500, rateBasis: 'bogus' }, // unknown basis → per day
+          { name: 'Water pump', quantity: 1, hoursUsed: 4 }, // no rate
+        ],
+      },
+    });
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    const rep = r.body.report;
+    assert.equal(rep.materials[0].rate, 380);
+    assert.equal(rep.materials[2].rate, undefined);
+    assert.equal(rep.totalMaterialCost, 45600 + 2901);
+    assert.equal(rep.machinery[0].rateBasis, 'HOUR');
+    assert.equal(rep.machinery[2].rateBasis, 'DAY');
+    assert.equal(rep.machinery[3].rateBasis, undefined);
+    assert.equal(rep.totalMachineryCost, 7200 + 12000 + 500);
+  });
 });

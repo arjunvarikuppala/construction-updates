@@ -76,6 +76,8 @@ export interface MaterialItem {
   name: string;
   quantity: number;
   unit: string;
+  /** ₹ per unit */
+  rate?: number;
   remarks?: string;
 }
 
@@ -83,6 +85,9 @@ export interface MachineryItem {
   name: string;
   quantity: number;
   hoursUsed?: number;
+  /** ₹ per machine, per day or per hour (see rateBasis) */
+  rate?: number;
+  rateBasis?: 'DAY' | 'HOUR';
   remarks?: string;
 }
 

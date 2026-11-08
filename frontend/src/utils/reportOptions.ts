@@ -85,3 +85,10 @@ export const MACHINERY_SUGGESTIONS = [
   'DG Set',
   'Bar Bending Machine',
 ];
+
+/** ₹ cost of a material row: quantity × rate per unit. */
+export const materialCost = (m: { quantity?: number; rate?: number }) => (Number(m.quantity) || 0) * (Number(m.rate) || 0);
+
+/** ₹ cost of a machinery row: per day = machines × rate; per hour = machines × hours × rate. */
+export const machineCost = (m: { quantity?: number; rate?: number; rateBasis?: 'DAY' | 'HOUR'; hoursUsed?: number }) =>
+  (Number(m.quantity) || 0) * (Number(m.rate) || 0) * (m.rateBasis === 'HOUR' ? Number(m.hoursUsed) || 0 : 1);

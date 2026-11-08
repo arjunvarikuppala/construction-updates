@@ -198,6 +198,7 @@ export interface MaterialItem {
   name: string;
   quantity: number;
   unit: string;
+  rate?: number; // ₹ per unit
   remarks?: string;
 }
 
@@ -205,6 +206,8 @@ export interface MachineryItem {
   name: string;
   quantity: number;
   hoursUsed?: number;
+  rate?: number; // ₹ per machine, per day or per hour
+  rateBasis?: 'DAY' | 'HOUR';
   remarks?: string;
 }
 
@@ -283,6 +286,8 @@ export interface DailyReport {
   labourBreakdown: LabourCountItem[];
   totalLabourCount: number;
   totalLabourCost?: number;
+  totalMaterialCost?: number;
+  totalMachineryCost?: number;
   totalWorkBudget?: number;
   equipmentDetails?: string;
   issuesAndDelays?: string;
