@@ -27,7 +27,7 @@ router.post('/upload-receipt', upload.single('receipt'), async (req: Authenticat
     }
 
     const result = await storageService.uploadFile(file.path, file.filename, file.mimetype);
-    await recordUpload({ url: result.url, uploadedBy: req.user!.userId, mimetype: result.mimetype, size: result.size });
+    await recordUpload({ url: result.url, uploadedBy: req.user!.userId, mimetype: result.mimetype, size: result.size, storage: result });
     res.json({
       success: true,
       receiptUrl: result.url,

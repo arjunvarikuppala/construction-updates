@@ -8,7 +8,7 @@ import { Project } from '../models/Project.js';
 import { ProjectAssignment } from '../models/ProjectAssignment.js';
 import { User } from '../models/User.js';
 import { verifyUserProjectAccess } from '../middleware/auth.js';
-import { recordExternalUpload, canUserAccessFile, resolveShareableAttachment, ShareableAttachment } from '../services/fileAccessService.js';
+import { recordExternalUpload, streamCloudFile, canUserAccessFile, resolveShareableAttachment, ShareableAttachment } from '../services/fileAccessService.js';
 import { Expense } from '../models/Expense.js';
 import { PaymentRequest } from '../models/PaymentRequest.js';
 import { DailyReport } from '../models/DailyReport.js';
@@ -603,7 +603,7 @@ export async function uploadProjectMessageMedia(req: AuthenticatedRequest, res: 
       if (fileUrl.startsWith('/uploads/')) {
         fileUrl = `/api/v1/projects/${resolvedProjectId}/messages/media/${file.filename}`;
       }
-      await recordExternalUpload({ url: fileUrl, uploadedBy: req.user!.userId, mimetype: detected.detectedMime, size: uploadResult.size });
+      await recordExternalUpload({ url: fileUrl, uploadedBy: req.user!.userId, mimetype: detected.detectedMime, size: uploadResult.size, storage: uploadResult });
 
       processedAttachments.push({
         type: detected.mediaType,
@@ -646,6 +646,7 @@ export async function serveProjectMessageMedia(req: AuthenticatedRequest, res: R
     const filePath = path.join(uploadsDir, safeFilename);
 
     if (!fs.existsSync(filePath)) {
+      if (await streamCloudFile(safeFilename, req, res, { download: req.query.download === 'true' })) return;
       res.status(404).json({ success: false, message: 'Media file not found' });
       return;
     }

@@ -11,6 +11,10 @@ export interface IUploadedFile extends Document {
   uploadedBy: mongoose.Types.ObjectId;
   mimetype?: string;
   size?: number;
+  provider?: 'CLOUDINARY' | 'R2' | 'LOCAL';
+  storageKey?: string;
+  resourceType?: string;
+  format?: string;
   createdAt: Date;
 }
 
@@ -21,6 +25,10 @@ const UploadedFileSchema = new Schema<IUploadedFile>(
     uploadedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     mimetype: { type: String },
     size: { type: Number },
+    provider: { type: String },
+    storageKey: { type: String },
+    resourceType: { type: String },
+    format: { type: String },
   },
   { timestamps: true }
 );

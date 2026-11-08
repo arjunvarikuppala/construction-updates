@@ -8,6 +8,9 @@ export interface StorageUploadResult {
   key: string;
   size: number;
   mimetype: string;
+  provider?: 'CLOUDINARY' | 'R2' | 'LOCAL';
+  resourceType?: string;
+  format?: string;
 }
 
 export class StorageService {
@@ -94,11 +97,14 @@ export class StorageService {
     // Option A: Cloudinary Upload (Photos, Videos, PDFs)
     if (this.isCloudinaryConfigured) {
       try {
+        // Private assets: never reachable by public URL. The API streams them to
+        // authorized users via short-lived signed download URLs (see streamCloudFile).
         const uploadRes = await cloudinary.uploader.upload(localFilePath, {
           folder: 'sitetrack',
           resource_type: 'auto',
-          use_filename: true,
-          unique_filename: true,
+          type: 'private',
+          public_id: filename.replace(/\.[^.]+$/, ''),
+          overwrite: false,
         });
 
         // Clean up temporary local file after upload
@@ -108,11 +114,15 @@ export class StorageService {
           // ignore
         }
 
+        // Keep the app-relative URL so every existing access check and signed link works unchanged
         return {
-          url: uploadRes.secure_url,
+          url: `/uploads/${filename}`,
           key: uploadRes.public_id,
           size: uploadRes.bytes || stats.size,
-          mimetype: uploadRes.format ? `${uploadRes.resource_type}/${uploadRes.format}` : mimetype,
+          mimetype,
+          provider: 'CLOUDINARY',
+          resourceType: uploadRes.resource_type,
+          format: uploadRes.format,
         };
       } catch (err: any) {
         console.error('Cloudinary upload error:', err);
@@ -158,7 +168,23 @@ export class StorageService {
       key: filename,
       size: stats.size,
       mimetype,
+      provider: 'LOCAL',
     };
+  }
+
+  /** Fetch a private Cloudinary asset through a 2-minute signed API download URL. */
+  public async fetchPrivateCloudinary(
+    key: string,
+    resourceType: string,
+    format: string,
+    range?: string
+  ): Promise<globalThis.Response> {
+    const url = cloudinary.utils.private_download_url(key, format, {
+      resource_type: resourceType as any,
+      type: 'private',
+      expires_at: Math.floor(Date.now() / 1000) + 120,
+    });
+    return fetch(url, { headers: range ? { Range: range } : {} });
   }
 
   /**

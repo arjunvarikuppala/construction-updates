@@ -19,6 +19,8 @@ import { PaymentRequest } from '../models/PaymentRequest.js';
 import { ProjectMessage } from '../models/ProjectMessage.js';
 import { getAccessibleProjectIds } from './tenantService.js';
 import { escapeRegex } from '../utils/validation.js';
+import { storageService, StorageUploadResult } from './storageService.js';
+import type { Request, Response } from 'express';
 
 export const SIGNED_URL_TTL_SECONDS = 60 * 60; // 1 hour
 
@@ -95,6 +97,7 @@ export async function recordUpload(params: {
   uploadedBy: string;
   mimetype?: string;
   size?: number;
+  storage?: StorageUploadResult;
 }): Promise<void> {
   const filename = extractLocalFilename(params.url);
   if (!filename) return; // external storage (Cloudinary/R2) — nothing to protect locally
@@ -105,6 +108,10 @@ export async function recordUpload(params: {
       uploadedBy: params.uploadedBy,
       mimetype: params.mimetype,
       size: params.size,
+      provider: params.storage?.provider,
+      storageKey: params.storage?.provider === 'CLOUDINARY' ? params.storage.key : undefined,
+      resourceType: params.storage?.resourceType,
+      format: params.storage?.format,
     });
   } catch (err) {
     console.error('Failed to record upload ownership:', (err as Error).message);
@@ -177,15 +184,60 @@ export async function resolveShareableAttachment(
   if (!report && !expense && !payment && !message) return null;
 
   const mimeType = inferMime(url);
-  return { url, name, type: mediaTypeFor(mimeType), mimeType, size: typeof raw?.size === 'number' ? raw.size : undefined };
+  return { url, name, type: mediaTypeFor(mimeType), mimeType, size: typeof raw?.size === 'number' && raw.size > 0 ? raw.size : undefined };
 }
 
 /** Record an externally stored (Cloudinary/R2) upload so it can later be validated as the caller's own. */
-export async function recordExternalUpload(params: { url: string; uploadedBy: string; mimetype?: string; size?: number }) {
+export async function recordExternalUpload(params: {
+  url: string;
+  uploadedBy: string;
+  mimetype?: string;
+  size?: number;
+  storage?: StorageUploadResult;
+}) {
   if (extractLocalFilename(params.url)) return recordUpload(params);
   try {
-    await UploadedFile.create({ filename: `ext:${params.url.slice(-120)}`, ...params });
+    const { storage: _storage, ...rest } = params;
+    await UploadedFile.create({ filename: `ext:${params.url.slice(-120)}`, ...rest });
   } catch (err) {
     console.error('Failed to record external upload:', (err as Error).message);
   }
+}
+
+/**
+ * Stream a file kept in private cloud storage. Call only AFTER authorization.
+ * Returns false when the file is not in cloud storage (caller then 404s).
+ */
+export async function streamCloudFile(
+  filename: string,
+  req: Request,
+  res: Response,
+  opts: { download?: boolean } = {}
+): Promise<boolean> {
+  const record = await UploadedFile.findOne({ filename, provider: 'CLOUDINARY', storageKey: { $exists: true } });
+  if (!record?.storageKey || !record.format) return false;
+
+  const upstream = await storageService.fetchPrivateCloudinary(
+    record.storageKey,
+    record.resourceType || 'image',
+    record.format,
+    typeof req.headers.range === 'string' ? req.headers.range : undefined
+  );
+  if (!upstream.ok || !upstream.body) {
+    console.error(`Cloud file fetch failed for ${filename}: ${upstream.status}`);
+    return false;
+  }
+
+  res.status(upstream.status);
+  res.setHeader('Content-Type', record.mimetype || upstream.headers.get('content-type') || 'application/octet-stream');
+  for (const h of ['content-length', 'content-range', 'accept-ranges']) {
+    const v = upstream.headers.get(h);
+    if (v) res.setHeader(h, v);
+  }
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Cache-Control', 'private, max-age=3000');
+  res.setHeader('Content-Disposition', `${opts.download ? 'attachment' : 'inline'}; filename="${filename}"`);
+  const { Readable } = await import('stream');
+  Readable.fromWeb(upstream.body as any).pipe(res);
+  return true;
 }

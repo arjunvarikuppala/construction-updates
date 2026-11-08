@@ -8,6 +8,7 @@ import {
   extractLocalFilename,
   signFilename,
   verifyFileSignature,
+  streamCloudFile,
   SIGNED_URL_TTL_SECONDS,
 } from '../services/fileAccessService.js';
 
@@ -54,7 +55,7 @@ fileApiRouter.post('/sign', async (req: AuthenticatedRequest, res: Response) => 
  * GET /uploads/:filename?exp=&sig=
  * Serves a private upload only with a valid, unexpired signature.
  */
-export function serveSignedUpload(req: Request, res: Response): void {
+export async function serveSignedUpload(req: Request, res: Response): Promise<void> {
   const filename = path.basename(String(req.params.filename || ''));
   if (!filename || filename.startsWith('.')) {
     res.status(404).json({ success: false, message: 'File not found' });
@@ -67,8 +68,18 @@ export function serveSignedUpload(req: Request, res: Response): void {
   }
 
   const filePath = path.join(uploadsDir, filename);
-  if (!filePath.startsWith(uploadsDir) || !fs.existsSync(filePath)) {
+  if (!filePath.startsWith(uploadsDir)) {
     res.status(404).json({ success: false, message: 'File not found' });
+    return;
+  }
+  if (!fs.existsSync(filePath)) {
+    // Signature already verified: stream from private cloud storage if it lives there
+    try {
+      if (await streamCloudFile(filename, req, res, { download: req.query.download === 'true' })) return;
+    } catch (err) {
+      console.error('Cloud stream failed:', (err as Error).message);
+    }
+    if (!res.headersSent) res.status(404).json({ success: false, message: 'File not found' });
     return;
   }
 
