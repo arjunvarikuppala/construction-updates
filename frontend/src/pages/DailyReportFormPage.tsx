@@ -26,7 +26,8 @@ import {
   DailyReport,
 } from '../types/index.js';
 import { api, ApiError } from '../api/client.js';
-import { SHIFT_OPTIONS } from '../utils/reportOptions.js';
+import { SHIFT_OPTIONS, materialCost, machineCost } from '../utils/reportOptions.js';
+import { ReportCostSummary, ReportCostTotals } from '../components/reports/ReportCostSummary.js';
 import { newRequestId } from '../utils/upload.js';
 import { paiseToRupees } from '../utils/currency.js';
 
@@ -347,6 +348,15 @@ export const DailyReportFormPage: React.FC = () => {
 
   const err = (k: string) => fieldErrors[k];
 
+
+  const costTotals: ReportCostTotals = {
+    work: form.workItems.reduce((sum, i) => sum + (Number(i.budget) || 0), 0),
+    labour: form.labourList.reduce((sum, l) => sum + (Number(l.count) || 0) * (Number(l.wagePerDay) || 0), 0),
+    materials: form.materials.reduce((sum, m) => sum + materialCost(m), 0),
+    machinery: form.machinery.reduce((sum, m) => sum + machineCost(m), 0),
+    expenses: form.expenses.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0),
+  };
+
   return (
     <div className="space-y-4 sm:space-y-5 max-w-3xl mx-auto pb-4 min-w-0">
       {/* Header */}
@@ -535,6 +545,9 @@ export const DailyReportFormPage: React.FC = () => {
         />
         <Textarea label="Remarks" placeholder="Anything else the MD should know" rows={2} maxLength={1000} value={form.remarks} onChange={(e) => set('remarks', e.target.value)} />
       </SectionCard>
+
+      {/* Grand total of every section */}
+      <ReportCostSummary totals={costTotals} />
 
       {/* Actions — sticky above the mobile bottom nav */}
       <div className="sticky -bottom-7 md:bottom-4 z-20">

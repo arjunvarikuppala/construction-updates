@@ -292,6 +292,26 @@ export function exportDailyReportPdf(report: DailyReport) {
     expenses.length ? [['Total', '', '', '', formatINR(expenses.reduce((s, e) => s + e.amount, 0)), '']] : undefined
   );
 
+  // Grand total of every section (expenses are stored in paise)
+  const labourTotal = (report.labourBreakdown || []).reduce((s, l) => s + (l.count || 0) * (l.wagePerDay || 0), 0);
+  const machineTotal = (report.machinery || []).reduce((s, m) => s + machineCost(m), 0);
+  const expenseRupees = expenses.reduce((s, e) => s + (e.amount || 0), 0) / 100;
+  const sections: Array<[string, number]> = [
+    ['Work items', totalBudget],
+    ['Labour (daily wages)', labourTotal],
+    ['Materials', materialTotal],
+    ['Machinery & equipment', machineTotal],
+    ['Expenses & bills', expenseRupees],
+  ];
+  const grandTotal = Math.round(sections.reduce((s, [, v]) => s + v, 0) * 100) / 100;
+  table(
+    ['Cost summary', 'Amount (INR)'],
+    sections.map(([label, v]) => [label, v > 0 ? formatRupees(v) : '—']),
+    [20, 43, 74],
+    [255, 255, 255],
+    [['GRAND TOTAL', formatRupees(grandTotal)]]
+  );
+
   textBlock('Issues & Delays:', report.issuesAndDelays);
   textBlock('Next Day Plan:', report.nextDayPlan);
   textBlock('Remarks:', report.remarks);

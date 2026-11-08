@@ -31,6 +31,7 @@ import { formatDate } from '../utils/dates.js';
 const exportDailyReportPdf = (...args: Parameters<typeof import('../utils/exportPdf.js').exportDailyReportPdf>) =>
   import('../utils/exportPdf.js').then((m) => m.exportDailyReportPdf(...args));
 import { formatRupees, formatINR } from '../utils/currency.js';
+import { ReportCostSummary } from '../components/reports/ReportCostSummary.js';
 import {
   expenseCategoryLabel,
   labourCategoryLabel,
@@ -443,6 +444,17 @@ export const DailyReportDetailPage: React.FC = () => {
           </Card>
         </div>
       )}
+
+      {/* Grand total of every section */}
+      <ReportCostSummary
+        totals={{
+          work: report.totalWorkBudget ?? report.workItems.reduce((s, i) => s + (i.budget || 0), 0),
+          labour: labourCost,
+          materials: materialTotal,
+          machinery: machineryTotal,
+          expenses: expenseTotal / 100, // stored in paise
+        }}
+      />
 
       {/* Expenses recorded in this report */}
       {expenses.length > 0 && (
