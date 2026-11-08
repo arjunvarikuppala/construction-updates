@@ -5,15 +5,21 @@ import { Project } from '../models/Project.js';
 import { Invitation } from '../models/Invitation.js';
 import { AuthenticatedRequest, isMD } from '../types/index.js';
 import { logAudit } from '../services/auditService.js';
+import { validatePasswordStrength } from '../utils/password.js';
+import { getCompanyInChargeIds, isInChargeInCompany } from '../services/tenantService.js';
+import { verifyUserProjectAccess } from '../middleware/auth.js';
+import { escapeRegex } from '../utils/validation.js';
 import { rupeesToPaise } from '../utils/currency.js';
 
 export async function listInChargeUsers(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
     const isCallerMD = isMD(req.user?.role);
-    const query: any = { role: { $in: ['SITE_INCHARGE', 'IN_CHARGE'] } };
+    // Company isolation: only In-Charges this MD created, invited or assigned
+    const companyInCharges = await getCompanyInChargeIds(req.user!.userId);
+    const query: any = { role: { $in: ['SITE_INCHARGE', 'IN_CHARGE'] }, _id: { $in: companyInCharges } };
 
     if (req.query.q) {
-      const searchStr = String(req.query.q).trim();
+      const searchStr = escapeRegex(String(req.query.q).trim());
       query.$or = [
         { name: { $regex: searchStr, $options: 'i' } },
         { email: { $regex: searchStr, $options: 'i' } },
@@ -42,8 +48,9 @@ export async function createInChargeUser(req: AuthenticatedRequest, res: Respons
       return;
     }
 
-    if (password.length < 6) {
-      res.status(400).json({ success: false, message: 'Password must be at least 6 characters long' });
+    const passwordError = validatePasswordStrength(password);
+    if (passwordError) {
+      res.status(400).json({ success: false, message: passwordError });
       return;
     }
 
@@ -68,6 +75,7 @@ export async function createInChargeUser(req: AuthenticatedRequest, res: Respons
       salary: salaryPaise,
       salaryFrequency: salaryFrequency || 'MONTHLY',
       assignedProjects: [],
+      createdByMD: req.user!.userId,
       isActive: true,
     });
 
@@ -108,7 +116,7 @@ export async function updateInChargeUser(req: AuthenticatedRequest, res: Respons
     const { name, phone, salary, salaryFrequency, isActive } = req.body;
 
     const user = await User.findById(id);
-    if (!user) {
+    if (!user || !['SITE_INCHARGE', 'IN_CHARGE'].includes(user.role) || !(await isInChargeInCompany(req.user!.userId, id))) {
       res.status(404).json({ success: false, message: 'In-charge user not found' });
       return;
     }
@@ -170,8 +178,12 @@ export async function createInvitation(req: AuthenticatedRequest, res: Response)
 
     let validProjectId: string | undefined = undefined;
     if (projectId) {
-      const proj = await Project.findById(projectId);
-      if (proj) validProjectId = proj._id.toString();
+      const access = await verifyUserProjectAccess(String(projectId), req.user!.userId, req.user!.role);
+      if (!access.allowed || !access.project) {
+        res.status(404).json({ success: false, message: 'Project not found' });
+        return;
+      }
+      validProjectId = access.project._id.toString();
     }
 
     const existingInvite = await Invitation.findOne({
@@ -182,6 +194,11 @@ export async function createInvitation(req: AuthenticatedRequest, res: Response)
 
     let token: string;
     let invitationDoc;
+
+    if (existingInvite && String(existingInvite.invitedBy) !== req.user!.userId) {
+      res.status(409).json({ success: false, message: 'This person already has a pending invitation from another organisation.' });
+      return;
+    }
 
     if (existingInvite) {
       token = existingInvite.token;

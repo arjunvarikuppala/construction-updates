@@ -5,8 +5,9 @@ import { AuthenticatedRequest, AuthUserPayload, isMD, isSiteInCharge, normalizeR
 import { Project, IProject } from '../models/Project.js';
 import { ProjectAssignment } from '../models/ProjectAssignment.js';
 import { User } from '../models/User.js';
+import { getJwtSecret } from '../config/env.js';
 
-export const getJwtSecret = () => process.env.JWT_SECRET || 'sitetrack_super_secure_jwt_secret_dev_2026';
+export { getJwtSecret };
 
 export interface ProjectAuthorizedRequest extends AuthenticatedRequest {
   projectDoc?: IProject;
@@ -16,10 +17,10 @@ export async function authenticate(req: AuthenticatedRequest, res: Response, nex
   const authHeader = req.headers.authorization;
   let token: string | undefined;
 
+  // Tokens are accepted ONLY via the Authorization header. Query-string tokens
+  // leak into logs, browser history and Referer headers, so they are rejected.
   if (authHeader && authHeader.startsWith('Bearer ')) {
     token = authHeader.split(' ')[1];
-  } else if (req.query && req.query.token) {
-    token = String(req.query.token);
   }
 
   if (!token) {

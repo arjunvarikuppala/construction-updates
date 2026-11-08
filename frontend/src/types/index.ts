@@ -170,16 +170,53 @@ export interface ProjectWeatherSummary {
   statusMessage?: string;
 }
 
+export type WorkItemStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED';
+
 export interface WorkItem {
   description: string;
   quantity: number;
   unit: string;
   budget?: number;
+  location?: string;
+  status?: WorkItemStatus;
+  progressPercent?: number;
+  remarks?: string;
 }
+
+export type LabourCategory = 'SKILLED' | 'UNSKILLED' | 'SUPERVISOR' | 'OTHER';
 
 export interface LabourCountItem {
   role: string;
   count: number;
+  category?: LabourCategory;
+  hours?: number;
+}
+
+export interface MaterialItem {
+  name: string;
+  quantity: number;
+  unit: string;
+  remarks?: string;
+}
+
+export interface MachineryItem {
+  name: string;
+  quantity: number;
+  hoursUsed?: number;
+  remarks?: string;
+}
+
+export type ReportShift = 'DAY' | 'NIGHT' | 'GENERAL' | 'DOUBLE';
+
+/** An expense row inside the daily report form (amount entered in rupees). */
+export interface ReportExpenseDraft {
+  _id?: string;
+  category: ExpenseCategory;
+  description: string;
+  amount: string;
+  vendor: string;
+  receiptUrl?: string;
+  status?: ExpenseStatus;
 }
 
 export interface SitePhoto {
@@ -252,6 +289,15 @@ export interface DailyReport {
   version?: number;
   comments?: ReportComment[];
   readReceipt?: ReadReceiptInfo;
+  shift?: ReportShift;
+  workLocation?: string;
+  remarks?: string;
+  overallProgressPercent?: number;
+  materials?: MaterialItem[];
+  machinery?: MachineryItem[];
+  submittedAt?: string;
+  /** Present on the detail endpoint: expenses recorded within this report */
+  expenses?: Expense[];
   createdAt: string;
   updatedAt: string;
 }
@@ -298,6 +344,7 @@ export interface Expense {
   previousNotes?: string;
   paymentStatus?: 'UNPAID' | 'PAYMENT_REQUESTED' | 'PAID';
   paymentRequestId?: string;
+  dailyReport?: string;
   paidAt?: string;
   createdAt: string;
   updatedAt: string;
@@ -319,6 +366,14 @@ export interface OwnerDashboardKPIs {
   submittedReportsLast7Days: number;
   expectedReportsLast7Days: number;
   missingReportsCount: number;
+  completedProjectsCount?: number;
+  onHoldProjectsCount?: number;
+  todayReportsSubmitted?: number;
+  activeProjectsMissingTodayReport?: number;
+  todayExpenditurePaise?: number;
+  todayLabourCount?: number;
+  averageReportedProgress?: number | null;
+  delayedReportsLast7Days?: number;
 }
 
 export interface CategoryBreakdownItem {
@@ -341,6 +396,8 @@ export interface ProjectExpenditureItem {
   remaining: number;
   burnRate: number;
   requiresAttention: boolean;
+  latestProgressPercent?: number | null;
+  reportedToday?: boolean;
 }
 
 export interface ExpenditureTrendItem {
@@ -367,6 +424,7 @@ export interface OwnerDashboardData {
   recentReports?: DailyReport[];
   recentExpenses?: Expense[];
   recentActivity: any[];
+  delayedWork?: Array<Pick<DailyReport, '_id' | 'titleOfWork' | 'workDate' | 'issuesAndDelays' | 'project' | 'submittedBy'>>;
 }
 
 export interface InChargeDashboardData {

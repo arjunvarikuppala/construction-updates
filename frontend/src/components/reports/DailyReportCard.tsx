@@ -11,6 +11,7 @@ import { useUnreadReports } from '../../hooks/useUnreadReports.js';
 import { formatDate } from '../../utils/dates.js';
 import { exportDailyReportPdf } from '../../utils/exportPdf.js';
 
+import { SecureImage, SecureLink } from '../common/SecureMedia.js';
 interface DailyReportCardProps {
   report: DailyReport;
 }
@@ -110,19 +111,16 @@ export const DailyReportCard: React.FC<DailyReportCardProps> = ({ report }) => {
           </div>
           <div className="flex items-center gap-2 overflow-x-auto pb-1">
             {report.photos.map((p, idx) => (
-              <a
-                key={idx}
-                href={p.url}
-                target="_blank"
-                rel="noreferrer"
+              <SecureLink
+                key={idx} href={p.url}
                 className="relative w-16 h-16 rounded-xl overflow-hidden flex-shrink-0 border border-slate-200 group"
               >
-                <img
+                <SecureImage
                   src={p.url}
                   alt={p.caption || 'Site photo'}
                   className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-200"
                 />
-              </a>
+              </SecureLink>
             ))}
           </div>
         </div>

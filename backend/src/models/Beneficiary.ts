@@ -27,6 +27,8 @@ export interface IBeneficiary extends Document {
   };
   isActive: boolean;
   createdBy: mongoose.Types.ObjectId;
+  /** Company scope: the MD that owns this payee record. Optional for legacy rows. */
+  company?: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -126,6 +128,11 @@ const BeneficiarySchema = new Schema<IBeneficiary>(
       type: Schema.Types.ObjectId,
       ref: 'User',
       required: true,
+    },
+    company: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      index: true,
     },
   },
   {

@@ -21,13 +21,17 @@ import auditRoutes from './routes/auditRoutes.js';
 import paymentRoutes from './routes/paymentRoutes.js';
 import communicationRoutes from './routes/communicationRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
+import { fileApiRouter, serveSignedUpload } from './routes/fileRoutes.js';
 import { initSocketService } from './services/socketService.js';
 import { seedInitialData } from './scripts/seed.js';
+import { sanitizeErrorResponses, globalErrorHandler } from './middleware/errorHandling.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+// Render / Vercel sit behind one proxy hop; needed for correct client IPs in rate limiting
+app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS ?? 1));
 const httpServer = http.createServer(app);
 const PORT = process.env.PORT || 5000;
 
@@ -97,21 +101,26 @@ const apiLimiter = rateLimit({
 
 app.use('/api', apiLimiter);
 
+// Never leak internal error details to clients
+app.use(sanitizeErrorResponses);
+
 // Logger & Parsers (Capture rawBody for cryptographic webhook signature verification)
-app.use(morgan('dev'));
+// Morgan's 'dev' format logs only method/url/status/time — no headers or bodies.
+if (process.env.NODE_ENV !== 'test') app.use(morgan('dev'));
 app.use(
   express.json({
-    limit: '20mb',
+    limit: '5mb',
     verify: (req: any, _res, buf) => {
       req.rawBody = buf;
     },
   })
 );
-app.use(express.urlencoded({ extended: true, limit: '20mb' }));
+app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 
-// Static uploads serving
+// Private uploads: only served with a short-lived signed URL issued by
+// POST /api/v1/files/sign after a project-level authorization check.
 const uploadsPath = path.resolve(process.cwd(), 'uploads');
-app.use('/uploads', express.static(uploadsPath));
+app.get('/uploads/:filename', serveSignedUpload);
 
 // Health check
 app.get('/api/health', (_req, res) => {
@@ -137,19 +146,18 @@ app.use('/api/v1/audit-logs', auditRoutes);
 app.use('/api/v1/payments', paymentRoutes);
 app.use('/api/v1/projects/:projectId/messages', communicationRoutes);
 app.use('/api/v1/notifications', notificationRoutes);
+app.use('/api/v1/files', fileApiRouter);
 
-// Global Error Handler
-app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error('Unhandled Server Error:', err);
-  res.status(err.status || 500).json({
-    success: false,
-    message: err.message || 'An internal server error occurred',
-    error: process.env.NODE_ENV === 'production' ? undefined : err.stack,
-  });
+// Unknown API routes
+app.use('/api', (_req, res) => {
+  res.status(404).json({ success: false, message: 'API endpoint not found' });
 });
 
+// Global Error Handler (safe client messages, full detail in server logs)
+app.use(globalErrorHandler);
+
 // Bootstrap server
-async function startServer() {
+export async function startServer() {
   await connectDB();
 
   // Demo seeding is strictly disabled in production and only runs if explicitly flagged in development
@@ -169,9 +177,12 @@ async function startServer() {
   });
 }
 
-startServer().catch((err) => {
-  console.error('Fatal startup error:', err);
-  process.exit(1);
-});
+// Tests import `app` directly and manage their own database connection.
+if (process.env.SITETRACK_NO_LISTEN !== 'true') {
+  startServer().catch((err) => {
+    console.error('Fatal startup error:', err);
+    process.exit(1);
+  });
+}
 
 export default app;

@@ -1,155 +1,212 @@
 import React from 'react';
-import { Plus, Trash2 } from 'lucide-react';
-import { WorkItem } from '../../types/index.js';
+import { Plus, Trash2, Copy } from 'lucide-react';
+import { WorkItem, WorkItemStatus } from '../../types/index.js';
 import { Button } from '../common/Button.js';
 import { Input, Select } from '../common/Input.js';
 import { formatRupees } from '../../utils/currency.js';
+import { UNIT_OPTIONS, WORK_STATUS_OPTIONS } from '../../utils/reportOptions.js';
 
 interface WorkItemsInputProps {
   items: WorkItem[];
   onChange: (items: WorkItem[]) => void;
+  defaultLocation?: string;
 }
 
-const COMMON_UNITS = [
-  'sq.m',
-  'sq.ft',
-  'cu.m',
-  'Tons',
-  'meters',
-  'bags',
-  'units',
-  'trips',
-  'hours',
-];
+const statusTone: Record<string, string> = {
+  emerald: 'bg-emerald-600 text-white border-emerald-600',
+  amber: 'bg-amber-500 text-navy-950 border-amber-500',
+  slate: 'bg-slate-600 text-white border-slate-600',
+};
 
-export const WorkItemsInput: React.FC<WorkItemsInputProps> = ({ items, onChange }) => {
-  const addItem = () => {
-    onChange([...items, { description: '', quantity: 0, unit: 'sq.m', budget: 0 }]);
+export const emptyWorkItem = (location = ''): WorkItem => ({
+  description: '',
+  quantity: 0,
+  unit: 'sq.m',
+  budget: 0,
+  location,
+  status: 'COMPLETED',
+});
+
+/** Multiple measured work items per report (no one-item-per-day restriction). */
+export const WorkItemsInput: React.FC<WorkItemsInputProps> = ({ items, onChange, defaultLocation = '' }) => {
+  const addItem = () => onChange([...items, emptyWorkItem(defaultLocation)]);
+  const removeItem = (index: number) => onChange(items.filter((_, i) => i !== index));
+  const duplicateItem = (index: number) => {
+    const copy = { ...items[index], quantity: 0 };
+    onChange([...items.slice(0, index + 1), copy, ...items.slice(index + 1)]);
   };
-
-  const removeItem = (index: number) => {
-    onChange(items.filter((_, i) => i !== index));
-  };
-
-  const updateItem = (index: number, field: keyof WorkItem, value: any) => {
-    const updated = [...items];
-    updated[index] = { ...updated[index], [field]: value };
-    onChange(updated);
+  const updateItem = (index: number, patch: Partial<WorkItem>) => {
+    onChange(items.map((it, i) => (i === index ? { ...it, ...patch } : it)));
   };
 
   const totalWorkBudget = items.reduce((sum, item) => sum + (Number(item.budget) || 0), 0);
+  const filled = items.filter((i) => i.description.trim()).length;
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-        <div>
-          <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
-            Work Completed & Quantities
-          </label>
-          <p className="text-[11px] text-slate-500">Record specific measured tasks executed on site today with allocated work budgets.</p>
+      <div className="flex flex-wrap items-start justify-between gap-2.5">
+        <div className="min-w-0">
+          <h3 className="text-base font-semibold text-navy-950">Work items &amp; quantities</h3>
+          <p className="text-xs text-slate-500">Add every task done today with its measured quantity. {filled > 0 && <span className="font-semibold text-slate-700">{filled} item{filled === 1 ? '' : 's'}</span>}</p>
         </div>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={addItem}
-          leftIcon={<Plus className="w-3.5 h-3.5" />}
-        >
-          Add Work Item
+        <Button type="button" size="sm" variant="outline" onClick={addItem} leftIcon={<Plus className="w-4 h-4" />}>
+          Add item
         </Button>
       </div>
 
       {items.length === 0 ? (
-        <div className="p-4 bg-slate-50 border border-dashed border-slate-300 rounded-xl text-center text-xs text-slate-500">
-          No work items added yet. Click &quot;Add Work Item&quot; to log concrete poured, rebar tied, brickwork, etc.
-        </div>
+        <button
+          type="button"
+          onClick={addItem}
+          className="w-full p-5 bg-slate-50 border-2 border-dashed border-slate-300 rounded-xl text-center text-sm text-slate-500 hover:border-amber-400 hover:text-slate-700"
+        >
+          + Add the first work item (e.g. brickwork, slab casting, plastering)
+        </button>
       ) : (
-        <div className="space-y-2.5">
+        <div className="space-y-3">
           {items.map((item, index) => (
-            <div
-              key={index}
-              className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2.5 sm:space-y-0 sm:flex sm:items-center sm:gap-2"
-            >
-              {/* Row 1 on mobile: Delete button + Task Description */}
-              <div className="flex items-center gap-2 flex-1 sm:contents">
-                {/* 1. Delete button on the far left */}
+            <fieldset key={index} className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2.5 min-w-0">
+              <legend className="sr-only">Work item {index + 1}</legend>
+              <div className="flex items-start gap-2">
+                <span className="mt-2.5 w-6 h-6 shrink-0 rounded-full bg-navy-900 text-white text-[11px] font-bold flex items-center justify-center">
+                  {index + 1}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <Input
+                    aria-label={`Work item ${index + 1} description`}
+                    placeholder="What was done? e.g. 230mm brickwork"
+                    value={item.description}
+                    maxLength={300}
+                    onChange={(e) => updateItem(index, { description: e.target.value })}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => duplicateItem(index)}
+                  title="Duplicate item"
+                  aria-label={`Duplicate work item ${index + 1}`}
+                  className="min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-400 hover:text-navy-800 rounded-lg hover:bg-slate-200 shrink-0"
+                >
+                  <Copy className="w-4 h-4" />
+                </button>
                 <button
                   type="button"
                   onClick={() => removeItem(index)}
                   title="Delete work item"
-                  aria-label="Delete work item"
-                  className="p-2 min-w-[40px] min-h-[40px] flex items-center justify-center text-slate-400 hover:text-rose-600 rounded-lg hover:bg-slate-200 transition-colors shrink-0 sm:order-1"
+                  aria-label={`Delete work item ${index + 1}`}
+                  className="min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-400 hover:text-rose-600 rounded-lg hover:bg-slate-200 shrink-0"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
+              </div>
 
-                {/* 2. Task Description */}
-                <div className="flex-1 sm:order-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  aria-label="Quantity"
+                  placeholder="Quantity"
+                  min="0"
+                  step="any"
+                  value={item.quantity === 0 && !item.description ? '' : item.quantity ?? ''}
+                  onChange={(e) => updateItem(index, { quantity: Math.max(0, parseFloat(e.target.value) || 0) })}
+                />
+                <Select
+                  aria-label="Unit"
+                  value={item.unit}
+                  onChange={(e) => updateItem(index, { unit: e.target.value })}
+                  options={(UNIT_OPTIONS.includes(item.unit) ? UNIT_OPTIONS : [item.unit, ...UNIT_OPTIONS]).map((u) => ({ value: u, label: u }))}
+                />
+                <div className="col-span-2">
                   <Input
-                    placeholder="Task Description (e.g. Slab Rebar Tied)"
-                    value={item.description}
-                    onChange={(e) => updateItem(index, 'description', e.target.value)}
-                    required
+                    aria-label="Location (floor / block / section)"
+                    placeholder="Location: e.g. Block B, 3rd floor"
+                    value={item.location || ''}
+                    maxLength={150}
+                    onChange={(e) => updateItem(index, { location: e.target.value })}
                   />
                 </div>
               </div>
 
-              {/* Row 2 on mobile: Quantity, Unit, and Budget */}
-              <div className="grid grid-cols-2 gap-2 sm:contents">
-                {/* 3. Quantity */}
-                <div className="w-full sm:w-28 sm:order-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mr-1">Status</span>
+                {WORK_STATUS_OPTIONS.map((opt) => {
+                  const active = (item.status || 'COMPLETED') === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() =>
+                        updateItem(index, {
+                          status: opt.value as WorkItemStatus,
+                          progressPercent: opt.value === 'COMPLETED' ? 100 : opt.value === 'NOT_STARTED' ? 0 : item.progressPercent,
+                        })
+                      }
+                      className={`min-h-[36px] px-3 rounded-full border text-xs font-semibold transition ${
+                        active ? statusTone[opt.tone] : 'bg-white text-slate-600 border-slate-300 hover:border-slate-400'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+                {item.status === 'IN_PROGRESS' && (
+                  <label className="flex items-center gap-2 text-xs text-slate-600 ml-auto">
+                    <span className="font-semibold">Done</span>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      max={100}
+                      aria-label="Percent complete"
+                      value={item.progressPercent ?? ''}
+                      onChange={(e) => updateItem(index, { progressPercent: Math.min(100, Math.max(0, parseInt(e.target.value) || 0)) })}
+                      className="w-16 min-h-[36px] rounded-lg border border-slate-300 px-2 text-sm"
+                    />
+                    <span>%</span>
+                  </label>
+                )}
+              </div>
+
+              <details className="group">
+                <summary className="cursor-pointer text-xs font-semibold text-navy-800 select-none py-1">Budget &amp; remarks (optional)</summary>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
                   <Input
                     type="number"
-                    placeholder="Qty"
-                    min="0"
-                    step="0.01"
-                    value={item.quantity === 0 && !item.description ? '' : item.quantity ?? ''}
-                    onChange={(e) => updateItem(index, 'quantity', parseFloat(e.target.value) || 0)}
-                    required
-                  />
-                </div>
-
-                {/* 4. Unit dropdown */}
-                <div className="w-full sm:w-32 sm:order-4">
-                  <Select
-                    value={item.unit}
-                    onChange={(e) => updateItem(index, 'unit', e.target.value)}
-                    options={COMMON_UNITS.map((u) => ({ value: u, label: u }))}
-                  />
-                </div>
-
-                {/* 5. Budget (₹) */}
-                <div className="col-span-2 sm:col-span-1 w-full sm:w-36 sm:order-5">
-                  <Input
-                    type="number"
-                    placeholder="Budget (₹)"
+                    inputMode="decimal"
+                    placeholder="Allocated budget (₹)"
                     min="0"
                     step="any"
-                    aria-label="Work item budget in Indian Rupees"
+                    aria-label="Work item budget in rupees"
                     leftIcon={<span className="text-xs font-bold text-slate-500">₹</span>}
-                    value={item.budget === undefined || item.budget === null || (item.budget === 0 && !item.description) ? '' : item.budget}
+                    value={!item.budget ? '' : item.budget}
                     onChange={(e) => {
-                      const val = e.target.value;
-                      const parsed = val === '' ? 0 : parseFloat(val);
-                      updateItem(index, 'budget', isNaN(parsed) || parsed < 0 ? 0 : parsed);
+                      const parsed = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                      updateItem(index, { budget: isNaN(parsed) || parsed < 0 ? 0 : parsed });
                     }}
                   />
+                  <Input
+                    placeholder="Remarks for this item"
+                    aria-label="Work item remarks"
+                    maxLength={500}
+                    value={item.remarks || ''}
+                    onChange={(e) => updateItem(index, { remarks: e.target.value })}
+                  />
                 </div>
-              </div>
-            </div>
+              </details>
+            </fieldset>
           ))}
 
-          {/* Section Summary: Total Work Budget */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 px-3 py-2.5 bg-slate-50/70 rounded-xl border border-slate-200 text-xs">
-            <span className="text-slate-500 text-[11px]">
-              * Work budget represents task allocation (distinct from actual expenses / bills).
-            </span>
-            <div className="flex items-center gap-2 self-end sm:self-auto font-bold">
-              <span className="text-slate-600 uppercase tracking-wider text-[11px]">Total Work Budget:</span>
-              <span className="text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 text-sm">
-                {formatRupees(totalWorkBudget)}
+          <div className="flex items-center justify-between gap-2">
+            <Button type="button" size="sm" variant="ghost" onClick={addItem} leftIcon={<Plus className="w-4 h-4" />}>
+              Add another item
+            </Button>
+            {totalWorkBudget > 0 && (
+              <span className="text-xs font-semibold text-slate-600">
+                Allocated budget: <span className="text-emerald-700">{formatRupees(totalWorkBudget)}</span>
               </span>
-            </div>
+            )}
           </div>
         </div>
       )}

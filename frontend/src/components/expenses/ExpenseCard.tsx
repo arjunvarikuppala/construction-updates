@@ -7,6 +7,7 @@ import { Button } from '../common/Button.js';
 import { formatINR } from '../../utils/currency.js';
 import { formatDate } from '../../utils/dates.js';
 
+import { SecureLink } from '../common/SecureMedia.js';
 interface ExpenseCardProps {
   expense: Expense;
   isOwner: boolean;
@@ -61,15 +62,12 @@ export const ExpenseCard: React.FC<ExpenseCardProps> = ({
       <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-100 flex items-center justify-between gap-2">
         <Badge category={expense.category} size="sm" />
         {expense.receiptUrl ? (
-          <a
-            href={expense.receiptUrl}
-            target="_blank"
-            rel="noreferrer"
+          <SecureLink href={expense.receiptUrl}
             className="text-[11px] font-semibold text-navy-800 flex items-center gap-1 hover:text-amber-600 transition-colors"
           >
             <span>Bill Receipt</span>
             <ExternalLink className="w-3 h-3 text-slate-400" />
-          </a>
+          </SecureLink>
         ) : (
           <span className="text-[11px] text-slate-400 italic">No receipt attached</span>
         )}

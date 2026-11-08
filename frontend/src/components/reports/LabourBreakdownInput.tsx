@@ -1,119 +1,160 @@
 import React from 'react';
-import { Plus, Trash2, Users } from 'lucide-react';
-import { LabourCountItem } from '../../types/index.js';
+import { Plus, Trash2, Users, Minus } from 'lucide-react';
+import { LabourCountItem, LabourCategory } from '../../types/index.js';
 import { Button } from '../common/Button.js';
-import { Input, Select } from '../common/Input.js';
+import { Select } from '../common/Input.js';
+import { LABOUR_CATEGORY_OPTIONS, LABOUR_PRESETS } from '../../utils/reportOptions.js';
 
 interface LabourBreakdownInputProps {
   labourList: LabourCountItem[];
   onChange: (list: LabourCountItem[]) => void;
 }
 
-const COMMON_ROLES = [
-  'Mason',
-  'Helper / Unskilled',
-  'Bar Bender',
-  'Carpenter / Shuttering',
-  'Plumber',
-  'Electrician',
-  'Painter',
-  'Welder',
-  'Machine Operator',
-  'Site Supervisor',
-  'Other',
-];
+const presetFor = (role: string) => LABOUR_PRESETS.find((p) => p.role === role);
 
-export const LabourBreakdownInput: React.FC<LabourBreakdownInputProps> = ({
-  labourList,
-  onChange,
-}) => {
-  const addLabour = () => {
-    onChange([...labourList, { role: 'Mason', count: 0 }]);
-  };
+/** Labour by trade with skilled / unskilled / supervisor category, headcount and hours. */
+export const LabourBreakdownInput: React.FC<LabourBreakdownInputProps> = ({ labourList, onChange }) => {
+  const update = (index: number, patch: Partial<LabourCountItem>) =>
+    onChange(labourList.map((l, i) => (i === index ? { ...l, ...patch } : l)));
+  const remove = (index: number) => onChange(labourList.filter((_, i) => i !== index));
+  const add = (role = 'Mason') =>
+    onChange([...labourList, { role, count: 1, category: presetFor(role)?.category || 'SKILLED', hours: 8 }]);
 
-  const removeLabour = (index: number) => {
-    onChange(labourList.filter((_, i) => i !== index));
-  };
-
-  const updateLabour = (index: number, field: keyof LabourCountItem, value: any) => {
-    const updated = [...labourList];
-    updated[index] = { ...updated[index], [field]: value };
-    onChange(updated);
-  };
-
-  const totalHeadcount = labourList.reduce((sum, item) => sum + (Number(item.count) || 0), 0);
+  const totals = labourList.reduce(
+    (acc, l) => {
+      const c = Number(l.count) || 0;
+      acc.all += c;
+      const cat = l.category || presetFor(l.role)?.category || 'SKILLED';
+      acc[cat] = (acc[cat] || 0) + c;
+      return acc;
+    },
+    { all: 0 } as Record<string, number>
+  );
+  const unused = LABOUR_PRESETS.filter((p) => p.role !== 'Other' && !labourList.some((l) => l.role === p.role)).slice(0, 6);
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-        <div>
-          <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
-            Site Labour & Headcount
-          </label>
-          <p className="text-[11px] text-slate-500">Breakdown of trades and helpers active on site.</p>
+      <div className="flex flex-wrap items-start justify-between gap-2.5">
+        <div className="min-w-0">
+          <h3 className="text-base font-semibold text-navy-950">Labour on site</h3>
+          <p className="text-xs text-slate-500">Headcount per trade. Hours are per worker.</p>
         </div>
-
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-500/10 border border-amber-300 rounded-lg text-xs font-bold text-amber-900">
-            <Users className="w-3.5 h-3.5 text-amber-600" />
-            <span>Total: {totalHeadcount}</span>
-          </div>
-
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={addLabour}
-            leftIcon={<Plus className="w-3.5 h-3.5" />}
-          >
-            Add Trade
-          </Button>
+        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 border border-amber-300 rounded-lg text-sm font-bold text-amber-900">
+          <Users className="w-4 h-4 text-amber-600" />
+          <span>{totals.all} workers</span>
         </div>
       </div>
 
-      {labourList.length === 0 ? (
-        <div className="p-4 bg-slate-50 border border-dashed border-slate-300 rounded-xl text-center text-xs text-slate-500">
-          No labour recorded. Add mason, carpenter, or helper headcounts.
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-          {labourList.map((item, index) => (
-            <div
-              key={index}
-              className="flex items-center gap-2 p-2.5 bg-slate-50 rounded-xl border border-slate-200"
-            >
-              <button
-                type="button"
-                onClick={() => removeLabour(index)}
-                title="Delete trade row"
-                aria-label="Delete trade row"
-                className="p-2 min-w-[40px] min-h-[40px] flex items-center justify-center text-slate-400 hover:text-rose-600 rounded-lg hover:bg-slate-200 transition-colors shrink-0"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-
-              <div className="flex-1">
-                <Select
-                  value={item.role}
-                  onChange={(e) => updateLabour(index, 'role', e.target.value)}
-                  options={COMMON_ROLES.map((r) => ({ value: r, label: r }))}
-                />
-              </div>
-
-              <div className="w-20 sm:w-24">
-                <Input
-                  type="number"
-                  min="0"
-                  placeholder="Count"
-                  value={item.count || ''}
-                  onChange={(e) => updateLabour(index, 'count', parseInt(e.target.value) || 0)}
-                  required
-                />
-              </div>
-            </div>
+      {totals.all > 0 && (
+        <div className="flex flex-wrap gap-1.5 text-[11px] font-semibold">
+          {LABOUR_CATEGORY_OPTIONS.filter((o) => totals[o.value]).map((o) => (
+            <span key={o.value} className="px-2 py-1 rounded-md bg-slate-100 text-slate-700">
+              {o.label}: {totals[o.value]}
+            </span>
           ))}
         </div>
       )}
+
+      {labourList.length > 0 && (
+        <div className="space-y-2">
+          {labourList.map((item, index) => {
+            const roleOptions = LABOUR_PRESETS.map((p) => p.role);
+            if (!roleOptions.includes(item.role)) roleOptions.unshift(item.role);
+            return (
+              <div key={index} className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 min-w-0">
+                    <Select
+                      aria-label="Trade"
+                      value={item.role}
+                      onChange={(e) =>
+                        update(index, { role: e.target.value, category: presetFor(e.target.value)?.category || item.category })
+                      }
+                      options={roleOptions.map((r) => ({ value: r, label: r }))}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => remove(index)}
+                    aria-label={`Remove ${item.role}`}
+                    className="min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-400 hover:text-rose-600 rounded-lg hover:bg-slate-200 shrink-0"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="grid grid-cols-[1fr_auto] min-[420px]:grid-cols-[1fr_auto_auto] gap-2 items-center">
+                  <Select
+                    aria-label="Labour category"
+                    value={item.category || presetFor(item.role)?.category || 'SKILLED'}
+                    onChange={(e) => update(index, { category: e.target.value as LabourCategory })}
+                    options={LABOUR_CATEGORY_OPTIONS}
+                  />
+                  {/* Stepper avoids the keyboard for the most common edit */}
+                  <div className="flex items-center rounded-xl border border-slate-300 bg-white overflow-hidden" role="group" aria-label="Headcount">
+                    <button
+                      type="button"
+                      aria-label="Decrease headcount"
+                      onClick={() => update(index, { count: Math.max(0, (Number(item.count) || 0) - 1) })}
+                      className="w-11 h-11 flex items-center justify-center text-slate-600 hover:bg-slate-100"
+                    >
+                      <Minus className="w-4 h-4" />
+                    </button>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      aria-label="Number of workers"
+                      value={item.count || ''}
+                      onChange={(e) => update(index, { count: Math.max(0, parseInt(e.target.value) || 0) })}
+                      className="w-12 h-11 text-center text-sm font-bold border-x border-slate-200 focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      aria-label="Increase headcount"
+                      onClick={() => update(index, { count: (Number(item.count) || 0) + 1 })}
+                      className="w-11 h-11 flex items-center justify-center text-slate-600 hover:bg-slate-100"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <label className="col-span-2 min-[420px]:col-span-1 flex items-center gap-1.5 text-xs text-slate-600">
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min={0}
+                      max={24}
+                      step="0.5"
+                      aria-label="Hours worked"
+                      value={item.hours ?? ''}
+                      onChange={(e) =>
+                        update(index, { hours: e.target.value === '' ? undefined : Math.min(24, Math.max(0, parseFloat(e.target.value) || 0)) })
+                      }
+                      className="w-16 h-11 rounded-xl border border-slate-300 px-2 text-sm text-center"
+                    />
+                    <span>hrs</span>
+                  </label>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-1.5">
+        {unused.map((p) => (
+          <button
+            key={p.role}
+            type="button"
+            onClick={() => add(p.role)}
+            className="min-h-[36px] px-3 rounded-full border border-dashed border-slate-300 text-xs font-semibold text-slate-600 hover:border-amber-400 hover:text-navy-900"
+          >
+            + {p.role}
+          </button>
+        ))}
+        <Button type="button" size="sm" variant="ghost" onClick={() => add('Other')} leftIcon={<Plus className="w-4 h-4" />}>
+          Other trade
+        </Button>
+      </div>
     </div>
   );
 };

@@ -156,74 +156,108 @@ export function exportDailyReportPdf(report: DailyReport) {
   doc.text(`Report Status: ${report.status}`, 18, 64);
   doc.text(`Total Labour Count: ${report.totalLabourCount} workers`, 115, 50);
   const totalBudget = report.totalWorkBudget ?? report.workItems?.reduce((s, i) => s + (i.budget || 0), 0) ?? 0;
-  doc.text(`Total Work Budget: ${formatRupees(totalBudget)}`, 115, 57);
+  doc.text(`Shift / Location: ${report.shift || '—'} / ${(report.workLocation || '—').slice(0, 38)}`, 115, 57);
+  doc.text(
+    `Progress: ${typeof report.overallProgressPercent === 'number' ? `${report.overallProgressPercent}%` : 'not reported'} | Submitted: ${
+      report.status === 'SUBMITTED' ? formatDate(report.submittedAt || report.createdAt, 'dd MMM yyyy, h:mm a') : 'draft'
+    }`,
+    115,
+    64
+  );
 
-  // Work Summary
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(20, 43, 74);
-  doc.text('Work Summary & Details:', 14, 80);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(51, 65, 85);
-  doc.text(doc.splitTextToSize(report.workSummary || 'No summary provided.', 182), 14, 86);
-
-  let currentY = 106;
-
-  // Work Items Table
-  if (report.workItems && report.workItems.length > 0) {
-    const itemsData = report.workItems.map((item) => [
-      item.description,
-      item.quantity.toString(),
-      item.unit,
-      formatRupees(item.budget || 0),
-    ]);
-
+  const PAGE_BOTTOM = 280;
+  let currentY = 80;
+  const ensureSpace = (needed: number) => {
+    if (currentY + needed > PAGE_BOTTOM) {
+      doc.addPage();
+      currentY = 18;
+    }
+  };
+  const textBlock = (title: string, body?: string) => {
+    if (!body) return;
+    const lines = doc.splitTextToSize(body, 182) as string[];
+    ensureSpace(12);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(20, 43, 74);
+    doc.text(title, 14, currentY);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(51, 65, 85);
+    currentY += 6;
+    for (const line of lines) {
+      ensureSpace(5);
+      doc.text(line, 14, currentY);
+      currentY += 4.5;
+    }
+    currentY += 6;
+  };
+  const table = (head: string[], body: string[][], color: [number, number, number], textColor: [number, number, number] = [255, 255, 255], foot?: string[][]) => {
+    if (!body.length) return;
+    ensureSpace(20);
     autoTable(doc, {
       startY: currentY,
-      head: [['Work Item / Activity', 'Quantity', 'Unit', 'Budget (INR)']],
-      body: itemsData,
-      foot: [['Total Work Budget (Estimated)', '', '', formatRupees(totalBudget)]],
-      headStyles: { fillColor: [20, 43, 74], fontSize: 9 },
+      head: [head],
+      body,
+      foot,
+      headStyles: { fillColor: color, textColor, fontSize: 9 },
       footStyles: { fillColor: [240, 243, 246], textColor: [20, 43, 74], fontStyle: 'bold', fontSize: 8.5 },
       styles: { fontSize: 8.5 },
     });
+    currentY = (doc as any).lastAutoTable.finalY + 10;
+  };
 
-    currentY = (doc as any).lastAutoTable.finalY + 12;
+  textBlock('Work Summary & Details:', report.workSummary || 'No summary provided.');
+
+  table(
+    ['Work Item / Activity', 'Location', 'Qty', 'Unit', 'Status', 'Budget (INR)'],
+    (report.workItems || []).map((item) => [
+      item.description,
+      item.location || '—',
+      item.quantity.toString(),
+      item.unit,
+      item.status ? `${item.status.replace('_', ' ')}${item.status === 'IN_PROGRESS' && item.progressPercent !== undefined ? ` ${item.progressPercent}%` : ''}` : '—',
+      formatRupees(item.budget || 0),
+    ]),
+    [20, 43, 74],
+    [255, 255, 255],
+    [['Total Work Budget (Estimated)', '', '', '', '', formatRupees(totalBudget)]]
+  );
+
+  table(
+    ['Labour Trade / Role', 'Category', 'Headcount', 'Hours'],
+    (report.labourBreakdown || []).map((l) => [l.role, l.category || '—', l.count.toString(), l.hours !== undefined ? String(l.hours) : '—']),
+    [245, 166, 35],
+    [20, 43, 74]
+  );
+
+  table(
+    ['Material', 'Quantity', 'Unit'],
+    (report.materials || []).map((m) => [m.name, String(m.quantity), m.unit]),
+    [20, 43, 74]
+  );
+
+  if (report.machinery && report.machinery.length > 0) {
+    table(
+      ['Machinery / Equipment', 'Nos', 'Hours used'],
+      report.machinery.map((m) => [m.name, String(m.quantity), m.hoursUsed !== undefined ? String(m.hoursUsed) : '—']),
+      [20, 43, 74]
+    );
+  } else {
+    textBlock('Machinery & Equipment:', report.equipmentDetails);
   }
 
-  // Labour Breakdown Table
-  if (report.labourBreakdown && report.labourBreakdown.length > 0) {
-    const labourData = report.labourBreakdown.map((l) => [l.role, l.count.toString()]);
+  const expenses = report.expenses || [];
+  table(
+    ['Expense', 'Category', 'Vendor', 'Status', 'Amount', 'Bill'],
+    expenses.map((e) => [e.description, e.category.replace(/_/g, ' '), e.vendor, e.status, formatINR(e.amount), e.receiptUrl ? 'Attached' : '—']),
+    [20, 43, 74],
+    [255, 255, 255],
+    expenses.length ? [['Total', '', '', '', formatINR(expenses.reduce((s, e) => s + e.amount, 0)), '']] : undefined
+  );
 
-    autoTable(doc, {
-      startY: currentY,
-      head: [['Labour Trade / Role', 'Headcount']],
-      body: labourData,
-      headStyles: { fillColor: [245, 166, 35], textColor: [20, 43, 74], fontSize: 9 },
-      styles: { fontSize: 8.5 },
-    });
-
-    currentY = (doc as any).lastAutoTable.finalY + 12;
-  }
-
-  // Equipment & Next Day Plan
-  if (report.equipmentDetails) {
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(20, 43, 74);
-    doc.text('Machinery & Equipment:', 14, currentY);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(51, 65, 85);
-    doc.text(doc.splitTextToSize(report.equipmentDetails, 182), 14, currentY + 6);
-    currentY += 16;
-  }
-
-  if (report.nextDayPlan) {
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(20, 43, 74);
-    doc.text('Next Day Plan:', 14, currentY);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(51, 65, 85);
-    doc.text(doc.splitTextToSize(report.nextDayPlan, 182), 14, currentY + 6);
-  }
+  textBlock('Issues & Delays:', report.issuesAndDelays);
+  textBlock('Next Day Plan:', report.nextDayPlan);
+  textBlock('Remarks:', report.remarks);
+  if (report.photos?.length) textBlock('Site Photos:', `${report.photos.length} photo(s)/video(s) attached — view them in SiteTrack.`);
 
   doc.save(`SiteTrack-DailyReport-${formatDate(report.workDate, 'yyyy-MM-dd')}.pdf`);
 }

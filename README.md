@@ -113,7 +113,14 @@ npm run dev
 # Also accessible on local network (e.g. http://192.168.x.x:5173) for mobile testing
 ```
 
-### 4. Run Automated Workflow Verification
+### 4. Run the automated test suite
+Security + end-to-end report workflow tests (in-memory MongoDB, payouts always simulated):
+```bash
+cd backend
+npm test
+```
+
+### 5. Legacy workflow verification script
 To verify all 14 business workflows (owner creation, report logging, paise math, duplicate checks, permission boundaries, rejection & resubmission):
 ```bash
 cd backend
@@ -159,7 +166,14 @@ npx tsx src/scripts/verify-workflows.ts
 }
 ```
 
-### 4. Media Storage (Cloudinary)
+### 4. Security-hardening release: required actions
+- `JWT_SECRET` (≥ 32 random chars) is now **mandatory** in production; there is no fallback. Rotating it signs everyone out.
+- `RAZORPAYX_WEBHOOK_SECRET` must be set for RazorpayX webhooks to be accepted.
+- Uploaded files are no longer public: the app fetches short-lived signed URLs from `POST /api/v1/files/sign`. Old `/uploads/...` links shared outside the app stop working.
+- Optional one-off backfill of company scoping for existing beneficiaries / In-Charges:
+  `npm run migrate:tenant` (dry run), then `npm run migrate:tenant -- --apply`.
+
+### 5. Media Storage (Cloudinary)
 For production persistence of receipts and site photos across container restarts, provide:
 - `CLOUDINARY_CLOUD_NAME`
 - `CLOUDINARY_API_KEY`

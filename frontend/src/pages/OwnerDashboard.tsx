@@ -287,6 +287,86 @@ export const OwnerDashboard: React.FC = () => {
         </Card>
       </div>
 
+      {/* Today on site: live figures from today's submitted reports */}
+      {kpis && (
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+          {[
+            {
+              label: "Today's reports",
+              value: `${kpis.todayReportsSubmitted ?? 0}`,
+              sub:
+                (kpis.activeProjectsMissingTodayReport ?? 0) > 0
+                  ? `${kpis.activeProjectsMissingTodayReport} active site(s) not reported`
+                  : 'All active sites reported',
+              warn: (kpis.activeProjectsMissingTodayReport ?? 0) > 0,
+            },
+            { label: "Today's labour", value: `${kpis.todayLabourCount ?? 0}`, sub: 'workers on site' },
+            { label: "Today's expenditure", value: formatCompactINR(kpis.todayExpenditurePaise ?? 0), sub: 'approved + pending' },
+            {
+              label: 'Avg. site progress',
+              value: kpis.averageReportedProgress === null || kpis.averageReportedProgress === undefined ? '—' : `${kpis.averageReportedProgress}%`,
+              sub: 'latest reported, per project',
+            },
+            {
+              label: 'Projects',
+              value: `${kpis.activeProjectsCount} active`,
+              sub: `${kpis.completedProjectsCount ?? 0} completed · ${kpis.onHoldProjectsCount ?? 0} on hold`,
+            },
+            {
+              label: 'Delays flagged',
+              value: `${kpis.delayedReportsLast7Days ?? 0}`,
+              sub: 'reports with issues, last 7 days',
+              warn: (kpis.delayedReportsLast7Days ?? 0) > 0,
+            },
+          ].map((k) => (
+            <div key={k.label} className="bg-white rounded-2xl border border-slate-200 p-3.5 min-w-0 shadow-card">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 truncate">{k.label}</p>
+              <p className="text-xl font-black text-navy-950 mt-1 tabular-nums truncate">{k.value}</p>
+              <p className={`text-[11px] mt-0.5 truncate flex items-center gap-1 ${k.warn ? 'text-amber-800 font-semibold' : 'text-slate-500'}`}>
+                {k.warn && <AlertTriangle className="w-3 h-3 shrink-0" />}
+                {k.sub}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Delayed work: latest reports that flagged issues */}
+      {(dashboardData?.delayedWork?.length || 0) > 0 && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-600" />
+              <CardTitle>Delays &amp; issues reported (last 7 days)</CardTitle>
+            </div>
+            <Button size="sm" variant="ghost" onClick={() => navigate('/analytics')} rightIcon={<ArrowRight className="w-3.5 h-3.5" />}>
+              Analytics
+            </Button>
+          </CardHeader>
+          <ul className="divide-y divide-slate-100">
+            {dashboardData!.delayedWork!.map((r) => (
+              <li key={r._id}>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/reports/${r._id}`)}
+                  className="w-full text-left px-4 py-3 hover:bg-slate-50 flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-4 text-xs"
+                >
+                  <span className="sm:w-40 shrink-0">
+                    <span className="font-mono font-bold text-navy-900">{(r.project as any)?.code}</span>
+                    <span className="block text-slate-500">{formatDate(r.workDate, 'dd MMM yyyy')}</span>
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="font-semibold text-navy-950 block truncate">{r.titleOfWork}</span>
+                    <span className="text-slate-700 line-clamp-2">{r.issuesAndDelays}</span>
+                  </span>
+                  <span className="text-slate-500 shrink-0">{(r.submittedBy as any)?.name}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
       {/* Conditional Section for Genuine Operational Issues */}
       {(unassignedCount > 0 || (kpis?.pendingCount || 0) > 0) && (
         <div className="bg-amber-500/10 border-2 border-amber-500/30 rounded-2xl p-4 sm:p-5 space-y-3">

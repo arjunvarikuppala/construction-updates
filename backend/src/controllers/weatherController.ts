@@ -116,7 +116,6 @@ export async function getWeatherSummary(req: AuthenticatedRequest, res: Response
       query.$or = [
         { createdBy: new mongoose.Types.ObjectId(user.userId) },
         { owner: new mongoose.Types.ObjectId(user.userId) },
-        { createdBy: { $exists: false } },
       ];
     } else {
       res.status(403).json({ success: false, message: 'Unauthorized role for weather summary' });

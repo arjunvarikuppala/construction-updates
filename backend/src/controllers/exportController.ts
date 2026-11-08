@@ -5,6 +5,8 @@ import { Expense } from '../models/Expense.js';
 import { Project } from '../models/Project.js';
 import { DailyReport } from '../models/DailyReport.js';
 import { AuthenticatedRequest } from '../types/index.js';
+import { verifyUserProjectAccess } from '../middleware/auth.js';
+import { getAccessibleProjectIds } from '../services/tenantService.js';
 import { paiseToRupees, formatIndianCurrency } from '../utils/currency.js';
 
 export async function exportExpensesExcel(req: AuthenticatedRequest, res: Response): Promise<void> {
@@ -15,9 +17,15 @@ export async function exportExpensesExcel(req: AuthenticatedRequest, res: Respon
     let projectTitle = 'All Projects';
 
     if (projectId) {
-      query.project = new mongoose.Types.ObjectId(String(projectId));
-      const proj = await Project.findById(projectId);
-      if (proj) projectTitle = `${proj.name} (${proj.code})`;
+      const access = await verifyUserProjectAccess(String(projectId), req.user!.userId, req.user!.role);
+      if (!access.allowed || !access.project) {
+        res.status(404).json({ success: false, message: 'Project not found' });
+        return;
+      }
+      query.project = access.project._id;
+      projectTitle = `${access.project.name} (${access.project.code})`;
+    } else {
+      query.project = { $in: await getAccessibleProjectIds(req.user!) };
     }
 
     if (status && status !== 'ALL') query.status = status;

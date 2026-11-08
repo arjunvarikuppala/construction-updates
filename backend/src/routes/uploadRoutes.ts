@@ -3,6 +3,7 @@ import { upload } from '../middleware/upload.js';
 import { authenticate } from '../middleware/auth.js';
 import { AuthenticatedRequest } from '../types/index.js';
 import { storageService } from '../services/storageService.js';
+import { recordUpload } from '../services/fileAccessService.js';
 
 const router = Router();
 
@@ -51,6 +52,7 @@ router.post('/single', upload.single('file'), async (req: AuthenticatedRequest, 
 
   try {
     const result = await storageService.uploadFile(req.file.path, req.file.filename, req.file.mimetype);
+    await recordUpload({ url: result.url, uploadedBy: req.user!.userId, mimetype: result.mimetype, size: result.size });
 
     res.json({
       success: true,
@@ -78,6 +80,7 @@ router.post('/multiple', upload.array('files', 15), async (req: AuthenticatedReq
     const uploadedFiles = await Promise.all(
       files.map(async (file) => {
         const result = await storageService.uploadFile(file.path, file.filename, file.mimetype);
+        await recordUpload({ url: result.url, uploadedBy: req.user!.userId, mimetype: result.mimetype, size: result.size });
         return {
           url: result.url,
           filename: file.filename,

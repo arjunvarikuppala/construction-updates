@@ -3,6 +3,7 @@ import { Server as SocketIOServer, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { verifyUserProjectAccess, getJwtSecret } from '../middleware/auth.js';
 import { User } from '../models/User.js';
+import { getProjectMDIds } from './tenantService.js';
 
 interface AuthenticatedSocket extends Socket {
   user?: {
@@ -111,10 +112,10 @@ export function initSocketService(httpServer: HttpServer, allowedOrigins?: strin
   // Authentication Middleware for Socket.IO
   io.use(async (socket: AuthenticatedSocket, next) => {
     try {
+      // Token via handshake auth payload or Authorization header only (never the URL query).
       const rawToken =
         socket.handshake.auth?.token ||
-        socket.handshake.headers?.authorization?.replace(/^Bearer\s+/i, '') ||
-        (socket.handshake.query?.token as string);
+        socket.handshake.headers?.authorization?.replace(/^Bearer\s+/i, '');
 
       if (!rawToken) {
         return next(new Error('Authentication required for real-time connection.'));
@@ -137,7 +138,7 @@ export function initSocketService(httpServer: HttpServer, allowedOrigins?: strin
 
       next();
     } catch (err: any) {
-      return next(new Error(`Socket authentication failed: ${err.message}`));
+      return next(new Error('Socket authentication failed.'));
     }
   });
 
@@ -161,8 +162,9 @@ export function initSocketService(httpServer: HttpServer, allowedOrigins?: strin
     presence.socketIds.add(socket.id);
     presence.lastSeen = new Date();
 
-    // Broadcast user online to all connected clients
-    io?.emit('presence:change', {
+    // Presence is shared only through project rooms (see presence:project_users),
+    // plus the user's own room — never globally across companies.
+    io?.to(`user:${user.userId}`).emit('presence:change', {
       userId: user.userId,
       name: user.name,
       role: user.role,
@@ -216,7 +218,7 @@ export function initSocketService(httpServer: HttpServer, allowedOrigins?: strin
 
         if (callback) callback({ success: true, room: `project:${canonicalId}`, canonicalId });
       } catch (err: any) {
-        if (callback) callback({ success: false, message: err.message });
+        if (callback) callback({ success: false, message: 'Unable to join project channel.' });
       }
     };
 
@@ -257,7 +259,8 @@ export function initSocketService(httpServer: HttpServer, allowedOrigins?: strin
 
     // Client marks messages as seen
     socket.on('messages:mark_seen', (data: { projectId: string; messageIds?: string[] }) => {
-      if (data?.projectId) {
+      // Only relay into rooms this socket has actually joined (access-checked on join)
+      if (data?.projectId && socket.rooms.has(`project:${data.projectId}`)) {
         emitToProject(data.projectId, 'messages:seen', {
           projectId: data.projectId,
           readerId: user.userId,
@@ -281,14 +284,14 @@ export function initSocketService(httpServer: HttpServer, allowedOrigins?: strin
             });
           });
 
-          // Broadcast user offline
-          io?.emit('presence:change', {
+          // Notify project rooms the user was in (company-scoped)
+          presence.activeProjects.forEach((projId) => io?.to(`project:${projId}`).emit('presence:change', {
             userId: user.userId,
             name: user.name,
             role: user.role,
             isOnline: false,
-            lastSeen: presence.lastSeen.toISOString(),
-          });
+            lastSeen: presence!.lastSeen.toISOString(),
+          }));
         }
       }
     });
@@ -313,23 +316,28 @@ export function emitToUser(userId: string, event: string, data: any): void {
   }
 }
 
-export function emitToMDs(event: string, data: any): void {
-  if (io) {
-    io.to('role:MD').emit(event, data);
-  }
+/** Emit only to the MD/Owner user rooms of one project (company-isolated). */
+export async function emitToProjectMDs(projectId: string | { toString(): string }, event: string, data: any): Promise<void> {
+  if (!io) return;
+  const mdIds = await getProjectMDIds(String(projectId));
+  mdIds.forEach((id) => io?.to(`user:${id}`).emit(event, data));
 }
 
+/**
+ * Report events go to the project room, the project's MDs and the author.
+ * They are never broadcast to every connected client (that leaked report
+ * metadata across companies).
+ */
 export function broadcastReportCreated(data: {
   reportId: string;
   projectId: string;
   submittedBy: string;
   titleOfWork: string;
 }): void {
-  if (io) {
-    io.emit('daily-report:new', data);
-    io.to(`project:${data.projectId}`).emit('daily-report:new', data);
-    io.to('role:MD').emit('daily-report:new', data);
-  }
+  if (!io) return;
+  io.to(`project:${data.projectId}`).emit('daily-report:new', data);
+  io.to(`user:${data.submittedBy}`).emit('daily-report:new', data);
+  void emitToProjectMDs(data.projectId, 'daily-report:new', data).catch(() => undefined);
 }
 
 export function broadcastReportViewed(data: {
@@ -338,13 +346,13 @@ export function broadcastReportViewed(data: {
   viewerId: string;
   viewerName: string;
   viewedAt: Date | string;
+  authorId?: string;
 }): void {
-  if (io) {
-    // 1. Broadcast globally to all connected clients (so In-Charge on /reports or dashboard gets it instantly)
-    io.emit('report:viewed', data);
-    io.emit('daily-report:viewed', data);
-    // 2. Also emit to specific project channel room
-    io.to(`project:${data.projectId}`).emit('report:viewed', data);
-    io.to(`project:${data.projectId}`).emit('daily-report:viewed', data);
+  if (!io) return;
+  io.to(`project:${data.projectId}`).emit('report:viewed', data);
+  io.to(`project:${data.projectId}`).emit('daily-report:viewed', data);
+  if (data.authorId) {
+    io.to(`user:${data.authorId}`).emit('report:viewed', data);
+    io.to(`user:${data.authorId}`).emit('daily-report:viewed', data);
   }
 }

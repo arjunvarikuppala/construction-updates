@@ -14,6 +14,7 @@ import {
   RefreshCw,
   HardHat,
   X,
+  BarChart3,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.js';
 import { useSync } from '../../hooks/useSync.js';
@@ -66,6 +67,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const ownerLinks: NavItem[] = [
     { to: '/', label: 'Owner Dashboard', icon: LayoutDashboard },
+    { to: '/analytics', label: 'Site Analytics', icon: BarChart3 },
     {
       to: '/projects',
       label: 'Projects',

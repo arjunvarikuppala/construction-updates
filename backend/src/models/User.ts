@@ -11,6 +11,8 @@ export interface IUser extends Document {
   salary?: number; // Integer paise (₹50,000 = 5000000 paise)
   salaryFrequency?: 'MONTHLY' | 'DAILY' | 'PER_PROJECT';
   assignedProjects: mongoose.Types.ObjectId[];
+  /** Company scope: the MD who created or invited this In-Charge (optional, legacy users may lack it). */
+  createdByMD?: mongoose.Types.ObjectId;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -37,7 +39,7 @@ const UserSchema = new Schema<IUser>(
     password: {
       type: String,
       required: [true, 'Password is required'],
-      minlength: 6,
+      minlength: 8,
       select: false, // Don't return password in normal queries
     },
     role: {
@@ -67,6 +69,11 @@ const UserSchema = new Schema<IUser>(
         ref: 'Project',
       },
     ],
+    createdByMD: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      index: true,
+    },
     isActive: {
       type: Boolean,
       default: true,

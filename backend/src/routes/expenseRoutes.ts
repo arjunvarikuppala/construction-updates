@@ -10,6 +10,7 @@ import {
 import { authenticate, requireOwner } from '../middleware/auth.js';
 import { upload } from '../middleware/upload.js';
 import { storageService } from '../services/storageService.js';
+import { recordUpload } from '../services/fileAccessService.js';
 import { AuthenticatedRequest } from '../types/index.js';
 
 const router = Router();
@@ -26,6 +27,7 @@ router.post('/upload-receipt', upload.single('receipt'), async (req: Authenticat
     }
 
     const result = await storageService.uploadFile(file.path, file.filename, file.mimetype);
+    await recordUpload({ url: result.url, uploadedBy: req.user!.userId, mimetype: result.mimetype, size: result.size });
     res.json({
       success: true,
       receiptUrl: result.url,

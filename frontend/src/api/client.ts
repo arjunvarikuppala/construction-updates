@@ -7,7 +7,7 @@
 // Production (Vercel):             VITE_API_URL = 'https://<your-service>.onrender.com'
 //   All requests go directly to the Render backend. No server-side proxy needed.
 // ---------------------------------------------------------------------------
-const API_ORIGIN = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') ?? '';
+export const API_ORIGIN = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') ?? '';
 const BASE_URL = `${API_ORIGIN}/api/v1`;
 
 export class ApiError extends Error {

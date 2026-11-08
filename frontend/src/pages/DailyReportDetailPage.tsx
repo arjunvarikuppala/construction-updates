@@ -13,6 +13,12 @@ import {
   Edit3,
   MessageSquare,
   Send,
+  MapPin,
+  Clock,
+  Package,
+  Receipt,
+  StickyNote,
+  TrendingUp,
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/common/Card.js';
 import { Button } from '../components/common/Button.js';
@@ -22,10 +28,24 @@ import { ReadReceiptBadge } from '../components/reports/ReadReceiptBadge.js';
 import { DailyReport } from '../types/index.js';
 import { formatDate } from '../utils/dates.js';
 import { exportDailyReportPdf } from '../utils/exportPdf.js';
-import { formatRupees } from '../utils/currency.js';
+import { formatRupees, formatINR } from '../utils/currency.js';
+import { expenseCategoryLabel, labourCategoryLabel, shiftLabel, WORK_STATUS_OPTIONS } from '../utils/reportOptions.js';
 import { useAuth } from '../context/AuthContext.js';
 import { api } from '../api/client.js';
 
+import { SecureImage, SecureLink, SecureVideo, ReceiptThumb } from '../components/common/SecureMedia.js';
+
+const statusChip: Record<string, string> = {
+  COMPLETED: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+  IN_PROGRESS: 'bg-amber-50 text-amber-900 border-amber-200',
+  NOT_STARTED: 'bg-slate-100 text-slate-700 border-slate-200',
+};
+const expenseChip: Record<string, string> = {
+  APPROVED: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+  PENDING: 'bg-amber-50 text-amber-900 border-amber-200',
+  REJECTED: 'bg-rose-50 text-rose-800 border-rose-200',
+  DRAFT: 'bg-slate-100 text-slate-700 border-slate-200',
+};
 export const DailyReportDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -37,7 +57,7 @@ export const DailyReportDetailPage: React.FC = () => {
   const [commentType, setCommentType] = useState<'COMMENT' | 'CHANGES_REQUESTED'>('COMMENT');
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ['daily-report-detail', id],
     queryFn: () => api.get<{ success: boolean; report: DailyReport }>(`/daily-reports/${id}`),
     enabled: Boolean(id),
@@ -68,6 +88,16 @@ export const DailyReportDetailPage: React.FC = () => {
     }
   };
 
+  if (isError) {
+    return (
+      <div className="max-w-xl mx-auto p-6 text-center space-y-3">
+        <AlertTriangle className="w-8 h-8 text-rose-500 mx-auto" />
+        <p className="text-sm text-slate-700">{(error as any)?.message || 'This report could not be loaded.'}</p>
+        <Button variant="outline" onClick={() => navigate('/reports')}>Back to reports</Button>
+      </div>
+    );
+  }
+
   if (isLoading || !data) {
     return (
       <div className="space-y-6">
@@ -78,6 +108,11 @@ export const DailyReportDetailPage: React.FC = () => {
   }
 
   const report = data.report;
+  const myId = user?.id || (user as any)?._id;
+  const canEdit = isMDUser || report.submittedBy?._id === myId;
+  const expenses = report.expenses || [];
+  const expenseTotal = expenses.reduce((s, e) => s + (e.amount || 0), 0);
+  const labourHours = (report.labourBreakdown || []).reduce((s, l) => s + (l.count || 0) * (l.hours || 0), 0);
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto pb-8 sm:pb-12 min-w-0">
@@ -113,13 +148,15 @@ export const DailyReportDetailPage: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto [&>button]:flex-1 [&>button]:sm:flex-initial">
-          <Button
-            variant="outline"
-            onClick={() => navigate(`/reports/new?edit=${report._id || report.id}`)}
-            leftIcon={<Edit3 className="w-4 h-4 text-slate-600" />}
-          >
-            Edit Report
-          </Button>
+          {canEdit && (
+            <Button
+              variant="outline"
+              onClick={() => navigate(`/reports/new?edit=${report._id || report.id}`)}
+              leftIcon={<Edit3 className="w-4 h-4 text-slate-600" />}
+            >
+              {report.status === 'DRAFT' ? 'Continue Draft' : 'Edit Report'}
+            </Button>
+          )}
 
           <Button
             variant="primary"
@@ -152,7 +189,44 @@ export const DailyReportDetailPage: React.FC = () => {
         </div>
         <div className="min-w-0">
           <span className="text-slate-400 block font-medium">Total Site Labour:</span>
-          <span className="font-bold text-amber-700 block mt-0.5">{report.totalLabourCount} Workers</span>
+          <span className="font-bold text-amber-700 block mt-0.5">
+            {report.totalLabourCount} Workers{labourHours > 0 ? ` · ${labourHours} labour-hrs` : ''}
+          </span>
+        </div>
+        <div className="min-w-0">
+          <span className="text-slate-400 block font-medium flex items-center gap-1"><Calendar className="w-3 h-3" /> Report Date / Shift:</span>
+          <span className="font-bold text-navy-950 block mt-0.5">
+            {formatDate(report.workDate, 'EEE, dd MMM yyyy')}
+            {report.shift ? ` · ${shiftLabel(report.shift)}` : ''}
+          </span>
+        </div>
+        <div className="min-w-0">
+          <span className="text-slate-400 block font-medium flex items-center gap-1"><MapPin className="w-3 h-3" /> Work Location:</span>
+          <span className="font-bold text-navy-950 block mt-0.5 break-words">{report.workLocation || '—'}</span>
+        </div>
+        <div className="min-w-0">
+          <span className="text-slate-400 block font-medium flex items-center gap-1"><Clock className="w-3 h-3" /> Submitted:</span>
+          <span className="font-bold text-navy-950 block mt-0.5">
+            {report.status === 'SUBMITTED'
+              ? formatDate(report.submittedAt || report.createdAt, 'dd MMM yyyy, h:mm a')
+              : 'Not yet submitted (draft)'}
+          </span>
+          {report.updatedAt && report.version && report.version > 1 && (
+            <span className="text-[10px] text-slate-500 block">Last updated {formatDate(report.updatedAt, 'dd MMM, h:mm a')}</span>
+          )}
+        </div>
+        <div className="min-w-0">
+          <span className="text-slate-400 block font-medium flex items-center gap-1"><TrendingUp className="w-3 h-3" /> Overall Site Progress:</span>
+          {typeof report.overallProgressPercent === 'number' ? (
+            <div className="mt-1 flex items-center gap-2">
+              <div className="flex-1 h-2 rounded-full bg-slate-100 overflow-hidden">
+                <div className="h-full bg-amber-500" style={{ width: `${report.overallProgressPercent}%` }} />
+              </div>
+              <span className="font-bold text-navy-950">{report.overallProgressPercent}%</span>
+            </div>
+          ) : (
+            <span className="font-bold text-slate-500 block mt-0.5">Not reported</span>
+          )}
         </div>
       </div>
 
@@ -184,8 +258,8 @@ export const DailyReportDetailPage: React.FC = () => {
           <CardTitle>Daily Work Summary & Execution</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-slate-700 leading-relaxed bg-slate-50 p-4 rounded-xl border border-slate-100">
-            {report.workSummary}
+          <p className="text-sm text-slate-700 leading-relaxed bg-slate-50 p-4 rounded-xl border border-slate-100 whitespace-pre-wrap break-words">
+            {report.workSummary || <span className="italic text-slate-400">No description provided yet.</span>}
           </p>
         </CardContent>
       </Card>
@@ -202,21 +276,37 @@ export const DailyReportDetailPage: React.FC = () => {
             </div>
           </CardHeader>
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse min-w-[500px]">
+            <table className="w-full text-left text-xs border-collapse min-w-[680px]">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-slate-500 font-bold uppercase">
                   <th className="py-3 px-4">Item / Activity Description</th>
+                  <th className="py-3 px-4">Location</th>
                   <th className="py-3 px-4 text-right">Quantity</th>
                   <th className="py-3 px-4 text-left">Unit</th>
+                  <th className="py-3 px-4">Status</th>
                   <th className="py-3 px-4 text-right">Work Budget (₹)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {report.workItems.map((item, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50/50">
-                    <td className="py-3 px-4 font-semibold text-navy-950">{item.description}</td>
+                  <tr key={idx} className="hover:bg-slate-50/50 align-top">
+                    <td className="py-3 px-4 font-semibold text-navy-950">
+                      {item.description}
+                      {item.remarks && <span className="block text-[11px] font-normal text-slate-500 mt-0.5">{item.remarks}</span>}
+                    </td>
+                    <td className="py-3 px-4 text-slate-600">{item.location || '—'}</td>
                     <td className="py-3 px-4 text-right font-bold text-navy-900">{item.quantity}</td>
                     <td className="py-3 px-4 text-slate-600 font-medium">{item.unit}</td>
+                    <td className="py-3 px-4">
+                      {item.status ? (
+                        <span className={`inline-block px-2 py-0.5 rounded-md border text-[11px] font-semibold whitespace-nowrap ${statusChip[item.status] || ''}`}>
+                          {WORK_STATUS_OPTIONS.find((o) => o.value === item.status)?.label}
+                          {item.status === 'IN_PROGRESS' && typeof item.progressPercent === 'number' ? ` · ${item.progressPercent}%` : ''}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
+                    </td>
                     <td className="py-3 px-4 text-right font-bold text-emerald-700">
                       {formatRupees(item.budget || 0)}
                     </td>
@@ -225,7 +315,7 @@ export const DailyReportDetailPage: React.FC = () => {
               </tbody>
               <tfoot>
                 <tr className="border-t-2 border-slate-200 bg-slate-50/80 font-bold">
-                  <td className="py-3 px-4 text-slate-700" colSpan={3}>
+                  <td className="py-3 px-4 text-slate-700" colSpan={5}>
                     <div className="flex flex-col">
                       <span className="text-xs uppercase tracking-wider text-slate-600">Total Work Budget (Estimated)</span>
                       <span className="text-[11px] text-slate-400 font-normal">Planned task allocations; separate from actual paid expenses</span>
@@ -254,18 +344,108 @@ export const DailyReportDetailPage: React.FC = () => {
           </CardHeader>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4">
             {report.labourBreakdown.map((l, idx) => (
-              <div key={idx} className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+              <div key={idx} className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs min-w-0">
                 <span className="text-slate-500 block truncate">{l.role}</span>
                 <span className="text-base font-black text-navy-950 block mt-0.5">{l.count}</span>
+                <span className="text-[10px] text-slate-500 block">
+                  {labourCategoryLabel(l.category)}
+                  {l.hours ? ` · ${l.hours} hrs` : ''}
+                </span>
               </div>
             ))}
           </div>
         </Card>
       )}
 
-      {/* Machinery & Issues */}
+      {/* Materials & Machinery (structured) */}
+      {((report.materials && report.materials.length > 0) || (report.machinery && report.machinery.length > 0)) && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-1.5">
+                <Package className="w-4 h-4 text-navy-800" />
+                <CardTitle>Materials Used</CardTitle>
+              </div>
+            </CardHeader>
+            {report.materials && report.materials.length > 0 ? (
+              <ul className="divide-y divide-slate-100 text-xs">
+                {report.materials.map((m, i) => (
+                  <li key={i} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                    <span className="font-semibold text-navy-950 min-w-0 break-words">{m.name}</span>
+                    <span className="font-bold text-slate-700 whitespace-nowrap">{m.quantity} {m.unit}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <CardContent><p className="text-xs text-slate-500">No materials recorded.</p></CardContent>
+            )}
+          </Card>
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-1.5">
+                <Wrench className="w-4 h-4 text-navy-800" />
+                <CardTitle>Machinery &amp; Equipment</CardTitle>
+              </div>
+            </CardHeader>
+            {report.machinery && report.machinery.length > 0 ? (
+              <ul className="divide-y divide-slate-100 text-xs">
+                {report.machinery.map((m, i) => (
+                  <li key={i} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                    <span className="font-semibold text-navy-950 min-w-0 break-words">{m.quantity}× {m.name}</span>
+                    <span className="font-bold text-slate-700 whitespace-nowrap">{m.hoursUsed ? `${m.hoursUsed} hrs` : '—'}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <CardContent><p className="text-xs text-slate-500">No machinery recorded.</p></CardContent>
+            )}
+          </Card>
+        </div>
+      )}
+
+      {/* Expenses recorded in this report */}
+      {expenses.length > 0 && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between w-full gap-2">
+              <div className="flex items-center gap-1.5">
+                <Receipt className="w-4 h-4 text-navy-800" />
+                <CardTitle>Expenses &amp; Bills ({expenses.length})</CardTitle>
+              </div>
+              <span className="text-xs font-bold text-navy-900 bg-navy-50 px-2.5 py-1 rounded-full border border-navy-200">
+                {formatINR(expenseTotal)}
+              </span>
+            </div>
+          </CardHeader>
+          <ul className="divide-y divide-slate-100">
+            {expenses.map((e) => (
+              <li key={e._id} className="flex items-start gap-3 px-4 py-3 text-xs">
+                {e.receiptUrl ? (
+                  <ReceiptThumb url={e.receiptUrl} className="w-14 h-14" label={`bill for ${e.description}`} />
+                ) : (
+                  <span className="w-14 h-14 shrink-0 rounded-lg border border-dashed border-slate-300 flex items-center justify-center text-[10px] text-slate-400 text-center">No bill</span>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-navy-950 break-words">{e.description}</p>
+                  <p className="text-slate-500">
+                    {expenseCategoryLabel(e.category)}
+                    {e.vendor && e.vendor !== 'Not specified' ? ` · ${e.vendor}` : ''}
+                  </p>
+                  {e.status === 'REJECTED' && e.rejectionReason && <p className="text-rose-700 mt-0.5">Rejected: {e.rejectionReason}</p>}
+                </div>
+                <div className="text-right shrink-0 space-y-1">
+                  <p className="font-black text-navy-950 text-sm">{formatINR(e.amount)}</p>
+                  <span className={`inline-block px-2 py-0.5 rounded-md border text-[10px] font-bold ${expenseChip[e.status] || ''}`}>{e.status}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      {/* Machinery (free text, older reports) & Issues */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {report.equipmentDetails && (
+        {report.equipmentDetails && !(report.machinery && report.machinery.length > 0) && (
           <Card>
             <CardHeader>
               <CardTitle>Machinery & Heavy Equipment</CardTitle>
@@ -294,6 +474,21 @@ export const DailyReportDetailPage: React.FC = () => {
           </Card>
         )}
       </div>
+
+      {/* Remarks */}
+      {report.remarks && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-1.5">
+              <StickyNote className="w-4 h-4 text-navy-800" />
+              <CardTitle>Remarks</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-slate-700 bg-slate-50 p-3 rounded-xl border border-slate-100 whitespace-pre-wrap break-words">{report.remarks}</p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Next Day Plan */}
       {report.nextDayPlan && (
@@ -324,7 +519,7 @@ export const DailyReportDetailPage: React.FC = () => {
                   <div key={idx} className="rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 space-y-2">
                     {isVideo ? (
                       <div className="h-56 bg-black flex items-center justify-center">
-                        <video
+                        <SecureVideo
                           src={photo.url}
                           controls
                           playsInline
@@ -333,13 +528,13 @@ export const DailyReportDetailPage: React.FC = () => {
                         />
                       </div>
                     ) : (
-                      <a href={photo.url} target="_blank" rel="noreferrer" className="block overflow-hidden h-48">
-                        <img
+                      <SecureLink href={photo.url} className="block overflow-hidden h-48">
+                        <SecureImage
                           src={photo.url}
                           alt={photo.caption || 'Site photo'}
                           className="w-full h-full object-cover hover:scale-105 transition-transform duration-200"
                         />
-                      </a>
+                      </SecureLink>
                     )}
                     {photo.caption && (
                       <div className="p-2 text-xs text-slate-600 font-medium">

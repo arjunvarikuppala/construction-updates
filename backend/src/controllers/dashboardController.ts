@@ -6,6 +6,8 @@ import { DailyReport } from '../models/DailyReport.js';
 import { AuditLog } from '../models/AuditLog.js';
 import { ProjectAssignment } from '../models/ProjectAssignment.js';
 import { AuthenticatedRequest, isMD, isSiteInCharge } from '../types/index.js';
+import { verifyUserProjectAccess } from '../middleware/auth.js';
+import { getCompanyInChargeIds } from '../services/tenantService.js';
 
 export async function getOwnerDashboard(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
@@ -14,12 +16,16 @@ export async function getOwnerDashboard(req: AuthenticatedRequest, res: Response
 
     let projectFilter: any = {};
     if (projectId) {
-      projectFilter._id = new mongoose.Types.ObjectId(String(projectId));
+      const access = await verifyUserProjectAccess(String(projectId), user.userId, user.role);
+      if (!access.allowed || !access.project) {
+        res.status(404).json({ success: false, message: 'Project not found' });
+        return;
+      }
+      projectFilter._id = access.project._id;
     } else {
       projectFilter.$or = [
         { createdBy: new mongoose.Types.ObjectId(user.userId) },
         { owner: new mongoose.Types.ObjectId(user.userId) },
-        { createdBy: { $exists: false } },
       ];
     }
 
@@ -149,6 +155,7 @@ export async function getOwnerDashboard(req: AuthenticatedRequest, res: Response
           remaining: Math.max(0, budget - pApproved),
           burnRate,
           requiresAttention,
+
         };
       })
     );
@@ -201,8 +208,46 @@ export async function getOwnerDashboard(req: AuthenticatedRequest, res: Response
     const expectedReportsLast7Days = activeProjectsCount * 7;
     const missingReportsCount = Math.max(0, expectedReportsLast7Days - submittedReportsCount);
 
+    // ---- Today's site activity (real data only) ----
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+    const activeProjectIds = projects.filter((p) => p.status === 'IN_PROGRESS').map((p) => p._id);
+
+    const [todayReports, todaySpendAgg, latestProgressAgg, delayedReports] = await Promise.all([
+      DailyReport.find({
+        project: { $in: projectIds },
+        status: 'SUBMITTED',
+        workDate: { $gte: today, $lt: tomorrow },
+      }).select('project totalLabourCount'),
+      Expense.aggregate([
+        { $match: { project: { $in: projectIds }, status: { $in: ['PENDING', 'APPROVED'] }, date: { $gte: today, $lt: tomorrow } } },
+        { $group: { _id: null, total: { $sum: '$amount' } } },
+      ]),
+      DailyReport.aggregate([
+        { $match: { project: { $in: projectIds }, status: 'SUBMITTED', overallProgressPercent: { $ne: null } } },
+        { $sort: { workDate: -1, createdAt: -1 } },
+        { $group: { _id: '$project', progress: { $first: '$overallProgressPercent' }, at: { $first: '$workDate' } } },
+      ]),
+      DailyReport.find({
+        project: { $in: projectIds },
+        status: 'SUBMITTED',
+        workDate: { $gte: sevenDaysAgo },
+        issuesAndDelays: { $nin: [null, ''] },
+      })
+        .populate('project', 'name code')
+        .populate('submittedBy', 'name')
+        .select('titleOfWork workDate issuesAndDelays project submittedBy')
+        .sort({ workDate: -1 })
+        .limit(8),
+    ]);
+
+    const reportedTodaySet = new Set(todayReports.map((r) => r.project.toString()));
+    const todayLabourCount = todayReports.reduce((s, r) => s + (r.totalLabourCount || 0), 0);
+    const progressByProject = new Map(latestProgressAgg.map((r: any) => [r._id.toString(), r]));
+    const progressValues = latestProgressAgg.map((r: any) => r.progress as number);
+
     // Recent 5 Daily Reports across authorized projects
-    const recentReports = await DailyReport.find({ project: { $in: projectIds } })
+    const recentReports = await DailyReport.find({ project: { $in: projectIds }, status: 'SUBMITTED' })
       .populate('project', 'name code')
       .populate('submittedBy', 'name email')
       .sort({ workDate: -1, createdAt: -1 })
@@ -228,14 +273,32 @@ export async function getOwnerDashboard(req: AuthenticatedRequest, res: Response
     }));
 
     // Recent Audit Logs
-    const recentActivity = await AuditLog.find()
+    // Company-scoped: only actions performed by this MD or their In-Charges
+    const companyMembers = [new mongoose.Types.ObjectId(user.userId), ...(await getCompanyInChargeIds(user.userId))];
+    const recentActivity = await AuditLog.find({ performedBy: { $in: companyMembers } })
       .populate('performedBy', 'name role')
       .sort({ createdAt: -1 })
       .limit(10);
 
+    const projectExpendituresWithProgress = projectExpenditures.map((pe) => ({
+      ...pe,
+      latestProgressPercent: (progressByProject.get(String(pe.id)) as any)?.progress ?? null,
+      reportedToday: reportedTodaySet.has(String(pe.id)),
+    }));
+
     res.json({
       success: true,
       kpis: {
+        completedProjectsCount: projects.filter((p) => p.status === 'COMPLETED').length,
+        onHoldProjectsCount: projects.filter((p) => p.status === 'ON_HOLD').length,
+        todayReportsSubmitted: todayReports.length,
+        activeProjectsMissingTodayReport: activeProjectIds.filter((id) => !reportedTodaySet.has(id.toString())).length,
+        todayExpenditurePaise: todaySpendAgg[0]?.total || 0,
+        todayLabourCount,
+        averageReportedProgress: progressValues.length
+          ? Math.round(progressValues.reduce((a, b) => a + b, 0) / progressValues.length)
+          : null,
+        delayedReportsLast7Days: delayedReports.length,
         activeProjectsCount,
         totalProjectsCount: projects.length,
         unassignedProjectsCount,
@@ -257,8 +320,9 @@ export async function getOwnerDashboard(req: AuthenticatedRequest, res: Response
         amount: c.totalAmount,
         count: c.count,
       })),
-      projectExpenditures,
+      projectExpenditures: projectExpendituresWithProgress,
       expenditureTrend,
+      delayedWork: delayedReports,
       recentlyUpdatedProjects,
       recentReports,
       recentExpenses,
@@ -330,11 +394,15 @@ export async function getInChargeDashboard(req: AuthenticatedRequest, res: Respo
 
     const todayReport = await DailyReport.findOne({
       project: { $in: projectIds },
+      submittedBy: new mongoose.Types.ObjectId(user.userId),
       workDate: { $gte: today, $lt: tomorrow },
-    });
+    }).sort({ status: -1, updatedAt: -1 });
 
-    // Recent reports
-    const recentReports = await DailyReport.find({ project: { $in: projectIds } })
+    // Recent reports: submitted ones plus the caller's own drafts
+    const recentReports = await DailyReport.find({
+      project: { $in: projectIds },
+      $or: [{ status: 'SUBMITTED' }, { submittedBy: new mongoose.Types.ObjectId(user.userId) }],
+    })
       .populate('project', 'name code')
       .sort({ workDate: -1 })
       .limit(5);

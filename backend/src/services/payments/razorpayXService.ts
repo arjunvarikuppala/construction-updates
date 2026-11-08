@@ -97,10 +97,8 @@ export class RazorpayXService {
     this.keyId = process.env.RAZORPAYX_KEY_ID || '';
     this.keySecret = process.env.RAZORPAYX_KEY_SECRET || '';
     this.accountNumber = process.env.RAZORPAYX_ACCOUNT_NUMBER || '';
-    this.webhookSecret =
-      process.env.RAZORPAYX_WEBHOOK_SECRET ||
-      process.env.PAYMENTS_WEBHOOK_SECRET ||
-      'sitetrack_rzpx_secret_key_2026';
+    // No hardcoded fallback: without a configured secret, webhook verification fails closed.
+    this.webhookSecret = (process.env.RAZORPAYX_WEBHOOK_SECRET || process.env.PAYMENTS_WEBHOOK_SECRET || '').trim();
     this.isLiveEnabled = process.env.PAYMENTS_LIVE_ENABLED === 'true';
 
     // If live credentials are not set or explicit mock mode is set, use safe simulation

@@ -8,6 +8,7 @@ import { Project } from '../models/Project.js';
 import { ProjectAssignment } from '../models/ProjectAssignment.js';
 import { User } from '../models/User.js';
 import { verifyUserProjectAccess } from '../middleware/auth.js';
+import { recordUpload, canUserAccessFile } from '../services/fileAccessService.js';
 import { emitToProject, isUserOnline, isUserInProject } from '../services/socketService.js';
 import { createNotification, notifyAllMDs } from '../services/notificationService.js';
 import { logAudit } from '../services/auditService.js';
@@ -542,6 +543,7 @@ export async function uploadProjectMessageMedia(req: AuthenticatedRequest, res: 
       if (fileUrl.startsWith('/uploads/')) {
         fileUrl = `/api/v1/projects/${resolvedProjectId}/messages/media/${file.filename}`;
       }
+      await recordUpload({ url: fileUrl, uploadedBy: req.user!.userId, mimetype: detected.detectedMime, size: uploadResult.size });
 
       processedAttachments.push({
         type: detected.mediaType,
@@ -575,7 +577,7 @@ export async function serveProjectMessageMedia(req: AuthenticatedRequest, res: R
     const safeFilename = path.basename(filename);
 
     const access = await verifyUserProjectAccess(projectId, req.user!.userId, req.user!.role);
-    if (!access.allowed) {
+    if (!access.allowed || !(await canUserAccessFile(req.user!, safeFilename))) {
       res.status(403).json({ success: false, message: 'Forbidden. You do not have access to this project media.' });
       return;
     }

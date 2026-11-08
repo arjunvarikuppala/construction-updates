@@ -45,17 +45,46 @@ export interface AuthenticatedRequest extends Request {
   user?: AuthUserPayload;
 }
 
+export type WorkItemStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED';
+
 export interface WorkItem {
   description: string;
   quantity: number;
   unit: string;
   budget?: number;
+  /** Floor / block / section where this item was executed */
+  location?: string;
+  status?: WorkItemStatus;
+  /** 0-100 completion of this item */
+  progressPercent?: number;
+  remarks?: string;
 }
+
+export type LabourCategory = 'SKILLED' | 'UNSKILLED' | 'SUPERVISOR' | 'OTHER';
 
 export interface LabourCountItem {
   role: string;
   count: number;
+  category?: LabourCategory;
+  /** Hours worked per person for this trade */
+  hours?: number;
 }
+
+export interface MaterialItem {
+  name: string;
+  quantity: number;
+  unit: string;
+  remarks?: string;
+}
+
+export interface MachineryItem {
+  name: string;
+  quantity: number;
+  hoursUsed?: number;
+  remarks?: string;
+}
+
+export type ReportShift = 'DAY' | 'NIGHT' | 'GENERAL' | 'DOUBLE';
 
 export interface SitePhoto {
   url: string;

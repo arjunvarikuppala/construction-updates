@@ -41,6 +41,8 @@ import {
 } from '../types/index.js';
 import { formatDate } from '../utils/dates.js';
 
+import { SecureImage, SecureVideo } from '../components/common/SecureMedia.js';
+import { resolveMediaUrl } from '../utils/media.js';
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
 const ALLOWED_DOC_TYPES = ['application/pdf'];
@@ -72,16 +74,8 @@ function formatFileSize(bytes?: number): string {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
-function getAuthenticatedMediaUrl(url: string): string {
-  if (!url) return '';
-  if (url.startsWith('http://') || url.startsWith('https://')) {
-    return url;
-  }
-  const token = localStorage.getItem('sitetrack_token');
-  if (!token) return url;
-  const separator = url.includes('?') ? '&' : '?';
-  return `${url}${separator}token=${encodeURIComponent(token)}`;
-}
+// Media is fetched through short-lived signed URLs (see utils/media.ts);
+// the login token is never placed in a URL.
 
 export const ProjectMessagesPage: React.FC = () => {
   const { projectId: routeProjectId } = useParams<{ projectId?: string }>();
@@ -635,7 +629,8 @@ export const ProjectMessagesPage: React.FC = () => {
 
   const handleDownload = (e: React.MouseEvent, url: string, filename: string) => {
     e.stopPropagation();
-    const authUrl = getAuthenticatedMediaUrl(url);
+    void resolveMediaUrl(url).then((authUrl) => {
+    if (!authUrl) return;
     const downloadUrl = authUrl.includes('?') ? `${authUrl}&download=true` : `${authUrl}?download=true`;
 
     const link = document.createElement('a');
@@ -645,6 +640,7 @@ export const ProjectMessagesPage: React.FC = () => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    });
   };
 
   const filteredProjects = useMemo(() => {
@@ -1295,14 +1291,14 @@ export const ProjectMessagesPage: React.FC = () => {
                               }`}
                             >
                               {imageAtts.map((att, idx) => {
-                                const mediaUrl = getAuthenticatedMediaUrl(att.url);
+                                const mediaUrl = att.url;
                                 return (
                                   <div
                                     key={idx}
                                     onClick={() => openLightbox(att.url, att.name, 'image')}
                                     className="group relative rounded-xl overflow-hidden bg-black/10 border border-slate-200/50 cursor-pointer aspect-video sm:aspect-square flex items-center justify-center"
                                   >
-                                    <img
+                                    <SecureImage
                                       src={mediaUrl}
                                       alt={att.name || 'Project photo'}
                                       className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
@@ -1344,13 +1340,13 @@ export const ProjectMessagesPage: React.FC = () => {
                           return (
                             <div className="space-y-2">
                               {videoAtts.map((att, idx) => {
-                                const mediaUrl = getAuthenticatedMediaUrl(att.url);
+                                const mediaUrl = att.url;
                                 return (
                                   <div
                                     key={idx}
                                     className="rounded-xl overflow-hidden bg-black border border-slate-700/50 shadow-md"
                                   >
-                                    <video
+                                    <SecureVideo
                                       controls
                                       preload="metadata"
                                       className="w-full max-h-72 object-contain bg-black"
@@ -1358,7 +1354,7 @@ export const ProjectMessagesPage: React.FC = () => {
                                       controlsList="nodownload"
                                     >
                                       Your browser does not support the video tag.
-                                    </video>
+                                    </SecureVideo>
                                     <div
                                       className={`px-3 py-1.5 flex items-center justify-between text-[11px] font-medium border-t ${
                                         isMine
@@ -1741,8 +1737,8 @@ export const ProjectMessagesPage: React.FC = () => {
             onClick={(e) => e.stopPropagation()}
             className="flex-1 w-full max-w-5xl flex items-center justify-center p-4 overflow-hidden"
           >
-            <img
-              src={getAuthenticatedMediaUrl(lightboxMedia.url)}
+            <SecureImage
+              src={lightboxMedia.url}
               alt={lightboxMedia.name}
               style={{
                 transform: `scale(${zoomLevel}) rotate(${rotation}deg)`,

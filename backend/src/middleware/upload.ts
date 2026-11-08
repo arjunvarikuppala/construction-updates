@@ -13,7 +13,8 @@ const storage = multer.diskStorage({
     cb(null, uploadDir);
   },
   filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname);
+    // Only keep a short, safe extension; never trust the client-supplied name
+    const ext = path.extname(file.originalname).toLowerCase().replace(/[^a-z0-9.]/g, '').slice(0, 10);
     const uniqueHash = crypto.randomBytes(12).toString('hex');
     const safeBaseName = path
       .basename(file.originalname, ext)
@@ -50,7 +51,9 @@ const fileFilter = (
   if (allowedMimes.includes(file.mimetype.toLowerCase())) {
     cb(null, true);
   } else {
-    cb(new Error('Invalid file format. Allowed formats: Photos (JPG, PNG, WEBP, HEIC), Videos (MP4, MOV, WEBM), and PDF documents'));
+    const err: any = new Error('Invalid file format. Allowed formats: Photos (JPG, PNG, WEBP, HEIC), Videos (MP4, MOV, WEBM), and PDF documents');
+    err.status = 400;
+    cb(err);
   }
 };
 

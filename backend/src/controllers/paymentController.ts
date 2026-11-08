@@ -1,20 +1,62 @@
 import { Response } from 'express';
 import crypto from 'crypto';
 import mongoose from 'mongoose';
-import { AuthenticatedRequest } from '../types/index.js';
+import { AuthenticatedRequest, isMD } from '../types/index.js';
 import { PaymentRequest, PaymentRequestStatus, PaymentMethod } from '../models/PaymentRequest.js';
 import { Beneficiary, maskAccountNumber } from '../models/Beneficiary.js';
 import { Expense } from '../models/Expense.js';
 import { Project } from '../models/Project.js';
-import { ProjectAssignment } from '../models/ProjectAssignment.js';
 import { WebhookEvent } from '../models/WebhookEvent.js';
 import { razorpayXService } from '../services/payments/razorpayXService.js';
 import { verifyUserProjectAccess } from '../middleware/auth.js';
 import { logAudit } from '../services/auditService.js';
-import { createNotification, notifyAllMDs } from '../services/notificationService.js';
-import { emitToProject, emitToUser, emitToMDs } from '../services/socketService.js';
+import { createNotification, notifyProjectMDs } from '../services/notificationService.js';
+import { emitToUser, emitToProjectMDs } from '../services/socketService.js';
+import { getAccessibleProjectIds } from '../services/tenantService.js';
+import { beneficiaryScopeFilter, getProjectCompanyId } from './beneficiaryController.js';
+import { escapeRegex } from '../utils/validation.js';
 
 const HIGH_VALUE_THRESHOLD_PAISE = Number(process.env.PAYMENT_HIGH_VALUE_THRESHOLD_PAISE) || 10000000; // ₹1,00,000
+
+/**
+ * Loads a payment request and enforces company/project isolation.
+ * - The caller must have access to the payment's project (MD owner or ACTIVE in-charge).
+ * - `mdOnly` additionally requires the MD/OWNER role.
+ * Callers outside the company receive 404 so payment IDs are not disclosed.
+ */
+async function loadAuthorizedPayment(
+  req: AuthenticatedRequest,
+  res: Response,
+  opts: { mdOnly: boolean; forbiddenMessage?: string }
+) {
+  const { id } = req.params;
+  if (!mongoose.Types.ObjectId.isValid(String(id))) {
+    res.status(404).json({ success: false, message: 'Payment request not found.' });
+    return null;
+  }
+
+  if (opts.mdOnly && !isMD(req.user!.role)) {
+    res.status(403).json({
+      success: false,
+      message: opts.forbiddenMessage || 'Only Managing Directors can perform this payment action.',
+    });
+    return null;
+  }
+
+  const payment = await PaymentRequest.findById(id);
+  if (!payment) {
+    res.status(404).json({ success: false, message: 'Payment request not found.' });
+    return null;
+  }
+
+  const access = await verifyUserProjectAccess(payment.project, req.user!.userId, req.user!.role);
+  if (!access.allowed) {
+    res.status(404).json({ success: false, message: 'Payment request not found.' });
+    return null;
+  }
+
+  return payment;
+}
 
 export async function createPaymentRequest(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
@@ -85,13 +127,22 @@ export async function createPaymentRequest(req: AuthenticatedRequest, res: Respo
 
     // Resolve or create beneficiary
     let beneficiaryDoc: any = null;
+    const projectCompanyId = getProjectCompanyId(project);
     if (beneficiaryId) {
-      beneficiaryDoc = await Beneficiary.findById(beneficiaryId).select('+accountNumber');
+      beneficiaryDoc = mongoose.Types.ObjectId.isValid(String(beneficiaryId))
+        ? await Beneficiary.findOne({
+            $and: [{ _id: beneficiaryId }, await beneficiaryScopeFilter([projectCompanyId])],
+          }).select('+accountNumber')
+        : null;
       if (!beneficiaryDoc) {
         res.status(404).json({ success: false, message: 'Selected beneficiary record not found.' });
         return;
       }
     } else if (newBeneficiary) {
+      if (typeof newBeneficiary.name !== 'string' || !newBeneficiary.name.trim()) {
+        res.status(400).json({ success: false, message: 'Beneficiary name is required.' });
+        return;
+      }
       const cleanAccount = newBeneficiary.accountNumber
         ? String(newBeneficiary.accountNumber).replace(/\s+/g, '').trim()
         : undefined;
@@ -110,6 +161,7 @@ export async function createPaymentRequest(req: AuthenticatedRequest, res: Respo
         email: newBeneficiary.email?.trim(),
         verificationStatus: 'UNVERIFIED',
         createdBy: req.user!.userId,
+        company: projectCompanyId,
       });
     } else {
       res.status(400).json({
@@ -140,7 +192,9 @@ export async function createPaymentRequest(req: AuthenticatedRequest, res: Respo
     // Optional Expense Link Verification
     let expenseDoc: any = null;
     if (expenseId) {
-      expenseDoc = await Expense.findById(expenseId);
+      expenseDoc = mongoose.Types.ObjectId.isValid(String(expenseId))
+        ? await Expense.findOne({ _id: expenseId, project: project._id })
+        : null;
       if (!expenseDoc) {
         res.status(404).json({ success: false, message: 'Referenced expense record not found.' });
         return;
@@ -208,7 +262,7 @@ export async function createPaymentRequest(req: AuthenticatedRequest, res: Respo
 
     // Notify Managing Directors
     const formattedINR = `₹${(amountPaise / 100).toLocaleString('en-IN')}`;
-    await notifyAllMDs({
+    await notifyProjectMDs({
       sender: req.user!.userId,
       project: project._id,
       type: 'PAYMENT_REQUEST_NEW',
@@ -219,7 +273,7 @@ export async function createPaymentRequest(req: AuthenticatedRequest, res: Respo
       excludeUserId: req.user!.userId,
     });
 
-    emitToMDs('payment:new', {
+    await emitToProjectMDs(project._id, 'payment:new', {
       paymentId: paymentRequest._id,
       paymentReference: paymentRequest.paymentReference,
       amountINR: formattedINR,
@@ -262,33 +316,21 @@ export async function listPaymentRequests(req: AuthenticatedRequest, res: Respon
 
     if (projectId) {
       const accessCheck = await verifyUserProjectAccess(String(projectId), req.user!.userId, req.user!.role);
-      if (!accessCheck.allowed) {
+      if (!accessCheck.allowed || !accessCheck.project) {
         res.status(403).json({ success: false, message: 'Forbidden: Access to this project is not permitted.' });
         return;
       }
-      query.project = projectId;
-    } else if (req.user!.role === 'SITE_INCHARGE') {
-      // Scoped access: In-Charge only sees their assigned projects
-      const assignments = await ProjectAssignment.find({
-        siteInCharge: req.user!.userId,
-        assignmentStatus: 'ACTIVE',
-      }).select('project');
-
-      const projectIds = assignments.map((a) => a.project);
-      query.project = { $in: projectIds };
-    } else if (req.user!.role === 'MD' || req.user!.role === 'OWNER') {
-      // Scoped access: MD only sees payments for their linked projects
-      const mdProjects = await Project.find({
-        $or: [
-          { createdBy: req.user!.userId },
-          { owner: req.user!.userId },
-        ],
-      }).select('_id');
-      query.project = { $in: mdProjects.map((p) => p._id) };
+      query.project = accessCheck.project._id;
+    } else {
+      // Company isolation: MD -> own projects, In-Charge -> ACTIVE assignments only
+      query.project = { $in: await getAccessibleProjectIds(req.user!) };
     }
 
+    if (query.status !== undefined && typeof query.status !== 'string') delete query.status;
+    if (query.payeeType !== undefined && typeof query.payeeType !== 'string') delete query.payeeType;
+
     if (search) {
-      const s = String(search).trim();
+      const s = escapeRegex(String(search).trim());
       query.$or = [
         { paymentReference: { $regex: s, $options: 'i' } },
         { payeeNameSnapshot: { $regex: s, $options: 'i' } },
@@ -307,7 +349,7 @@ export async function listPaymentRequests(req: AuthenticatedRequest, res: Respon
       .sort({ createdAt: -1 });
 
     // Aggregate summary metrics
-    const allMatching = await PaymentRequest.find(query.project ? { project: query.project } : {});
+    const allMatching = await PaymentRequest.find({ project: query.project });
 
     const summary = {
       totalDisbursedPaise: allMatching
@@ -338,6 +380,11 @@ export async function getPaymentRequestById(req: AuthenticatedRequest, res: Resp
   try {
     const { id } = req.params;
 
+    if (!mongoose.Types.ObjectId.isValid(String(id))) {
+      res.status(404).json({ success: false, message: 'Payment request not found.' });
+      return;
+    }
+
     const payment = await PaymentRequest.findById(id)
       .populate('project', 'name code location budget')
       .populate('expense', 'category description amount vendor date status')
@@ -354,7 +401,7 @@ export async function getPaymentRequestById(req: AuthenticatedRequest, res: Resp
 
     const accessCheck = await verifyUserProjectAccess((payment.project as any)._id, req.user!.userId, req.user!.role);
     if (!accessCheck.allowed) {
-      res.status(403).json({ success: false, message: 'Forbidden. You do not have access to this payment request.' });
+      res.status(404).json({ success: false, message: 'Payment request not found.' });
       return;
     }
 
@@ -366,17 +413,16 @@ export async function getPaymentRequestById(req: AuthenticatedRequest, res: Resp
 
 export async function reviewPaymentRequest(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
-    const { id } = req.params;
     const { remarks, setUnderReview = true } = req.body;
 
-    if (req.user!.role !== 'MD') {
-      res.status(403).json({ success: false, message: 'Only Managing Directors can review payment requests.' });
-      return;
-    }
+    const payment = await loadAuthorizedPayment(req, res, {
+      mdOnly: true,
+      forbiddenMessage: 'Only Managing Directors can review payment requests.',
+    });
+    if (!payment) return;
 
-    const payment = await PaymentRequest.findById(id);
-    if (!payment) {
-      res.status(404).json({ success: false, message: 'Payment request not found.' });
+    if (remarks !== undefined && remarks !== null && typeof remarks !== 'string') {
+      res.status(400).json({ success: false, message: 'Remarks must be text.' });
       return;
     }
 
@@ -417,22 +463,13 @@ export async function reviewPaymentRequest(req: AuthenticatedRequest, res: Respo
 
 export async function authorizePaymentRequest(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
-    const { id } = req.params;
     const { notes } = req.body;
 
-    if (req.user!.role !== 'MD') {
-      res.status(403).json({
-        success: false,
-        message: 'Unauthorized. Only Managing Directors are permitted to authorize payment disbursements.',
-      });
-      return;
-    }
-
-    const payment = await PaymentRequest.findById(id);
-    if (!payment) {
-      res.status(404).json({ success: false, message: 'Payment request not found.' });
-      return;
-    }
+    const payment = await loadAuthorizedPayment(req, res, {
+      mdOnly: true,
+      forbiddenMessage: 'Unauthorized. Only Managing Directors are permitted to authorize payment disbursements.',
+    });
+    if (!payment) return;
 
     // High-value dual authorization enforcement: creator cannot authorize their own high-value payment
     if (payment.requiresHighValueAuth && String(payment.createdBy) === String(req.user!.userId)) {
@@ -460,7 +497,7 @@ export async function authorizePaymentRequest(req: AuthenticatedRequest, res: Re
     payment.status = 'AUTHORIZED';
     payment.authorizedBy = req.user!.userId as any;
     payment.authorizedAt = new Date();
-    payment.authorizationNotes = notes?.trim() || 'Authorized by Managing Director';
+    payment.authorizationNotes = (typeof notes === 'string' && notes.trim()) || 'Authorized by Managing Director';
 
     payment.auditTrail.push({
       timestamp: new Date(),
@@ -504,26 +541,20 @@ export async function authorizePaymentRequest(req: AuthenticatedRequest, res: Re
 
 export async function rejectPaymentRequest(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
-    const { id } = req.params;
     const { reason } = req.body;
 
-    if (req.user!.role !== 'MD') {
-      res.status(403).json({ success: false, message: 'Only Managing Directors can reject payment requests.' });
-      return;
-    }
+    const payment = await loadAuthorizedPayment(req, res, {
+      mdOnly: true,
+      forbiddenMessage: 'Only Managing Directors can reject payment requests.',
+    });
+    if (!payment) return;
 
-    if (!reason || !reason.trim()) {
+    if (typeof reason !== 'string' || !reason.trim()) {
       res.status(400).json({ success: false, message: 'Rejection reason is required.' });
       return;
     }
 
-    const payment = await PaymentRequest.findById(id);
-    if (!payment) {
-      res.status(404).json({ success: false, message: 'Payment request not found.' });
-      return;
-    }
-
-    if (payment.status === 'PAID' || payment.status === 'PROCESSING') {
+    if (payment.status === 'PAID' || payment.status === 'PROCESSING' || payment.status === 'REVERSED') {
       res.status(400).json({
         success: false,
         message: `Cannot reject payment in '${payment.status}' state. Transfer is already in-flight or completed.`,
@@ -579,18 +610,19 @@ export async function rejectPaymentRequest(req: AuthenticatedRequest, res: Respo
 
 export async function initiatePaymentTransfer(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
-    const { id } = req.params;
+    const payment = await loadAuthorizedPayment(req, res, {
+      mdOnly: true,
+      forbiddenMessage: 'Only Managing Directors can initiate bank payouts.',
+    });
+    if (!payment) return;
 
-    if (req.user!.role !== 'MD') {
-      res.status(403).json({ success: false, message: 'Only Managing Directors can initiate bank payouts.' });
+    // Rejected / failed / reversed requests can never be dispatched
+    if (['REJECTED', 'FAILED', 'REVERSED'].includes(payment.status as string)) {
+      res.status(400).json({ success: false, message: `Cannot initiate a payment with status '${payment.status}'.` });
       return;
     }
 
-    const payment = await PaymentRequest.findById(id).populate('beneficiary');
-    if (!payment) {
-      res.status(404).json({ success: false, message: 'Payment request not found.' });
-      return;
-    }
+    await payment.populate('beneficiary');
 
     // Enforce High-Value Authorization Guard
     if (payment.requiresHighValueAuth && payment.status !== 'AUTHORIZED') {
@@ -713,13 +745,11 @@ export async function initiatePaymentTransfer(req: AuthenticatedRequest, res: Re
 
 export async function reconcilePayment(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
-    const { id } = req.params;
-
-    const payment = await PaymentRequest.findById(id);
-    if (!payment) {
-      res.status(404).json({ success: false, message: 'Payment request not found.' });
-      return;
-    }
+    const payment = await loadAuthorizedPayment(req, res, {
+      mdOnly: true,
+      forbiddenMessage: 'Only Managing Directors can reconcile payouts.',
+    });
+    if (!payment) return;
 
     const payoutId = payment.razorpayxPayoutId || payment.providerTransactionId;
     if (!payoutId) {
@@ -775,24 +805,20 @@ export async function reconcilePayment(req: AuthenticatedRequest, res: Response)
 
 export async function cancelPaymentRequest(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
-    const { id } = req.params;
     const { reason } = req.body;
 
-    const payment = await PaymentRequest.findById(id);
-    if (!payment) {
-      res.status(404).json({ success: false, message: 'Payment request not found.' });
-      return;
-    }
+    const payment = await loadAuthorizedPayment(req, res, { mdOnly: false });
+    if (!payment) return;
 
     const isCreator = String(payment.createdBy) === String(req.user!.userId);
-    const isMD = req.user!.role === 'MD';
+    const callerIsMD = isMD(req.user!.role);
 
-    if (!isCreator && !isMD) {
+    if (!isCreator && !callerIsMD) {
       res.status(403).json({ success: false, message: 'Forbidden. You do not have permission to cancel this request.' });
       return;
     }
 
-    if (payment.status === 'PROCESSING' || payment.status === 'PAID') {
+    if (['PROCESSING', 'PAID', 'REVERSED', 'FAILED', 'REJECTED'].includes(payment.status as string)) {
       res.status(400).json({
         success: false,
         message: `Cannot cancel a payment with status '${payment.status}'. Once submitted to bank, reconciliation is required.`,
@@ -801,12 +827,13 @@ export async function cancelPaymentRequest(req: AuthenticatedRequest, res: Respo
     }
 
     payment.status = 'FAILED';
-    payment.failureReason = `Cancelled by user: ${reason || 'No reason provided'}`;
+    const cleanReason = typeof reason === 'string' && reason.trim() ? reason.trim().slice(0, 500) : 'No reason provided';
+    payment.failureReason = `Cancelled by user: ${cleanReason}`;
     payment.auditTrail.push({
       timestamp: new Date(),
       action: 'PAYMENT_CANCELLED',
       performedBy: req.user!.userId as any,
-      note: `Payment cancelled before transfer: ${reason || 'N/A'}`,
+      note: `Payment cancelled before transfer: ${cleanReason}`,
       ip: req.ip,
     });
 
@@ -828,7 +855,7 @@ export async function cancelPaymentRequest(req: AuthenticatedRequest, res: Respo
 export async function parseUpiQr(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
     const { qrString } = req.body;
-    if (!qrString) {
+    if (typeof qrString !== 'string' || !qrString || qrString.length > 2048) {
       res.status(400).json({ success: false, message: 'QR content string is required.' });
       return;
     }
@@ -853,6 +880,10 @@ export async function parseUpiQr(req: AuthenticatedRequest, res: Response): Prom
 
 export async function generatePaymentQr(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
+    if (!isMD(req.user!.role)) {
+      res.status(403).json({ success: false, message: 'Only Managing Directors can generate collection QR codes.' });
+      return;
+    }
     const { amountRupees, amountPaise: suppliedPaise, referenceId, purpose } = req.body;
 
     const amountPaise = suppliedPaise ? Number(suppliedPaise) : Math.round(Number(amountRupees) * 100);
@@ -903,14 +934,20 @@ export async function handlePaymentWebhook(req: any, res: Response): Promise<voi
 
     const rawBodyBuffer = req.rawBody || Buffer.from(JSON.stringify(req.body));
 
+    // Signature is mandatory in every environment. Without a configured secret
+    // verification fails closed and the webhook is rejected.
     const isValidSignature = razorpayXService.verifyWebhookSignature(rawBodyBuffer, signature);
-    if (!isValidSignature && process.env.NODE_ENV === 'production') {
+    if (!isValidSignature) {
       res.status(401).json({ success: false, message: 'Invalid webhook signature.' });
       return;
     }
 
     const event = req.body;
-    const eventId = event.event_id || event.id || `evt_${Date.now()}`;
+    const eventId = String(event.event_id || event.id || '');
+    if (!eventId) {
+      res.status(400).json({ success: false, message: 'Webhook event id is required.' });
+      return;
+    }
     const eventType = event.event || 'payout.processed';
 
     // Duplicate event suppression
@@ -936,9 +973,12 @@ export async function handlePaymentWebhook(req: any, res: Response): Promise<voi
       const rzpStatus = (payoutEntity.status || '').toLowerCase();
       const utr = payoutEntity.utr;
 
-      const payment = await PaymentRequest.findOne({
-        $or: [{ paymentReference: paymentRef }, { razorpayxPayoutId: payoutId }, { providerTransactionId: payoutId }],
-      });
+      const lookups: any[] = [];
+      if (typeof paymentRef === 'string' && paymentRef) lookups.push({ paymentReference: paymentRef });
+      if (typeof payoutId === 'string' && payoutId) {
+        lookups.push({ razorpayxPayoutId: payoutId }, { providerTransactionId: payoutId });
+      }
+      const payment = lookups.length ? await PaymentRequest.findOne({ $or: lookups }) : null;
 
       if (payment) {
         if (rzpStatus === 'processed' || rzpStatus === 'paid' || rzpStatus === 'success') {

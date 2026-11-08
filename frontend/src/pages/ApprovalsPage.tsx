@@ -24,6 +24,7 @@ import { formatDate } from '../utils/dates.js';
 import { useToast } from '../context/ToastContext.js';
 import { api } from '../api/client.js';
 
+import { SecureLink } from '../components/common/SecureMedia.js';
 export const ApprovalsPage: React.FC = () => {
   const queryClient = useQueryClient();
   const { success, error: toastError } = useToast();
@@ -158,15 +159,12 @@ export const ApprovalsPage: React.FC = () => {
 
                   {expense.receiptUrl && (
                     <div className="pt-1">
-                      <a
-                        href={expense.receiptUrl}
-                        target="_blank"
-                        rel="noreferrer"
+                      <SecureLink href={expense.receiptUrl}
                         className="inline-flex items-center gap-1.5 text-xs font-bold text-navy-900 hover:text-amber-600 hover:underline"
                       >
                         <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
                         <span>Inspect Attached Receipt / Tax Invoice</span>
-                      </a>
+                      </SecureLink>
                     </div>
                   )}
                 </div>

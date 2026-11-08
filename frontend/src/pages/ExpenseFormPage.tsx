@@ -19,6 +19,7 @@ import { useToast } from '../context/ToastContext.js';
 import { Project, ExpenseCategory } from '../types/index.js';
 import { api } from '../api/client.js';
 
+import { SecureImage } from '../components/common/SecureMedia.js';
 const CATEGORIES: Array<{ value: ExpenseCategory; label: string }> = [
   { value: 'CONSTRUCTION_MATERIALS', label: 'Construction Materials' },
   { value: 'LABOUR', label: 'Labour' },
@@ -257,7 +258,7 @@ export const ExpenseFormPage: React.FC = () => {
           <CardContent>
             {receiptUrl ? (
               <div className="relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-100 max-h-72 flex items-center justify-center p-2">
-                <img
+                <SecureImage
                   src={receiptUrl}
                   alt="Receipt"
                   className="max-h-64 object-contain rounded-lg"

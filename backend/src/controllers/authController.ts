@@ -6,6 +6,7 @@ import { ProjectAssignment } from '../models/ProjectAssignment.js';
 import { Invitation } from '../models/Invitation.js';
 import { AuthenticatedRequest, AuthUserPayload } from '../types/index.js';
 import { logAudit } from '../services/auditService.js';
+import { validatePasswordStrength } from '../utils/password.js';
 
 import { getJwtSecret } from '../middleware/auth.js';
 const JWT_EXPIRES_IN = '7d';
@@ -23,13 +24,19 @@ export async function registerMD(req: AuthenticatedRequest, res: Response): Prom
   try {
     const { name, email, password, phone } = req.body;
 
-    if (!name || !email || !password) {
+    if (typeof name !== 'string' || typeof email !== 'string' || !name.trim() || !email.trim() || !password) {
       res.status(400).json({ success: false, message: 'Name, email, and password are required' });
       return;
     }
 
-    if (password.length < 6) {
-      res.status(400).json({ success: false, message: 'Password must be at least 6 characters long' });
+    if (!/^\S+@\S+\.\S+$/.test(email.trim())) {
+      res.status(400).json({ success: false, message: 'Please provide a valid email address' });
+      return;
+    }
+
+    const passwordError = validatePasswordStrength(password);
+    if (passwordError) {
+      res.status(400).json({ success: false, message: passwordError });
       return;
     }
 
@@ -92,7 +99,7 @@ export async function login(req: AuthenticatedRequest, res: Response): Promise<v
   try {
     const { email, password } = req.body;
 
-    if (!email || !password) {
+    if (typeof email !== 'string' || typeof password !== 'string' || !email || !password) {
       res.status(400).json({ success: false, message: 'Email and password are required' });
       return;
     }
@@ -178,7 +185,7 @@ export async function getMe(req: AuthenticatedRequest, res: Response): Promise<v
 export async function getInvitationByToken(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
     const { token } = req.params;
-    if (!token) {
+    if (!token || typeof token !== 'string') {
       res.status(400).json({ success: false, message: 'Invitation token is required' });
       return;
     }
@@ -223,13 +230,14 @@ export async function acceptInvitation(req: AuthenticatedRequest, res: Response)
   try {
     const { token, password, phone } = req.body;
 
-    if (!token || !password) {
+    if (typeof token !== 'string' || !token || !password) {
       res.status(400).json({ success: false, message: 'Token and password are required' });
       return;
     }
 
-    if (password.length < 6) {
-      res.status(400).json({ success: false, message: 'Password must be at least 6 characters long' });
+    const passwordError = validatePasswordStrength(password);
+    if (passwordError) {
+      res.status(400).json({ success: false, message: passwordError });
       return;
     }
 
@@ -262,6 +270,7 @@ export async function acceptInvitation(req: AuthenticatedRequest, res: Response)
       role: 'SITE_INCHARGE',
       phone: phone?.trim(),
       isActive: true,
+      createdByMD: invitation.invitedBy,
       assignedProjects: invitation.project ? [invitation.project] : [],
     });
 

@@ -1,14 +1,68 @@
 import { Response } from 'express';
-import { AuthenticatedRequest } from '../types/index.js';
+import mongoose from 'mongoose';
+import { AuthenticatedRequest, isMD } from '../types/index.js';
 import { Beneficiary, maskAccountNumber, PayeeType } from '../models/Beneficiary.js';
+import { IProject } from '../models/Project.js';
 import { razorpayXService } from '../services/payments/razorpayXService.js';
 import { logAudit } from '../services/auditService.js';
+import { verifyUserProjectAccess } from '../middleware/auth.js';
+import { getCompanyIdsForUser, getCompanyInChargeIds } from '../services/tenantService.js';
+import { escapeRegex } from '../utils/validation.js';
+
+/** The company (MD user id) that owns a project: the explicit owner, else the creator. */
+export function getProjectCompanyId(project: Pick<IProject, 'owner' | 'createdBy'>): string {
+  return String(project.owner || project.createdBy);
+}
+
+/**
+ * Mongo filter limiting beneficiaries to the given companies.
+ * Legacy rows created before the `company` field existed are matched by their
+ * creator being the company's MD or one of the company's In-Charges.
+ */
+export async function beneficiaryScopeFilter(companyIds: string[]) {
+  const ids = companyIds.filter(Boolean).map((id) => new mongoose.Types.ObjectId(id));
+  if (ids.length === 0) return { _id: { $in: [] as mongoose.Types.ObjectId[] } };
+  const members = new Set<string>(ids.map(String));
+  for (const companyId of ids) {
+    (await getCompanyInChargeIds(String(companyId))).forEach((m) => members.add(String(m)));
+  }
+  return {
+    $or: [
+      { company: { $in: ids } },
+      {
+        company: { $exists: false },
+        createdBy: { $in: Array.from(members).map((m) => new mongoose.Types.ObjectId(m)) },
+      },
+    ],
+  };
+}
+
+/** Resolve which company a new beneficiary belongs to for the calling user. */
+async function resolveCompanyForCreate(req: AuthenticatedRequest): Promise<string | null> {
+  const user = req.user!;
+  if (isMD(user.role)) return user.userId;
+  const projectId = req.body.projectId || req.body.project;
+  if (projectId) {
+    const access = await verifyUserProjectAccess(String(projectId), user.userId, user.role);
+    return access.allowed && access.project ? getProjectCompanyId(access.project) : null;
+  }
+  const companies = await getCompanyIdsForUser(user);
+  return companies.length === 1 ? companies[0] : null;
+}
+
+async function findScopedBeneficiary(req: AuthenticatedRequest, withAccountNumber = false) {
+  const { id } = req.params;
+  if (!mongoose.Types.ObjectId.isValid(String(id))) return null;
+  const scope = await beneficiaryScopeFilter(await getCompanyIdsForUser(req.user!));
+  const q = Beneficiary.findOne({ $and: [{ _id: id }, scope] });
+  return withAccountNumber ? q.select('+accountNumber') : q.select('-accountNumber');
+}
 
 export async function createBeneficiary(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
     const { name, payeeType, accountNumber, ifsc, vpa, phone, email, bankName } = req.body;
 
-    if (!name || !name.trim()) {
+    if (typeof name !== 'string' || !name.trim()) {
       res.status(400).json({ success: false, message: 'Beneficiary name is required.' });
       return;
     }
@@ -71,6 +125,15 @@ export async function createBeneficiary(req: AuthenticatedRequest, res: Response
 
     const masked = cleanAccount ? maskAccountNumber(cleanAccount) : undefined;
 
+    const companyId = await resolveCompanyForCreate(req);
+    if (!companyId) {
+      res.status(400).json({
+        success: false,
+        message: 'Select the project this payee belongs to before registering the beneficiary.',
+      });
+      return;
+    }
+
     const beneficiary = await Beneficiary.create({
       name: name.trim(),
       payeeType,
@@ -83,6 +146,7 @@ export async function createBeneficiary(req: AuthenticatedRequest, res: Response
       email: email?.trim(),
       verificationStatus: 'UNVERIFIED',
       createdBy: req.user!.userId,
+      company: companyId,
     });
 
     await logAudit('BENEFICIARY_CREATED', req.user!.userId, 'BENEFICIARY', beneficiary._id, {
@@ -122,16 +186,16 @@ export async function listBeneficiaries(req: AuthenticatedRequest, res: Response
 
     const query: any = { isActive: true };
 
-    if (payeeType && payeeType !== 'ALL') {
+    if (typeof payeeType === 'string' && payeeType !== 'ALL') {
       query.payeeType = payeeType;
     }
 
-    if (verificationStatus && verificationStatus !== 'ALL') {
+    if (typeof verificationStatus === 'string' && verificationStatus !== 'ALL') {
       query.verificationStatus = verificationStatus;
     }
 
     if (search) {
-      const s = String(search).trim();
+      const s = escapeRegex(String(search).trim());
       query.$or = [
         { name: { $regex: s, $options: 'i' } },
         { ifsc: { $regex: s, $options: 'i' } },
@@ -141,7 +205,8 @@ export async function listBeneficiaries(req: AuthenticatedRequest, res: Response
     }
 
     // Exclude raw full account number in list views for security
-    const beneficiaries = await Beneficiary.find(query)
+    const scope = await beneficiaryScopeFilter(await getCompanyIdsForUser(req.user!));
+    const beneficiaries = await Beneficiary.find({ $and: [query, scope] })
       .select('-accountNumber')
       .sort({ createdAt: -1 });
 
@@ -157,8 +222,7 @@ export async function listBeneficiaries(req: AuthenticatedRequest, res: Response
 
 export async function getBeneficiaryById(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
-    const { id } = req.params;
-    const beneficiary = await Beneficiary.findById(id).select('-accountNumber');
+    const beneficiary = await findScopedBeneficiary(req);
     if (!beneficiary) {
       res.status(404).json({ success: false, message: 'Beneficiary not found' });
       return;
@@ -172,8 +236,12 @@ export async function getBeneficiaryById(req: AuthenticatedRequest, res: Respons
 
 export async function validateBeneficiaryAccount(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
-    const { id } = req.params;
-    const beneficiary = await Beneficiary.findById(id).select('+accountNumber');
+    if (!isMD(req.user!.role)) {
+      res.status(403).json({ success: false, message: 'Only Managing Directors can verify beneficiary accounts.' });
+      return;
+    }
+
+    const beneficiary = await findScopedBeneficiary(req, true);
 
     if (!beneficiary) {
       res.status(404).json({ success: false, message: 'Beneficiary not found' });

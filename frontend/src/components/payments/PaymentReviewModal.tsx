@@ -25,6 +25,7 @@ import { useAuth } from '../../context/AuthContext.js';
 import { PaymentRequest } from '../../types/index.js';
 import { formatDate } from '../../utils/dates.js';
 
+import { SecureLink } from '../common/SecureMedia.js';
 interface PaymentReviewModalProps {
   payment: PaymentRequest | null;
   isOpen: boolean;
@@ -298,15 +299,12 @@ export const PaymentReviewModal: React.FC<PaymentReviewModalProps> = ({
                 <FileText className="w-4 h-4 text-navy-800 flex-shrink-0" />
                 <span className="truncate">Attached Supporting Invoice / Receipt</span>
               </div>
-              <a
-                href={payment.invoiceUrl}
-                target="_blank"
-                rel="noreferrer"
+              <SecureLink href={payment.invoiceUrl}
                 className="flex items-center gap-1 text-xs font-bold text-amber-700 hover:text-amber-800 transition-colors flex-shrink-0"
               >
                 <span>View Attachment</span>
                 <ExternalLink className="w-3.5 h-3.5" />
-              </a>
+              </SecureLink>
             </div>
           )}
 

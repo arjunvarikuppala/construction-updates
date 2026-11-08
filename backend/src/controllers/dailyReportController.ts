@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import mongoose from 'mongoose';
-import { DailyReport } from '../models/DailyReport.js';
+import { DailyReport, IDailyReport } from '../models/DailyReport.js';
 import { Project } from '../models/Project.js';
 import { ProjectAssignment } from '../models/ProjectAssignment.js';
 import { ReportView } from '../models/ReportView.js';
@@ -10,6 +10,15 @@ import { AuthenticatedRequest, isMD, isSiteInCharge } from '../types/index.js';
 import { logAudit } from '../services/auditService.js';
 import { verifyUserProjectAccess } from '../middleware/auth.js';
 import { emitToProject, emitToUser, broadcastReportViewed, broadcastReportCreated } from '../services/socketService.js';
+import { getAccessibleProjectIds, getProjectMDIds } from '../services/tenantService.js';
+import {
+  sanitizeReportInput,
+  sanitizeReportExpenses,
+  syncReportExpenses,
+  promoteDraftExpenses,
+  getReportExpenses,
+} from '../services/reportService.js';
+import { escapeRegex, parseDate } from '../utils/validation.js';
 
 async function attachReadReceipts(reports: any[], callerRole?: string) {
   if (!reports || reports.length === 0) return [];
@@ -86,42 +95,7 @@ export async function getUnreadReportsSummary(req: AuthenticatedRequest, res: Re
       return;
     }
 
-    let accessibleProjectIds: mongoose.Types.ObjectId[] = [];
-
-    if (isMD(user.role)) {
-      const mdProjects = await Project.find({
-        $or: [
-          { createdBy: new mongoose.Types.ObjectId(user.userId) },
-          { owner: new mongoose.Types.ObjectId(user.userId) },
-          { createdBy: { $exists: false } },
-        ],
-      }).select('_id');
-      accessibleProjectIds = mdProjects.map((p) => p._id as mongoose.Types.ObjectId);
-    } else if (isSiteInCharge(user.role)) {
-      const activeAssignments = await ProjectAssignment.find({
-        siteInCharge: new mongoose.Types.ObjectId(user.userId),
-        assignmentStatus: 'ACTIVE',
-      }).select('project');
-
-      const revokedAssignments = await ProjectAssignment.find({
-        siteInCharge: new mongoose.Types.ObjectId(user.userId),
-        assignmentStatus: 'REVOKED',
-      }).select('project');
-
-      const revokedSet = new Set(revokedAssignments.map((a) => a.project.toString()));
-      const activeIds = activeAssignments
-        .map((a) => a.project.toString())
-        .filter((id) => !revokedSet.has(id));
-
-      const legacyProjects = await Project.find({
-        assignedInCharge: new mongoose.Types.ObjectId(user.userId),
-        _id: { $nin: revokedAssignments.map((a) => a.project) },
-      }).select('_id');
-
-      legacyProjects.forEach((p) => activeIds.push(p._id.toString()));
-      const uniqueIds = Array.from(new Set(activeIds));
-      accessibleProjectIds = uniqueIds.map((id) => new mongoose.Types.ObjectId(id));
-    }
+    const accessibleProjectIds = await getAccessibleProjectIds(user);
 
     if (accessibleProjectIds.length === 0) {
       res.json({
@@ -219,74 +193,43 @@ export async function listDailyReports(req: AuthenticatedRequest, res: Response)
     let query: any = {};
 
     if (search) {
-      const searchStr = String(search).trim();
+      const searchStr = escapeRegex(String(search).trim());
       query.$or = [
         { titleOfWork: { $regex: searchStr, $options: 'i' } },
         { workSummary: { $regex: searchStr, $options: 'i' } },
+        { workLocation: { $regex: searchStr, $options: 'i' } },
       ];
     }
 
     if (projectId) {
       const accessCheck = await verifyUserProjectAccess(String(projectId), user.userId, user.role);
-      if (!accessCheck.allowed) {
+      if (!accessCheck.allowed || !accessCheck.project) {
         res.status(403).json({ success: false, message: 'Forbidden: You do not have access to this project.' });
         return;
       }
-      query.project = new mongoose.Types.ObjectId(String(projectId));
-    } else if (isSiteInCharge(user.role)) {
-      const activeAssignments = await ProjectAssignment.find({
-        siteInCharge: new mongoose.Types.ObjectId(user.userId),
-        assignmentStatus: 'ACTIVE',
-      }).select('project');
-
-      const revokedAssignments = await ProjectAssignment.find({
-        siteInCharge: new mongoose.Types.ObjectId(user.userId),
-        assignmentStatus: 'REVOKED',
-      }).select('project');
-
-      const revokedSet = new Set(revokedAssignments.map((a) => a.project.toString()));
-      const activeProjectIds = new Set<string>();
-
-      activeAssignments.forEach((a) => {
-        if (!revokedSet.has(a.project.toString())) {
-          activeProjectIds.add(a.project.toString());
-        }
-      });
-
-      const legacyProjects = await Project.find({
-        assignedInCharge: new mongoose.Types.ObjectId(user.userId),
-        _id: { $nin: revokedAssignments.map((a) => a.project) },
-      }).select('_id');
-
-      legacyProjects.forEach((p) => activeProjectIds.add(p._id.toString()));
-
-      query.project = {
-        $in: Array.from(activeProjectIds).map((id) => new mongoose.Types.ObjectId(id)),
-      };
-    } else if (isMD(user.role)) {
-      const authorizedProjects = await Project.find({
-        $or: [
-          { createdBy: new mongoose.Types.ObjectId(user.userId) },
-          { owner: new mongoose.Types.ObjectId(user.userId) },
-          { createdBy: { $exists: false } },
-        ],
-      }).select('_id');
-      query.project = { $in: authorizedProjects.map((p) => p._id) };
+      query.project = accessCheck.project._id;
+    } else {
+      query.project = { $in: await getAccessibleProjectIds(user) };
     }
 
-    if (status) {
+    if (status === 'DRAFT' || status === 'SUBMITTED') {
       query.status = status;
-    } else if (isMD(user.role)) {
-      if (!req.query.includeDrafts) {
-        query.status = 'SUBMITTED';
-      }
+    } else if (isMD(user.role) && !req.query.includeDrafts) {
+      query.status = 'SUBMITTED';
     }
 
-    if (startDate || endDate) {
+    // Drafts are private to their author: MDs never see other people's drafts,
+    // In-Charges never see a colleague's drafts.
+    if (query.status !== 'SUBMITTED') {
+      query.$and = [{ $or: [{ status: 'SUBMITTED' }, { submittedBy: new mongoose.Types.ObjectId(user.userId) }] }];
+    }
+
+    const start = parseDate(startDate);
+    const end = parseDate(endDate);
+    if (start || end) {
       query.workDate = {};
-      if (startDate) query.workDate.$gte = new Date(String(startDate));
-      if (endDate) {
-        const end = new Date(String(endDate));
+      if (start) query.workDate.$gte = start;
+      if (end) {
         end.setHours(23, 59, 59, 999);
         query.workDate.$lte = end;
       }
@@ -309,6 +252,10 @@ export async function listDailyReports(req: AuthenticatedRequest, res: Response)
 export async function getDailyReportById(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
     const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(String(id))) {
+      res.status(404).json({ success: false, message: 'Daily report not found' });
+      return;
+    }
     const report = await DailyReport.findById(id)
       .populate('project', 'name code location budget assignedInCharge')
       .populate('submittedBy', 'name email role')
@@ -323,6 +270,12 @@ export async function getDailyReportById(req: AuthenticatedRequest, res: Respons
     const accessCheck = await verifyUserProjectAccess(projectId, req.user!.userId, req.user!.role);
     if (!accessCheck.allowed) {
       res.status(403).json({ success: false, message: 'Forbidden. You do not have access to this report.' });
+      return;
+    }
+
+    const authorIdStr = String((report.submittedBy as any)?._id || report.submittedBy);
+    if (report.status === 'DRAFT' && authorIdStr !== req.user!.userId) {
+      res.status(404).json({ success: false, message: 'Daily report not found' });
       return;
     }
 
@@ -351,6 +304,7 @@ export async function getDailyReportById(req: AuthenticatedRequest, res: Respons
         viewerId: req.user!.userId,
         viewerName: req.user!.name || 'Managing Director',
         viewedAt: now.toISOString(),
+        authorId: authorIdStr,
       });
 
       // Mark MD's own notifications for this report as read
@@ -400,7 +354,8 @@ export async function getDailyReportById(req: AuthenticatedRequest, res: Respons
     }
 
     const [enrichedReport] = await attachReadReceipts([report], req.user!.role);
-    res.json({ success: true, report: enrichedReport });
+    const expenses = await getReportExpenses(report._id as mongoose.Types.ObjectId);
+    res.json({ success: true, report: { ...enrichedReport, expenses } });
   } catch (error: any) {
     res.status(500).json({ success: false, message: 'Failed to fetch daily report', error: error.message });
   }
@@ -444,13 +399,14 @@ export async function recordDailyReportView(req: AuthenticatedRequest, res: Resp
         projectId,
       });
 
-      // Instant real-time broadcast to all connected clients
+      // Real-time update to the project room and the author
       broadcastReportViewed({
         reportId: report._id.toString(),
         projectId,
         viewerId: req.user!.userId,
         viewerName: req.user!.name || 'Managing Director',
         viewedAt: now.toISOString(),
+        authorId: String(report.submittedBy),
       });
 
       // Mark MD's own notifications for this report as read
@@ -506,71 +462,142 @@ export async function recordDailyReportView(req: AuthenticatedRequest, res: Resp
   }
 }
 
+/** Notify the project's MDs (and confirm to the author) that a report was submitted or updated. */
+async function dispatchReportNotifications(
+  report: IDailyReport,
+  actor: { userId: string; name?: string },
+  kind: 'SUBMITTED' | 'UPDATED'
+): Promise<void> {
+  try {
+    const targetProjId = report.project.toString();
+    const projectDoc = await Project.findById(targetProjId).select('name code createdBy owner');
+    const projectName = projectDoc?.name || 'Construction Project';
+    const projectCode = projectDoc?.code || '';
+
+    // Only this project's MD/Owner(s) — never every MD in the system
+    const mdIds = await getProjectMDIds(targetProjId);
+    const mdRecipients = await User.find({ _id: { $in: mdIds }, role: { $in: ['MD', 'OWNER'] }, isActive: true });
+
+    for (const md of mdRecipients) {
+      if (md._id.toString() === actor.userId) continue;
+      const notif = await Notification.create({
+        recipient: md._id,
+        sender: actor.userId,
+        project: targetProjId,
+        type: 'DAILY_REPORT_SUBMITTED',
+        title:
+          kind === 'SUBMITTED'
+            ? `New Daily Report: ${report.titleOfWork || 'Site Progress Log'}`
+            : `Daily Report Updated: ${report.titleOfWork || 'Site Progress Log'}`,
+        message:
+          kind === 'SUBMITTED'
+            ? `${actor.name || 'Site In-Charge'} submitted a new daily report for ${projectName} (${projectCode}): "${report.titleOfWork}".`
+            : `${actor.name || 'Site In-Charge'} updated the daily report for ${projectName} (${projectCode}): "${report.titleOfWork}".`,
+        relatedEntity: 'DAILY_REPORT',
+        relatedId: report._id.toString(),
+        isRead: false,
+      });
+      emitToUser(md._id.toString(), 'notification:new', notif);
+    }
+
+    const inChargeNotif = await Notification.create({
+      recipient: actor.userId,
+      sender: actor.userId,
+      project: targetProjId,
+      type: 'DAILY_REPORT_SUBMITTED',
+      title: kind === 'SUBMITTED' ? 'Report Submitted Successfully' : 'Report Updated Successfully',
+      message:
+        kind === 'SUBMITTED'
+          ? `Your daily report "${report.titleOfWork || 'Daily Work Log'}" for ${projectName} was successfully submitted.`
+          : `Your changes to daily report "${report.titleOfWork || 'Daily Work Log'}" for ${projectName} were saved.`,
+      relatedEntity: 'DAILY_REPORT',
+      relatedId: report._id.toString(),
+      isRead: false,
+    });
+    emitToUser(actor.userId, 'notification:new', inChargeNotif);
+  } catch (notifDispatchErr) {
+    console.error('Failed to dispatch report notifications:', notifDispatchErr);
+  }
+}
+
 export async function createDailyReport(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
-    const {
-      project,
-      titleOfWork,
-      workDate,
-      workSummary,
-      workItems = [],
-      labourBreakdown = [],
-      equipmentDetails,
-      issuesAndDelays,
-      nextDayPlan,
-      photos = [],
-      status = 'SUBMITTED',
-    } = req.body;
+    const status: 'DRAFT' | 'SUBMITTED' = req.body.status === 'DRAFT' ? 'DRAFT' : 'SUBMITTED';
+    const targetProjectId = req.body.project || req.body.projectId;
+    const clientRequestId =
+      typeof req.body.clientRequestId === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(req.body.clientRequestId)
+        ? req.body.clientRequestId
+        : undefined;
 
-    const targetProjectId = project || req.body.projectId;
+    if (!targetProjectId) {
+      res.status(400).json({ success: false, message: 'Please select a project' });
+      return;
+    }
 
-    const accessCheck = await verifyUserProjectAccess(targetProjectId, req.user!.userId, req.user!.role);
-    if (!accessCheck.allowed) {
+    const accessCheck = await verifyUserProjectAccess(String(targetProjectId), req.user!.userId, req.user!.role);
+    if (!accessCheck.allowed || !accessCheck.project) {
       res.status(403).json({ success: false, message: 'Forbidden: You are not assigned to this project.' });
       return;
     }
 
-    const sanitizedWorkItems = Array.isArray(workItems)
-      ? workItems.map((item: any) => ({
-          description: String(item.description || item.taskDescription || '').trim(),
-          quantity: Math.max(0, Number(item.quantity) || 0),
-          unit: String(item.unit || '').trim(),
-          budget: Math.max(0, Number(item.budget || item.budgetINR) || 0),
-        }))
-      : [];
+    // Idempotent retry / double-tap: return the report already created for this request
+    if (clientRequestId) {
+      const existing = await DailyReport.findOne({ submittedBy: req.user!.userId, clientRequestId });
+      if (existing) {
+        res.status(200).json({ success: true, duplicate: true, message: 'This report was already saved.', report: existing });
+        return;
+      }
+    }
 
-    const totalWorkBudget = sanitizedWorkItems.reduce(
-      (sum: number, item: any) => sum + (Number(item.budget) || 0),
-      0
-    );
+    const { data, errors } = sanitizeReportInput(req.body, { partial: false });
+    const { expenses, errors: expenseErrors } = sanitizeReportExpenses(req.body.expenses);
+    const allErrors = [...errors, ...expenseErrors];
+    if (allErrors.length) {
+      res.status(400).json({ success: false, message: allErrors[0], errors: allErrors });
+      return;
+    }
 
-    const totalLabourCount = labourBreakdown.reduce(
-      (sum: number, item: { count: number }) => sum + (Number(item.count) || 0),
-      0
-    );
+    // Guard against accidental duplicate submissions (same author, project, date and title)
+    if (status === 'SUBMITTED') {
+      const dayStart = new Date(data.workDate!);
+      dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(dayStart);
+      dayEnd.setDate(dayEnd.getDate() + 1);
+      const dup = await DailyReport.findOne({
+        project: accessCheck.project._id,
+        submittedBy: req.user!.userId,
+        status: 'SUBMITTED',
+        titleOfWork: data.titleOfWork,
+        workDate: { $gte: dayStart, $lt: dayEnd },
+      }).select('_id');
+      if (dup) {
+        res.status(409).json({
+          success: false,
+          message: 'You already submitted a report with this title for this date. Open it to edit instead.',
+          existingReportId: dup._id,
+        });
+        return;
+      }
+    }
 
     const report = await DailyReport.create({
-      project: targetProjectId,
+      ...data,
+      project: accessCheck.project._id,
       submittedBy: req.user!.userId,
-      titleOfWork: titleOfWork.trim(),
-      workDate: new Date(workDate),
-      workSummary: workSummary.trim(),
-      workItems: sanitizedWorkItems,
-      totalWorkBudget,
-      labourBreakdown,
-      totalLabourCount,
-      equipmentDetails: equipmentDetails?.trim(),
-      issuesAndDelays: issuesAndDelays?.trim(),
-      nextDayPlan: nextDayPlan?.trim(),
-      photos,
       status,
       version: 1,
+      submittedAt: status === 'SUBMITTED' ? new Date() : undefined,
+      clientRequestId,
     });
+
+    if (expenses.length) await syncReportExpenses(report, expenses, req.user!.userId);
 
     await logAudit('DAILY_REPORT_CREATED', req.user!.userId, 'DAILY_REPORT', report._id, {
       titleOfWork: report.titleOfWork,
       project: report.project,
       status: report.status,
+      workItems: report.workItems.length,
+      expenses: expenses.length,
     });
 
     if (report.status === 'SUBMITTED') {
@@ -580,63 +607,22 @@ export async function createDailyReport(req: AuthenticatedRequest, res: Response
         submittedBy: req.user!.userId,
         titleOfWork: report.titleOfWork,
       });
-
-      // Find project details to include in notification title and message
-      try {
-        const targetProjId = report.project.toString();
-        const projectDoc = await Project.findById(targetProjId).select('name code createdBy owner');
-        const projectName = projectDoc?.name || 'Construction Project';
-        const projectCode = projectDoc?.code || '';
-
-        // 1. Notify authorized MDs/Owners
-        const mdRecipients = await User.find({
-          role: { $in: ['MD', 'OWNER'] },
-          isActive: true,
-          $or: [
-            { _id: projectDoc?.createdBy },
-            { _id: projectDoc?.owner },
-            ...(projectDoc?.createdBy ? [] : [{}]),
-          ],
-        });
-        const targets = mdRecipients.length > 0 ? mdRecipients : await User.find({ role: { $in: ['MD', 'OWNER'] }, isActive: true });
-
-        for (const md of targets) {
-          if (md._id.toString() !== req.user!.userId) {
-            const notif = await Notification.create({
-              recipient: md._id,
-              sender: req.user!.userId,
-              project: targetProjId,
-              type: 'DAILY_REPORT_SUBMITTED',
-              title: `New Daily Report: ${report.titleOfWork || 'Site Progress Log'}`,
-              message: `${req.user!.name || 'Site In-Charge'} submitted a new daily report for ${projectName} (${projectCode}): "${report.titleOfWork}".`,
-              relatedEntity: 'DAILY_REPORT',
-              relatedId: report._id.toString(),
-              isRead: false,
-            });
-            emitToUser(md._id.toString(), 'notification:new', notif);
-          }
-        }
-
-        // 2. Site In-Charge confirmation notification
-        const inChargeNotif = await Notification.create({
-          recipient: req.user!.userId,
-          sender: req.user!.userId,
-          project: targetProjId,
-          type: 'DAILY_REPORT_SUBMITTED',
-          title: 'Report Submitted Successfully',
-          message: `Your daily report "${report.titleOfWork || 'Daily Work Log'}" for ${projectName} was successfully submitted.`,
-          relatedEntity: 'DAILY_REPORT',
-          relatedId: report._id.toString(),
-          isRead: false,
-        });
-        emitToUser(req.user!.userId, 'notification:new', inChargeNotif);
-      } catch (notifDispatchErr) {
-        console.error('Failed to dispatch report creation notifications:', notifDispatchErr);
-      }
+      await dispatchReportNotifications(report, req.user!, 'SUBMITTED');
     }
 
     res.status(201).json({ success: true, message: 'Daily report created successfully', report });
   } catch (error: any) {
+    if (error?.code === 11000 && req.body.clientRequestId) {
+      const existing = await DailyReport.findOne({ submittedBy: req.user!.userId, clientRequestId: req.body.clientRequestId });
+      if (existing) {
+        res.status(200).json({ success: true, duplicate: true, message: 'This report was already saved.', report: existing });
+        return;
+      }
+    }
+    if (error?.name === 'ValidationError') {
+      res.status(400).json({ success: false, message: 'Some report fields are invalid. Please review and try again.', error });
+      return;
+    }
     res.status(500).json({ success: false, message: 'Failed to create daily report', error: error.message });
   }
 }
@@ -644,6 +630,10 @@ export async function createDailyReport(req: AuthenticatedRequest, res: Response
 export async function updateDailyReport(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
     const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(String(id))) {
+      res.status(404).json({ success: false, message: 'Daily report not found' });
+      return;
+    }
     const report = await DailyReport.findById(id);
 
     if (!report) {
@@ -657,158 +647,119 @@ export async function updateDailyReport(req: AuthenticatedRequest, res: Response
       return;
     }
 
-    const {
-      titleOfWork,
-      workDate,
-      workSummary,
-      workItems,
-      labourBreakdown,
-      equipmentDetails,
-      issuesAndDelays,
-      nextDayPlan,
-      photos,
-      status,
-    } = req.body;
+    // In-Charges may only edit their own reports; MDs can correct any report in their projects.
+    const isAuthor = report.submittedBy.toString() === req.user!.userId;
+    if (!isAuthor && !isMD(req.user!.role)) {
+      res.status(403).json({ success: false, message: 'Only the In-Charge who created this report can edit it.' });
+      return;
+    }
 
-    if (titleOfWork) report.titleOfWork = titleOfWork.trim();
-    if (workDate) report.workDate = new Date(workDate);
-    if (workSummary) report.workSummary = workSummary.trim();
-    if (workItems !== undefined) {
-      const sanitizedWorkItems = Array.isArray(workItems)
-        ? workItems.map((item: any) => ({
-            description: String(item.description || '').trim(),
-            quantity: Math.max(0, Number(item.quantity) || 0),
-            unit: String(item.unit || '').trim(),
-            budget: Math.max(0, Number(item.budget) || 0),
-          }))
-        : [];
-      report.workItems = sanitizedWorkItems;
-      report.totalWorkBudget = sanitizedWorkItems.reduce(
-        (sum: number, item: any) => sum + (Number(item.budget) || 0),
-        0
-      );
+    const requestedStatus = req.body.status;
+    if (requestedStatus !== undefined && requestedStatus !== 'DRAFT' && requestedStatus !== 'SUBMITTED') {
+      res.status(400).json({ success: false, message: 'Invalid report status' });
+      return;
     }
-    if (labourBreakdown) {
-      report.labourBreakdown = labourBreakdown;
-      report.totalLabourCount = labourBreakdown.reduce(
-        (sum: number, item: { count: number }) => sum + (Number(item.count) || 0),
-        0
-      );
+    if (report.status === 'SUBMITTED' && requestedStatus === 'DRAFT') {
+      res.status(400).json({ success: false, message: 'A submitted report cannot be moved back to draft.' });
+      return;
     }
-    if (equipmentDetails !== undefined) report.equipmentDetails = equipmentDetails?.trim();
-    if (issuesAndDelays !== undefined) report.issuesAndDelays = issuesAndDelays?.trim();
-    if (nextDayPlan !== undefined) report.nextDayPlan = nextDayPlan?.trim();
-    if (photos) report.photos = photos;
-    if (status) report.status = status;
+
+    const { data, errors } = sanitizeReportInput(req.body, { partial: true });
+    const expenseInput = req.body.expenses !== undefined ? sanitizeReportExpenses(req.body.expenses) : null;
+    const allErrors = [...errors, ...(expenseInput?.errors || [])];
+    if (allErrors.length) {
+      res.status(400).json({ success: false, message: allErrors[0], errors: allErrors });
+      return;
+    }
+
+    const wasDraft = report.status === 'DRAFT';
+    Object.assign(report, data);
+    if (requestedStatus) report.status = requestedStatus;
+    const becameSubmitted = wasDraft && report.status === 'SUBMITTED';
+    if (report.status === 'SUBMITTED' && !String(report.workSummary || '').trim()) {
+      res.status(400).json({ success: false, message: 'Detailed work description is required before submitting.' });
+      return;
+    }
+    if (becameSubmitted) report.submittedAt = new Date();
 
     report.version = (report.version || 1) + 1;
     report.lastEditedBy = new mongoose.Types.ObjectId(req.user!.userId);
 
     await report.save();
 
+    if (expenseInput) {
+      // Sync against the pre-submission state so draft rows are edited, then promoted
+      const syncTarget = becameSubmitted ? Object.assign(report, { status: 'DRAFT' }) : report;
+      await syncReportExpenses(syncTarget, expenseInput.expenses, report.submittedBy.toString());
+      if (becameSubmitted) report.status = 'SUBMITTED';
+    }
+    if (becameSubmitted) await promoteDraftExpenses(report);
+
     await logAudit('DAILY_REPORT_UPDATED', req.user!.userId, 'DAILY_REPORT', report._id, {
       status: report.status,
       titleOfWork: report.titleOfWork,
       originalAuthor: report.submittedBy,
       editorRole: req.user!.role,
+      version: report.version,
     });
 
     if (report.status === 'SUBMITTED') {
       broadcastReportCreated({
         reportId: report._id.toString(),
         projectId: report.project.toString(),
-        submittedBy: req.user!.userId,
+        submittedBy: report.submittedBy.toString(),
         titleOfWork: report.titleOfWork,
       });
-
-      // Find project details to include in notification title and message
-      try {
-        const targetProjId = report.project.toString();
-        const projectDoc = await Project.findById(targetProjId).select('name code createdBy owner');
-        const projectName = projectDoc?.name || 'Construction Project';
-        const projectCode = projectDoc?.code || '';
-
-        // 1. Notify authorized MDs/Owners
-        const mdRecipients = await User.find({
-          role: { $in: ['MD', 'OWNER'] },
-          isActive: true,
-          $or: [
-            { _id: projectDoc?.createdBy },
-            { _id: projectDoc?.owner },
-            ...(projectDoc?.createdBy ? [] : [{}]),
-          ],
-        });
-        const targets = mdRecipients.length > 0 ? mdRecipients : await User.find({ role: { $in: ['MD', 'OWNER'] }, isActive: true });
-
-        for (const md of targets) {
-          if (md._id.toString() !== req.user!.userId) {
-            const notif = await Notification.create({
-              recipient: md._id,
-              sender: req.user!.userId,
-              project: targetProjId,
-              type: 'DAILY_REPORT_SUBMITTED',
-              title: `Daily Report Updated: ${report.titleOfWork || 'Site Progress Log'}`,
-              message: `${req.user!.name || 'Site In-Charge'} updated the daily report for ${projectName} (${projectCode}): "${report.titleOfWork}".`,
-              relatedEntity: 'DAILY_REPORT',
-              relatedId: report._id.toString(),
-              isRead: false,
-            });
-            emitToUser(md._id.toString(), 'notification:new', notif);
-          }
-        }
-
-        // 2. Site In-Charge confirmation notification
-        const inChargeNotif = await Notification.create({
-          recipient: req.user!.userId,
-          sender: req.user!.userId,
-          project: targetProjId,
-          type: 'DAILY_REPORT_SUBMITTED',
-          title: 'Report Updated Successfully',
-          message: `Your changes to daily report "${report.titleOfWork || 'Daily Work Log'}" for ${projectName} were saved.`,
-          relatedEntity: 'DAILY_REPORT',
-          relatedId: report._id.toString(),
-          isRead: false,
-        });
-        emitToUser(req.user!.userId, 'notification:new', inChargeNotif);
-      } catch (notifDispatchErr) {
-        console.error('Failed to dispatch report update notifications:', notifDispatchErr);
-      }
+      await dispatchReportNotifications(report, req.user!, becameSubmitted ? 'SUBMITTED' : 'UPDATED');
     }
 
     res.json({ success: true, message: 'Daily report updated successfully', report });
   } catch (error: any) {
+    if (error?.name === 'ValidationError') {
+      res.status(400).json({ success: false, message: 'Some report fields are invalid. Please review and try again.', error });
+      return;
+    }
     res.status(500).json({ success: false, message: 'Failed to update daily report', error: error.message });
   }
 }
 
 export async function getMissingReports(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
-    const activeProjects = await Project.find({ status: 'IN_PROGRESS' }).populate('assignedInCharge', 'name phone');
+    // Company isolation: only projects the caller can access
+    const accessibleIds = await getAccessibleProjectIds(req.user!);
+    const activeProjects = await Project.find({ _id: { $in: accessibleIds }, status: 'IN_PROGRESS' }).populate(
+      'assignedInCharge',
+      'name phone'
+    );
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const windowStart = new Date(today);
+    windowStart.setDate(today.getDate() - 7);
 
-    const missingRecords: Array<{
-      project: any;
-      date: string;
-      daysAgo: number;
-    }> = [];
+    // One query for all submitted reports in the window, grouped by project + calendar day
+    const submitted = await DailyReport.find({
+      project: { $in: activeProjects.map((p) => p._id) },
+      status: 'SUBMITTED',
+      workDate: { $gte: windowStart, $lt: today },
+    }).select('project workDate');
+    const submittedKeys = new Set(
+      submitted.map((r) => {
+        const d = new Date(r.workDate);
+        d.setHours(0, 0, 0, 0);
+        return `${r.project.toString()}|${d.getTime()}`;
+      })
+    );
+
+    const missingRecords: Array<{ project: any; date: string; daysAgo: number }> = [];
 
     for (const project of activeProjects) {
       for (let i = 1; i <= 7; i++) {
         const checkDate = new Date(today);
         checkDate.setDate(today.getDate() - i);
-        checkDate.setHours(0, 0, 0, 0);
 
         if (project.startDate && checkDate < project.startDate) continue;
-
-        const exists = await DailyReport.exists({
-          project: project._id,
-          workDate: checkDate,
-          status: 'SUBMITTED',
-        });
-
-        if (!exists) {
+        if (!submittedKeys.has(`${project._id.toString()}|${checkDate.getTime()}`)) {
           missingRecords.push({
             project: {
               _id: project._id,
@@ -816,7 +767,7 @@ export async function getMissingReports(req: AuthenticatedRequest, res: Response
               code: project.code,
               assignedInCharge: project.assignedInCharge,
             },
-            date: checkDate.toISOString().split('T')[0],
+            date: `${checkDate.getFullYear()}-${String(checkDate.getMonth() + 1).padStart(2, '0')}-${String(checkDate.getDate()).padStart(2, '0')}`,
             daysAgo: i,
           });
         }
@@ -834,7 +785,7 @@ export async function addDailyReportComment(req: AuthenticatedRequest, res: Resp
     const { id } = req.params;
     const { message, type = 'COMMENT' } = req.body;
 
-    if (!message || !message.trim()) {
+    if (typeof message !== 'string' || !message.trim() || message.length > 2000) {
       res.status(400).json({ success: false, message: 'Comment message is required' });
       return;
     }

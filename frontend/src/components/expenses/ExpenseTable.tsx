@@ -6,6 +6,7 @@ import { Button } from '../common/Button.js';
 import { formatINR } from '../../utils/currency.js';
 import { formatDate } from '../../utils/dates.js';
 
+import { SecureLink } from '../common/SecureMedia.js';
 interface ExpenseTableProps {
   expenses: Expense[];
   isOwner: boolean;
@@ -74,15 +75,12 @@ export const ExpenseTable: React.FC<ExpenseTableProps> = ({
                 </td>
                 <td className="py-3.5 px-4 text-center whitespace-nowrap">
                   {expense.receiptUrl ? (
-                    <a
-                      href={expense.receiptUrl}
-                      target="_blank"
-                      rel="noreferrer"
+                    <SecureLink href={expense.receiptUrl}
                       className="inline-flex items-center gap-1 text-[11px] font-semibold text-navy-800 hover:text-navy-950 hover:underline"
                     >
                       <ExternalLink className="w-3.5 h-3.5" />
                       <span>View</span>
-                    </a>
+                    </SecureLink>
                   ) : (
                     <span className="text-slate-400 text-[11px]">—</span>
                   )}

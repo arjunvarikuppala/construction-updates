@@ -7,6 +7,8 @@ import { DailyReport } from '../models/DailyReport.js';
 import { ProjectAssignment } from '../models/ProjectAssignment.js';
 import { AuthenticatedRequest, isMD, isSiteInCharge } from '../types/index.js';
 import { logAudit } from '../services/auditService.js';
+import { validatePasswordStrength } from '../utils/password.js';
+import { isInChargeInCompany } from '../services/tenantService.js';
 import { rupeesToPaise } from '../utils/currency.js';
 import { verifyUserProjectAccess } from '../middleware/auth.js';
 import { WeatherService } from '../services/weatherService.js';
@@ -53,7 +55,6 @@ export async function listProjects(req: AuthenticatedRequest, res: Response): Pr
       query.$or = [
         { createdBy: new mongoose.Types.ObjectId(user.userId) },
         { owner: new mongoose.Types.ObjectId(user.userId) },
-        { createdBy: { $exists: false } },
       ];
     }
 
@@ -265,7 +266,7 @@ export async function createProject(req: AuthenticatedRequest, res: Response): P
       status,
     } = req.body;
 
-    if (!name || !code || (!location && !address && !city)) {
+    if (typeof name !== 'string' || typeof code !== 'string' || !name.trim() || !code.trim() || (!location && !address && !city)) {
       res.status(400).json({
         success: false,
         message: 'Project name, unique project code, and site address/location are required',
@@ -287,8 +288,14 @@ export async function createProject(req: AuthenticatedRequest, res: Response): P
 
     let inChargeUserId: mongoose.Types.ObjectId | undefined = undefined;
     if (assignedInCharge) {
-      const inChargeUser = await User.findById(assignedInCharge);
-      if (!inChargeUser || !isSiteInCharge(inChargeUser.role)) {
+      const inChargeUser = mongoose.Types.ObjectId.isValid(String(assignedInCharge))
+        ? await User.findById(assignedInCharge)
+        : null;
+      if (
+        !inChargeUser ||
+        !isSiteInCharge(inChargeUser.role) ||
+        !(await isInChargeInCompany(req.user!.userId, inChargeUser._id.toString()))
+      ) {
         res.status(400).json({ success: false, message: 'Selected in-charge user is invalid or does not have in-charge role' });
         return;
       }
@@ -442,8 +449,14 @@ export async function updateProject(req: AuthenticatedRequest, res: Response): P
 
     if (assignedInCharge !== undefined && assignedInCharge !== oldInChargeId) {
       if (assignedInCharge) {
-        const newInCharge = await User.findById(assignedInCharge);
-        if (!newInCharge || !isSiteInCharge(newInCharge.role)) {
+        const newInCharge = mongoose.Types.ObjectId.isValid(String(assignedInCharge))
+          ? await User.findById(assignedInCharge)
+          : null;
+        if (
+          !newInCharge ||
+          !isSiteInCharge(newInCharge.role) ||
+          !(await isInChargeInCompany(req.user!.userId, newInCharge._id.toString()))
+        ) {
           res.status(400).json({ success: false, message: 'Assigned user is not a valid in-charge' });
           return;
         }
@@ -494,7 +507,12 @@ export async function updateProject(req: AuthenticatedRequest, res: Response): P
 export async function getProjectAssignments(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
     const { id } = req.params;
-    const project = await Project.findById(id).populate('assignedInCharge', 'name email phone role');
+    const access = await verifyUserProjectAccess(String(id), req.user!.userId, req.user!.role);
+    if (!access.allowed || !access.project) {
+      res.status(404).json({ success: false, message: 'Project not found' });
+      return;
+    }
+    const project = await Project.findById(access.project._id).populate('assignedInCharge', 'name email phone role');
     if (!project) {
       res.status(404).json({ success: false, message: 'Project not found' });
       return;
@@ -545,8 +563,9 @@ export async function assignProjectInCharge(req: AuthenticatedRequest, res: Resp
         res.status(400).json({ success: false, message: 'Name, email, and explicit password are required for new account' });
         return;
       }
-      if (password.length < 6) {
-        res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
+      const passwordError = validatePasswordStrength(password);
+      if (passwordError) {
+        res.status(400).json({ success: false, message: passwordError });
         return;
       }
 
@@ -565,6 +584,7 @@ export async function assignProjectInCharge(req: AuthenticatedRequest, res: Resp
           role: 'SITE_INCHARGE',
           phone: phone?.trim(),
           isActive: true,
+          createdByMD: req.user!.userId,
           assignedProjects: [project._id],
         });
         targetUserId = createdUser._id.toString();
@@ -576,8 +596,14 @@ export async function assignProjectInCharge(req: AuthenticatedRequest, res: Resp
         });
       }
     } else if (siteInChargeId) {
-      const inChargeUser = await User.findById(siteInChargeId);
-      if (!inChargeUser || !isSiteInCharge(inChargeUser.role)) {
+      const inChargeUser = mongoose.Types.ObjectId.isValid(String(siteInChargeId))
+        ? await User.findById(siteInChargeId)
+        : null;
+      if (
+        !inChargeUser ||
+        !isSiteInCharge(inChargeUser.role) ||
+        !(await isInChargeInCompany(req.user!.userId, inChargeUser._id.toString()))
+      ) {
         res.status(400).json({ success: false, message: 'Selected user is not a valid Site In-Charge' });
         return;
       }

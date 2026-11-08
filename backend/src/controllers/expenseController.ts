@@ -7,6 +7,9 @@ import { AuthenticatedRequest, isMD, isSiteInCharge } from '../types/index.js';
 import { logAudit } from '../services/auditService.js';
 import { rupeesToPaise } from '../utils/currency.js';
 import { verifyUserProjectAccess } from '../middleware/auth.js';
+import { getAccessibleProjectIds } from '../services/tenantService.js';
+import { escapeRegex, parseDate } from '../utils/validation.js';
+import { EXPENSE_CATEGORIES, isAcceptableMediaUrl } from '../services/reportService.js';
 
 export async function listExpenses(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
@@ -17,72 +20,45 @@ export async function listExpenses(req: AuthenticatedRequest, res: Response): Pr
 
     if (projectId) {
       const accessCheck = await verifyUserProjectAccess(String(projectId), user.userId, user.role);
-      if (!accessCheck.allowed) {
+      if (!accessCheck.allowed || !accessCheck.project) {
         res.status(403).json({ success: false, message: 'Forbidden. You do not have access to this project.' });
         return;
       }
-      query.project = new mongoose.Types.ObjectId(String(projectId));
-    } else if (isSiteInCharge(user.role)) {
-      const activeAssignments = await ProjectAssignment.find({
-        siteInCharge: new mongoose.Types.ObjectId(user.userId),
-        assignmentStatus: 'ACTIVE',
-      }).select('project');
-
-      const revokedAssignments = await ProjectAssignment.find({
-        siteInCharge: new mongoose.Types.ObjectId(user.userId),
-        assignmentStatus: 'REVOKED',
-      }).select('project');
-
-      const revokedSet = new Set(revokedAssignments.map((a) => a.project.toString()));
-      const activeProjectIds = new Set<string>();
-
-      activeAssignments.forEach((a) => {
-        if (!revokedSet.has(a.project.toString())) {
-          activeProjectIds.add(a.project.toString());
-        }
-      });
-
-      const legacyProjects = await Project.find({
-        assignedInCharge: new mongoose.Types.ObjectId(user.userId),
-        _id: { $nin: revokedAssignments.map((a) => a.project) },
-      }).select('_id');
-
-      legacyProjects.forEach((p) => activeProjectIds.add(p._id.toString()));
-
-      query.project = {
-        $in: Array.from(activeProjectIds).map((id) => new mongoose.Types.ObjectId(id)),
-      };
-    } else if (isMD(user.role)) {
-      const authorizedProjects = await Project.find({
-        $or: [
-          { createdBy: new mongoose.Types.ObjectId(user.userId) },
-          { owner: new mongoose.Types.ObjectId(user.userId) },
-          { createdBy: { $exists: false } },
-        ],
-      }).select('_id');
-      query.project = { $in: authorizedProjects.map((p) => p._id) };
+      query.project = accessCheck.project._id;
+    } else {
+      query.project = { $in: await getAccessibleProjectIds(user) };
     }
 
-    if (status && status !== 'ALL') {
+    if (typeof status === 'string' && status !== 'ALL') {
       query.status = status;
     }
 
-    if (category && category !== 'ALL') {
+    // Draft expenses are private to the person who created them
+    if (query.status !== 'PENDING' && query.status !== 'APPROVED' && query.status !== 'REJECTED') {
+      query.$and = [{ $or: [{ status: { $ne: 'DRAFT' } }, { submittedBy: new mongoose.Types.ObjectId(user.userId) }] }];
+    }
+
+    if (typeof category === 'string' && category !== 'ALL') {
       query.category = category;
     }
 
-    if (startDate || endDate) {
+    const start = parseDate(startDate);
+    const end = parseDate(endDate);
+    if (start || end) {
       query.date = {};
-      if (startDate) query.date.$gte = new Date(String(startDate));
-      if (endDate) {
-        const end = new Date(String(endDate));
+      if (start) query.date.$gte = start;
+      if (end) {
         end.setHours(23, 59, 59, 999);
         query.date.$lte = end;
       }
     }
 
+    if (req.query.dailyReport && mongoose.Types.ObjectId.isValid(String(req.query.dailyReport))) {
+      query.dailyReport = new mongoose.Types.ObjectId(String(req.query.dailyReport));
+    }
+
     if (search) {
-      const searchStr = String(search).trim();
+      const searchStr = escapeRegex(String(search).trim());
       query.$or = [
         { description: { $regex: searchStr, $options: 'i' } },
         { vendor: { $regex: searchStr, $options: 'i' } },
@@ -144,6 +120,27 @@ export async function createExpense(req: AuthenticatedRequest, res: Response): P
       return;
     }
 
+    if (typeof description !== 'string' || typeof vendor !== 'string' || !EXPENSE_CATEGORIES.includes(category)) {
+      res.status(400).json({ success: false, message: 'Invalid expense category, description or vendor' });
+      return;
+    }
+
+    if (!parseDate(date)) {
+      res.status(400).json({ success: false, message: 'A valid expense date is required' });
+      return;
+    }
+
+    if (receiptUrl && !isAcceptableMediaUrl(receiptUrl)) {
+      res.status(400).json({ success: false, message: 'Receipt attachment is invalid. Please re-upload it.' });
+      return;
+    }
+
+    const numericAmount = Number(amount);
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+      res.status(400).json({ success: false, message: 'Amount must be greater than zero' });
+      return;
+    }
+
     const accessCheck = await verifyUserProjectAccess(project, req.user!.userId, req.user!.role);
     if (!accessCheck.allowed) {
       res.status(403).json({ success: false, message: 'Forbidden. You are not authorized to submit expenses for this project.' });
@@ -152,8 +149,8 @@ export async function createExpense(req: AuthenticatedRequest, res: Response): P
 
     const projectDoc = accessCheck.project!;
 
-    const amountInPaise = req.body.isPaise ? amount : rupeesToPaise(amount);
-    if (amountInPaise <= 0) {
+    const amountInPaise = req.body.isPaise === true ? numericAmount : rupeesToPaise(numericAmount);
+    if (!Number.isInteger(amountInPaise) || amountInPaise < 100) {
       res.status(400).json({ success: false, message: 'Amount must be greater than zero' });
       return;
     }
@@ -238,6 +235,11 @@ export async function approveExpense(req: AuthenticatedRequest, res: Response): 
       return;
     }
 
+    if (expense.status === 'DRAFT') {
+      res.status(400).json({ success: false, message: 'Draft expenses cannot be approved until they are submitted.' });
+      return;
+    }
+
     expense.status = 'APPROVED';
     expense.reviewedBy = new mongoose.Types.ObjectId(req.user!.userId);
     expense.reviewedAt = new Date();
@@ -286,6 +288,11 @@ export async function rejectExpense(req: AuthenticatedRequest, res: Response): P
 
     if (expense.status === 'APPROVED') {
       res.status(400).json({ success: false, message: 'Approved expenses cannot be silently modified or rejected' });
+      return;
+    }
+
+    if (expense.status === 'DRAFT') {
+      res.status(400).json({ success: false, message: 'Draft expenses cannot be rejected until they are submitted.' });
       return;
     }
 

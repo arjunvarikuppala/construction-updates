@@ -19,6 +19,8 @@ export interface IExpense extends Document {
   paymentStatus?: 'UNPAID' | 'PAYMENT_REQUESTED' | 'PAID';
   paymentRequestId?: mongoose.Types.ObjectId;
   paidAt?: Date;
+  /** Daily report this expense was recorded in (optional; standalone expenses have none) */
+  dailyReport?: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -121,6 +123,11 @@ const ExpenseSchema = new Schema<IExpense>(
     },
     paidAt: {
       type: Date,
+    },
+    dailyReport: {
+      type: Schema.Types.ObjectId,
+      ref: 'DailyReport',
+      index: true,
     },
   },
   {

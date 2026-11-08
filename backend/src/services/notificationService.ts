@@ -1,7 +1,8 @@
 import mongoose from 'mongoose';
 import { Notification, NotificationType, NotificationRelatedEntity } from '../models/Notification.js';
 import { User } from '../models/User.js';
-import { emitToUser, emitToMDs } from './socketService.js';
+import { emitToUser } from './socketService.js';
+import { getProjectMDIds } from './tenantService.js';
 
 export async function createNotification(params: {
   recipient: string | mongoose.Types.ObjectId;
@@ -53,7 +54,11 @@ export async function createNotification(params: {
   }
 }
 
-export async function notifyAllMDs(params: {
+/**
+ * Notify the MD/Owner(s) of the given project only. Never broadcasts across companies:
+ * when no project is supplied nothing is sent.
+ */
+export async function notifyProjectMDs(params: {
   sender?: string | mongoose.Types.ObjectId;
   project?: string | mongoose.Types.ObjectId;
   type: NotificationType;
@@ -64,7 +69,12 @@ export async function notifyAllMDs(params: {
   excludeUserId?: string;
 }) {
   try {
-    const mds = await User.find({ role: 'MD', isActive: true });
+    if (!params.project) {
+      console.warn('notifyProjectMDs called without a project; skipping to preserve company isolation.');
+      return;
+    }
+    const mdIds = await getProjectMDIds(params.project);
+    const mds = await User.find({ _id: { $in: mdIds }, role: { $in: ['MD', 'OWNER'] }, isActive: true });
     for (const md of mds) {
       if (params.excludeUserId && md._id.toString() === params.excludeUserId) {
         continue;
@@ -78,3 +88,6 @@ export async function notifyAllMDs(params: {
     console.error('Failed to notify MDs:', err);
   }
 }
+
+/** @deprecated kept for backward compatibility; scoped to the project's MDs. */
+export const notifyAllMDs = notifyProjectMDs;
