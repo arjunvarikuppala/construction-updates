@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
-export type PayeeType = 'CONTRACTOR' | 'SUPPLIER' | 'LABOUR';
+export type PayeeType = 'CONTRACTOR' | 'SUPPLIER' | 'LABOUR' | 'SITE_INCHARGE';
 export type BeneficiaryVerificationStatus = 'UNVERIFIED' | 'VERIFIED' | 'FAILED';
 
 export interface IBeneficiary extends Document {

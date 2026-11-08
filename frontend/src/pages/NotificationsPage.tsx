@@ -79,7 +79,7 @@ export const NotificationsPage: React.FC = () => {
     }
 
     if (n.relatedEntity === 'PAYMENT_REQUEST') {
-      navigate('/payments');
+      navigate(n.relatedId ? `/payments?id=${n.relatedId}` : '/payments');
     } else if (n.relatedEntity === 'PROJECT_MESSAGE') {
       const projId = n.project?._id || n.project?.code || n.relatedId;
       navigate(projId ? `/messages/${projId}` : '/messages');
@@ -166,10 +166,15 @@ export const NotificationsPage: React.FC = () => {
             Report submitted
           </span>
         );
-      case 'PAYMENT_REQUEST_AUTHORIZED':
       case 'PAYMENT_REQUEST_PAID':
         return (
           <span className="inline-flex items-center text-[10px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+            Paid
+          </span>
+        );
+      case 'PAYMENT_REQUEST_AUTHORIZED':
+        return (
+          <span className="inline-flex items-center text-[10px] font-semibold text-sky-800 bg-sky-50 border border-sky-200 px-2 py-0.5 rounded-md">
             Payment approved
           </span>
         );

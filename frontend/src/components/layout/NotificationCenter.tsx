@@ -146,7 +146,7 @@ export const NotificationCenter: React.FC = () => {
 
     // Navigate to related entity
     if (notification.relatedEntity === 'PAYMENT_REQUEST') {
-      navigate('/payments');
+      navigate(notification.relatedId ? `/payments?id=${notification.relatedId}` : '/payments');
     } else if (notification.relatedEntity === 'PROJECT_MESSAGE') {
       const projId = notification.project?._id || notification.project?.code || notification.relatedId;
       navigate(projId ? `/messages/${projId}` : '/messages');
@@ -228,8 +228,13 @@ export const NotificationCenter: React.FC = () => {
             Report submitted
           </span>
         );
-      case 'PAYMENT_REQUEST_AUTHORIZED':
       case 'PAYMENT_REQUEST_PAID':
+        return (
+          <span className="inline-flex items-center text-[10px] font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md">
+            Paid
+          </span>
+        );
+      case 'PAYMENT_REQUEST_AUTHORIZED':
         return (
           <span className="inline-flex items-center text-[10px] font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md">
             Payment approved

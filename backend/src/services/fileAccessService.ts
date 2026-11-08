@@ -65,7 +65,7 @@ async function findReferencingProjectIds(filename: string): Promise<string[]> {
   const [reports, expenses, payments, messages] = await Promise.all([
     DailyReport.find({ 'photos.url': pattern }).select('project'),
     Expense.find({ receiptUrl: pattern }).select('project'),
-    PaymentRequest.find({ invoiceUrl: pattern }).select('project'),
+    PaymentRequest.find({ $or: [{ invoiceUrl: pattern }, { 'settlements.proofUrl': pattern }] }).select('project'),
     ProjectMessage.find({ 'attachments.url': pattern }).select('project'),
   ]);
   const ids = new Set<string>();

@@ -1,24 +1,21 @@
-import React, { useState, useEffect } from 'react';
-import { localDateString } from '../../utils/dates.js';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  CreditCard,
-  X,
-  Building2,
-  Users,
-  QrCode,
-  FileText,
-  Upload,
-  Calendar,
-  AlertTriangle,
-  CheckCircle2,
-} from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { QrCode, Upload, CheckCircle2, X, UserRound, Store, Send } from 'lucide-react';
 import { api } from '../../api/client.js';
+import { Modal } from '../common/Modal.js';
 import { Button } from '../common/Button.js';
+import { Input, Select, Textarea } from '../common/Input.js';
 import { useToast } from '../../context/ToastContext.js';
-import { Beneficiary, PaymentMethod, Expense } from '../../types/index.js';
+import { useAuth } from '../../context/AuthContext.js';
+import type { Beneficiary, Expense, PayeeKind, ProjectAssignment } from '../../types/index.js';
+import { localDateString } from '../../utils/dates.js';
+import { uploadFileWithProgress } from '../../utils/upload.js';
+import { inr, isValidVpa, newSettlementKey, rememberVpa, rememberedVpa } from '../../utils/payments.js';
 import { UPIQRScannerModal } from './UPIQRScannerModal.js';
 import { BeneficiaryModal } from './BeneficiaryModal.js';
+import { PayFields, PayDraft, emptyPayDraft, payDraftProblems, payDraftToPayload } from './PayFields.js';
+
+const NO_SPIN = '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none';
 
 interface PaymentRequestModalProps {
   isOpen: boolean;
@@ -27,466 +24,418 @@ interface PaymentRequestModalProps {
   defaultExpenseId?: string;
 }
 
+/**
+ * Site In-Charge: ask the MD to pay you (reimbursement / site advance) or a vendor.
+ * MD: add a payment to make later, or record one already made ("I have paid this").
+ */
 export const PaymentRequestModal: React.FC<PaymentRequestModalProps> = ({
   isOpen,
   onClose,
   defaultProjectId,
   defaultExpenseId,
 }) => {
-  const { showToast } = useToast();
+  const { success, error: toastError, showToast } = useToast();
+  const { isOwner, user } = useAuth();
   const queryClient = useQueryClient();
 
-  // Form states
   const [projectId, setProjectId] = useState(defaultProjectId || '');
+  const [payeeKind, setPayeeKind] = useState<PayeeKind>('INCHARGE');
+  const [payeeUserId, setPayeeUserId] = useState('');
+  const [payeeVpa, setPayeeVpa] = useState('');
   const [beneficiaryId, setBeneficiaryId] = useState('');
-  const [amountInr, setAmountInr] = useState<number | ''>('');
+  const [amount, setAmount] = useState('');
   const [purpose, setPurpose] = useState('');
-  const [preferredMethod, setPreferredMethod] = useState<PaymentMethod>('NEFT');
-  const [relatedExpenseId, setRelatedExpenseId] = useState(defaultExpenseId || '');
-  const [requestedDate, setRequestedDate] = useState(localDateString());
+  const [expenseId, setExpenseId] = useState(defaultExpenseId || '');
+  const [neededBy, setNeededBy] = useState('');
   const [remarks, setRemarks] = useState('');
-  const [invoiceUrl, setInvoiceUrl] = useState('');
-  const [invoiceFileName, setInvoiceFileName] = useState('');
-  const [isUploading, setIsUploading] = useState(false);
+  const [bill, setBill] = useState<{ url: string; name: string } | null>(null);
+  const [uploading, setUploading] = useState(0);
+  const [paidAlready, setPaidAlready] = useState(false);
+  const [payDraft, setPayDraft] = useState<PayDraft>(() => emptyPayDraft(0, false));
+  const [settlementKey, setSettlementKey] = useState(newSettlementKey);
+  const [saving, setSaving] = useState(false);
+  const [showErrors, setShowErrors] = useState(false);
 
-  // Modals for QR scanner & Add Beneficiary
   const [isQrScannerOpen, setIsQrScannerOpen] = useState(false);
   const [isBeneficiaryModalOpen, setIsBeneficiaryModalOpen] = useState(false);
-  const [scannedInitialVpa, setScannedInitialVpa] = useState('');
-  const [scannedInitialName, setScannedInitialName] = useState('');
+  const [scannedVpa, setScannedVpa] = useState('');
+  const [scannedName, setScannedName] = useState('');
 
-  // Fetch projects
+  // Reset each time it opens
+  useEffect(() => {
+    if (!isOpen) return;
+    setProjectId(defaultProjectId || '');
+    setPayeeKind('INCHARGE');
+    setPayeeUserId('');
+    setPayeeVpa(isOwner ? '' : rememberedVpa());
+    setBeneficiaryId('');
+    setAmount('');
+    setPurpose('');
+    setExpenseId(defaultExpenseId || '');
+    setNeededBy('');
+    setRemarks('');
+    setBill(null);
+    setPaidAlready(false);
+    setPayDraft(emptyPayDraft(0, false));
+    setSettlementKey(newSettlementKey());
+    setShowErrors(false);
+  }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const { data: projectsData } = useQuery({
     queryKey: ['projects'],
-    queryFn: () => api.get<{ success: boolean; projects: any[] }>('/projects'),
+    queryFn: () => api.get<{ projects: any[] }>('/projects'),
+    enabled: isOpen,
   });
   const projects = projectsData?.projects || [];
+  useEffect(() => {
+    if (isOpen && !projectId && projects.length === 1) setProjectId(projects[0]._id || projects[0].id);
+  }, [isOpen, projects, projectId]);
 
-  // Fetch beneficiaries
   const { data: beneficiariesData } = useQuery({
     queryKey: ['beneficiaries'],
-    queryFn: () => api.get<{ success: boolean; beneficiaries: Beneficiary[] }>('/payments/beneficiaries'),
+    queryFn: () => api.get<{ beneficiaries: Beneficiary[] }>('/payments/beneficiaries'),
+    enabled: isOpen,
   });
   const beneficiaries = beneficiariesData?.beneficiaries || [];
 
-  // Fetch approved/unpaid expenses for the project to link
+  const { data: assignmentsData } = useQuery({
+    queryKey: ['project-assignments', projectId],
+    queryFn: () => api.get<{ assignments: ProjectAssignment[] }>(`/projects/${projectId}/assignments`),
+    enabled: isOpen && isOwner && Boolean(projectId),
+  });
+  const inCharges = (assignmentsData?.assignments || []).filter((a) => a.assignmentStatus === 'ACTIVE' && a.siteInCharge);
+
   const { data: expensesData } = useQuery({
     queryKey: ['project-expenses-unpaid', projectId],
-    queryFn: () => api.get<{ success: boolean; expenses: Expense[] }>(`/expenses?project=${projectId}`),
-    enabled: Boolean(projectId),
+    queryFn: () => api.get<{ expenses: Expense[] }>(`/expenses?projectId=${projectId}`),
+    enabled: isOpen && Boolean(projectId),
   });
-  const expenses = expensesData?.expenses || [];
+  const linkableExpenses = (expensesData?.expenses || []).filter(
+    (e: any) => e.status !== 'REJECTED' && (!e.paymentStatus || e.paymentStatus === 'UNPAID')
+  );
 
-  // Submit payment request mutation
-  const createRequestMutation = useMutation({
-    mutationFn: (data: any) => api.post('/payments/requests', data),
-    onSuccess: () => {
-      showToast('Payment request submitted successfully for review', 'success');
-      queryClient.invalidateQueries({ queryKey: ['payment-requests'] });
-      queryClient.invalidateQueries({ queryKey: ['payment-stats'] });
-      onClose();
-    },
-    onError: (err: any) => {
-      showToast(err.message || 'Failed to submit payment request', 'error');
-    },
-  });
+  const selectedBeneficiary = beneficiaries.find((b) => (b._id || b.id) === beneficiaryId);
+  const selectedInCharge = inCharges.find((a) => a.siteInCharge._id === payeeUserId)?.siteInCharge;
+  const amountPaise = Math.round((parseFloat(amount) || 0) * 100);
+  const payeeName =
+    payeeKind === 'VENDOR' ? selectedBeneficiary?.name || '' : isOwner ? selectedInCharge?.name || '' : user?.name || '';
+  const effectiveVpa = payeeKind === 'VENDOR' ? selectedBeneficiary?.vpa || '' : payeeVpa.trim().toLowerCase();
 
-  // Handle invoice file upload
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Pre-fill the amount paid with the full request amount
+  useEffect(() => {
+    if (paidAlready) setPayDraft((d) => ({ ...d, amount: amount, mode: effectiveVpa ? d.mode : d.mode === 'UPI' ? 'BANK_TRANSFER' : d.mode }));
+  }, [paidAlready]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const problems = useMemo(() => {
+    const p: string[] = [];
+    if (!projectId) p.push('choose the site');
+    if (payeeKind === 'VENDOR' && !beneficiaryId) p.push('choose or add the vendor');
+    if (payeeKind === 'INCHARGE' && isOwner && !payeeUserId) p.push('choose the Site In-Charge');
+    if (payeeKind === 'INCHARGE' && payeeVpa.trim() && !isValidVpa(payeeVpa)) p.push('the UPI ID does not look right');
+    if (amountPaise < 100) p.push('enter the amount');
+    if (!purpose.trim()) p.push('say what the payment is for');
+    if (paidAlready) p.push(...payDraftProblems(payDraft, amountPaise));
+    return p;
+  }, [projectId, payeeKind, beneficiaryId, isOwner, payeeUserId, payeeVpa, amountPaise, purpose, paidAlready, payDraft]);
+
+  const onBill = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
-
+    setUploading(1);
     try {
-      setIsUploading(true);
-      const formData = new FormData();
-      formData.append('receipt', file);
-
-      const res = await api.post<{ success: boolean; receiptUrl: string }>(
-        '/expenses/upload-receipt',
-        formData
-      );
-
-      if (res.success && res.receiptUrl) {
-        setInvoiceUrl(res.receiptUrl);
-        setInvoiceFileName(file.name);
-        showToast('Invoice document uploaded', 'success');
-      }
+      const up = await uploadFileWithProgress(file, (pct) => setUploading(Math.max(1, pct)));
+      setBill({ url: up.url, name: up.originalName });
     } catch (err: any) {
-      showToast(err.message || 'Failed to upload invoice document', 'error');
+      toastError(err.message || 'Upload failed');
     } finally {
-      setIsUploading(false);
+      setUploading(0);
     }
   };
 
-  // Callback from QR Scanner
-  const handleBeneficiaryScanned = (scanned: {
-    vpa: string;
-    payeeName?: string;
-    amountInr?: number;
-    transactionNote?: string;
-  }) => {
-    if (scanned.amountInr && scanned.amountInr > 0) {
-      setAmountInr(scanned.amountInr);
-    }
-    if (scanned.transactionNote) {
-      setPurpose(scanned.transactionNote);
-    }
-    setPreferredMethod('UPI');
-
-    // Check if beneficiary already exists with this VPA
-    const matched = beneficiaries.find(
-      (b) => b.vpa?.toLowerCase() === scanned.vpa.toLowerCase()
-    );
-
+  const handleScanned = (scanned: { vpa: string; payeeName?: string; amountInr?: number; transactionNote?: string }) => {
+    if (scanned.amountInr && scanned.amountInr > 0) setAmount(String(scanned.amountInr));
+    if (scanned.transactionNote && !purpose) setPurpose(scanned.transactionNote);
+    setPayeeKind('VENDOR');
+    const matched = beneficiaries.find((b) => b.vpa?.toLowerCase() === scanned.vpa.toLowerCase());
     if (matched) {
       setBeneficiaryId(matched._id || matched.id || '');
-      showToast(`Selected existing beneficiary: ${matched.name}`, 'info');
+      showToast(`Selected ${matched.name}`, 'info');
     } else {
-      // Prompt user to add this new beneficiary
-      setScannedInitialVpa(scanned.vpa);
-      setScannedInitialName(scanned.payeeName || '');
+      setScannedVpa(scanned.vpa);
+      setScannedName(scanned.payeeName || '');
       setIsBeneficiaryModalOpen(true);
     }
   };
 
-  const selectedBeneficiary = beneficiaries.find(
-    (b) => (b._id || b.id) === beneficiaryId
-  );
-
-  // Method suitability warnings
-  const amountVal = Number(amountInr) || 0;
-  const isHighValue = amountVal >= 100000;
-  const rtgsUnderLimit = preferredMethod === 'RTGS' && amountVal > 0 && amountVal < 200000;
-  const upiOverLimit = preferredMethod === 'UPI' && amountVal > 100000;
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!projectId) {
-      showToast('Please select a project', 'error');
+  const submit = async () => {
+    if (problems.length) {
+      setShowErrors(true);
       return;
     }
-    if (!beneficiaryId) {
-      showToast('Please select or add a beneficiary', 'error');
-      return;
+    setSaving(true);
+    try {
+      const res = await api.post<{ message: string }>('/payments/requests', {
+        projectId,
+        payeeKind,
+        payeeUserId: payeeKind === 'INCHARGE' && isOwner ? payeeUserId : undefined,
+        payeeVpa: payeeKind === 'INCHARGE' && payeeVpa.trim() ? payeeVpa.trim().toLowerCase() : undefined,
+        beneficiaryId: payeeKind === 'VENDOR' ? beneficiaryId : undefined,
+        amountRupees: amount,
+        paymentMethod: effectiveVpa ? 'UPI' : 'NEFT',
+        purpose: purpose.trim(),
+        expenseId: expenseId || undefined,
+        requestedPaymentDate: neededBy || undefined,
+        invoiceUrl: bill?.url,
+        inchargeRemarks: remarks.trim() || undefined,
+        payNow: isOwner && paidAlready ? payDraftToPayload(payDraft, settlementKey) : undefined,
+      });
+      if (payeeKind === 'INCHARGE' && !isOwner && payeeVpa.trim()) rememberVpa(payeeVpa.trim().toLowerCase());
+      success(res.message || 'Saved');
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['payment-requests'] }),
+        queryClient.invalidateQueries({ queryKey: ['payment-summary'] }),
+        queryClient.invalidateQueries({ queryKey: ['project-expenses-unpaid'] }),
+      ]);
+      onClose();
+    } catch (err: any) {
+      setSettlementKey(newSettlementKey());
+      toastError(err.message || 'Could not save the payment request');
+    } finally {
+      setSaving(false);
     }
-    if (!amountInr || amountInr <= 0) {
-      showToast('Please enter a valid amount', 'error');
-      return;
-    }
-    if (rtgsUnderLimit) {
-      showToast('RTGS requires a minimum amount of ₹2,00,000 as per RBI guidelines. Choose NEFT instead.', 'error');
-      return;
-    }
-    if (upiOverLimit) {
-      showToast('UPI standard limit is ₹1,00,000 per transaction as per NPCI guidelines. Choose NEFT or RTGS instead.', 'error');
-      return;
-    }
-
-    createRequestMutation.mutate({
-      project: projectId,
-      beneficiary: beneficiaryId,
-      amountPaise: Math.round(Number(amountInr) * 100),
-      preferredMethod,
-      purpose: purpose.trim(),
-      relatedExpense: relatedExpenseId || undefined,
-      requestedDate: requestedDate || undefined,
-      invoiceUrl: invoiceUrl || undefined,
-      remarks: remarks.trim() || undefined,
-    });
   };
 
-  if (!isOpen) return null;
+  const submitLabel = isOwner ? (paidAlready ? 'Save & record payment' : 'Add payment to make') : 'Send to MD';
 
   return (
     <>
-      <div className="fixed inset-0 z-50 bg-navy-950/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
-        <div className="bg-white rounded-3xl max-w-xl w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[88dvh] sm:max-h-[92vh] animate-in fade-in zoom-in-95 duration-150">
-          {/* Header */}
-          <div className="px-4 sm:px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/60 shrink-0">
-            <div className="flex items-center gap-2.5 min-w-0 pr-2">
-              <div className="w-9 h-9 rounded-xl bg-amber-500 text-navy-950 flex items-center justify-center font-bold shrink-0">
-                <CreditCard className="w-5 h-5" />
-              </div>
-              <div className="min-w-0">
-                <h3 className="text-base font-extrabold text-navy-950 truncate">New Payment Request</h3>
-                <p className="text-[11px] text-slate-500 truncate">Submit payout request to MD for authorization</p>
-              </div>
+      <Modal
+        isOpen={isOpen}
+        onClose={saving ? () => undefined : onClose}
+        title={isOwner ? 'New payment' : 'Request a payment'}
+        description={isOwner ? 'Pay a Site In-Charge or a vendor' : 'The MD approves by paying — you are notified when it is paid'}
+        size="lg"
+        footer={
+          <>
+            <Button variant="ghost" onClick={onClose} disabled={saving}>
+              Cancel
+            </Button>
+            <Button onClick={submit} isLoading={saving} leftIcon={<Send className="w-4 h-4" />}>
+              {submitLabel}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Select
+            label="Site"
+            value={projectId}
+            onChange={(e) => {
+              setProjectId(e.target.value);
+              setPayeeUserId('');
+              setExpenseId('');
+            }}
+            options={[
+              { value: '', label: 'Choose the site' },
+              ...projects.map((p: any) => ({ value: p._id || p.id, label: `${p.code} – ${p.name}` })),
+            ]}
+          />
+
+          <div>
+            <span className="block text-xs font-semibold text-slate-700 mb-1.5">Who gets the money?</span>
+            <div role="radiogroup" aria-label="Who gets the money" className="grid grid-cols-2 gap-2">
+              {[
+                { kind: 'INCHARGE' as const, icon: UserRound, label: isOwner ? 'Site In-Charge' : 'Me', sub: isOwner ? 'Advance / reimbursement' : 'Reimburse me / site advance' },
+                { kind: 'VENDOR' as const, icon: Store, label: 'Vendor', sub: 'Contractor, supplier, labour' },
+              ].map((o) => (
+                <button
+                  key={o.kind}
+                  type="button"
+                  role="radio"
+                  aria-checked={payeeKind === o.kind}
+                  onClick={() => setPayeeKind(o.kind)}
+                  className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition ${
+                    payeeKind === o.kind ? 'border-navy-900 bg-navy-50 ring-1 ring-navy-900' : 'border-slate-300 bg-white hover:bg-slate-50'
+                  }`}
+                >
+                  <o.icon className={`w-5 h-5 shrink-0 ${payeeKind === o.kind ? 'text-navy-900' : 'text-slate-400'}`} />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-bold text-navy-950">{o.label}</span>
+                    <span className="block text-[11px] text-slate-500 truncate">{o.sub}</span>
+                  </span>
+                </button>
+              ))}
             </div>
-            <button
-              onClick={onClose}
-              aria-label="Close dialog"
-              className="p-2 min-w-[40px] min-h-[40px] flex items-center justify-center text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 shrink-0"
-            >
-              <X className="w-5 h-5" />
-            </button>
           </div>
 
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="p-4 sm:p-6 overflow-y-auto space-y-4 overscroll-contain flex-1">
-            {/* Project Selection */}
-            <div>
-              <label className="block text-xs font-bold text-navy-950 uppercase tracking-wider mb-1.5">
-                Target Project *
-              </label>
-              <select
-                required
-                value={projectId}
-                onChange={(e) => setProjectId(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm text-slate-800 bg-white focus:ring-2 focus:ring-amber-500 outline-none"
-              >
-                <option value="">-- Select Project --</option>
-                {projects.map((p) => (
-                  <option key={p._id || p.id} value={p._id || p.id}>
-                    [{p.code}] {p.name}
-                  </option>
-                ))}
-              </select>
+          {payeeKind === 'INCHARGE' ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {isOwner && (
+                <Select
+                  label="Site In-Charge"
+                  value={payeeUserId}
+                  onChange={(e) => setPayeeUserId(e.target.value)}
+                  disabled={!projectId}
+                  options={[
+                    { value: '', label: projectId ? (inCharges.length ? 'Choose' : 'No In-Charge on this site') : 'Choose the site first' },
+                    ...inCharges.map((a) => ({ value: a.siteInCharge._id, label: a.siteInCharge.name })),
+                  ]}
+                />
+              )}
+              <Input
+                label={isOwner ? 'Their UPI ID (optional)' : 'Your UPI ID (optional)'}
+                value={payeeVpa}
+                autoCapitalize="none"
+                inputMode="email"
+                maxLength={100}
+                onChange={(e) => setPayeeVpa(e.target.value.replace(/\s+/g, ''))}
+                error={payeeVpa && !isValidVpa(payeeVpa) && payeeVpa.includes('@') && payeeVpa.split('@')[1].length > 1 ? 'Check the UPI ID' : undefined}
+                helperText="Lets the MD pay with one tap from their UPI app"
+              />
             </div>
-
-            {/* Beneficiary Header + Actions */}
+          ) : (
             <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs font-bold text-navy-950 uppercase tracking-wider">
-                  Beneficiary (Contractor / Supplier / Labour) *
-                </label>
-                <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between mb-1.5 gap-2">
+                <span className="text-xs font-semibold text-slate-700">Vendor</span>
+                <div className="flex items-center gap-1.5">
                   <button
                     type="button"
                     onClick={() => setIsQrScannerOpen(true)}
-                    className="flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 px-2 py-1 rounded-lg border border-amber-200 transition-colors"
+                    className="inline-flex items-center gap-1 min-h-[32px] text-[11px] font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 px-2 rounded-lg border border-amber-200"
                   >
-                    <QrCode className="w-3.5 h-3.5" />
-                    <span>Scan UPI QR</span>
+                    <QrCode className="w-3.5 h-3.5" /> Scan UPI QR
                   </button>
                   <button
                     type="button"
                     onClick={() => {
-                      setScannedInitialVpa('');
-                      setScannedInitialName('');
+                      setScannedVpa('');
+                      setScannedName('');
                       setIsBeneficiaryModalOpen(true);
                     }}
-                    className="text-[11px] font-bold text-navy-800 bg-navy-50 hover:bg-navy-100 px-2 py-1 rounded-lg border border-navy-200 transition-colors"
+                    className="min-h-[32px] text-[11px] font-bold text-navy-800 bg-navy-50 hover:bg-navy-100 px-2 rounded-lg border border-navy-200"
                   >
-                    + Add New
+                    + New vendor
                   </button>
                 </div>
               </div>
-
-              <select
-                required
+              <Select
+                aria-label="Vendor"
                 value={beneficiaryId}
                 onChange={(e) => setBeneficiaryId(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm text-slate-800 bg-white focus:ring-2 focus:ring-amber-500 outline-none"
-              >
-                <option value="">-- Choose Beneficiary --</option>
-                {beneficiaries.map((b) => (
-                  <option key={b._id || b.id} value={b._id || b.id}>
-                    {b.name} ({b.payeeType}) — {b.vpa ? `UPI: ${b.vpa}` : `A/C: ${b.accountNumberMasked || 'Bank'}`}
-                  </option>
-                ))}
-              </select>
+                options={[
+                  { value: '', label: beneficiaries.length ? 'Choose the vendor' : 'No vendors yet — add one' },
+                  ...beneficiaries.map((b) => ({
+                    value: b._id || b.id || '',
+                    label: `${b.name}${b.vpa ? ` · ${b.vpa}` : b.accountNumberMasked ? ` · A/C ${b.accountNumberMasked.slice(-4)}` : ''}`,
+                  })),
+                ]}
+              />
+            </div>
+          )}
 
-              {/* Beneficiary Info preview card */}
-              {selectedBeneficiary && (
-                <div className="mt-2 p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-navy-950">{selectedBeneficiary.name}</span>
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-navy-100 text-navy-800">
-                      {selectedBeneficiary.payeeType}
-                    </span>
-                  </div>
-                  <div className="text-slate-600 font-mono text-[11px]">
-                    {selectedBeneficiary.vpa ? (
-                      <span>VPA: {selectedBeneficiary.vpa}</span>
-                    ) : (
-                      <span>
-                        A/C: {selectedBeneficiary.accountNumberMasked} | IFSC: {selectedBeneficiary.ifsc}
-                      </span>
-                    )}
-                  </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Input
+              label="Amount"
+              type="number"
+              inputMode="decimal"
+              min="1"
+              step="0.01"
+              className={NO_SPIN}
+              leftIcon={<span className="text-xs font-bold text-slate-500">₹</span>}
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              helperText={amountPaise >= 100 ? inr(amountPaise) : undefined}
+            />
+            <Input
+              label="Needed by (optional)"
+              type="date"
+              min={localDateString()}
+              value={neededBy}
+              onChange={(e) => setNeededBy(e.target.value)}
+            />
+          </div>
+
+          <Input label="What is it for?" maxLength={300} value={purpose} onChange={(e) => setPurpose(e.target.value)} />
+
+          {linkableExpenses.length > 0 && (
+            <Select
+              label="Link to a site expense (optional)"
+              value={expenseId}
+              onChange={(e) => setExpenseId(e.target.value)}
+              options={[
+                { value: '', label: 'Not linked' },
+                ...linkableExpenses.map((exp: any) => ({
+                  value: exp._id || exp.id,
+                  label: `${inr(exp.amount)} · ${exp.vendor || exp.category} · ${String(exp.description || '').slice(0, 40)}`,
+                })),
+              ]}
+            />
+          )}
+
+          <div>
+            <span className="block text-xs font-semibold text-slate-700 mb-1.5">Bill / invoice (optional)</span>
+            {bill ? (
+              <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl border border-emerald-200 bg-emerald-50 text-xs">
+                <span className="flex items-center gap-1.5 min-w-0 text-emerald-800 font-semibold">
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  <span className="truncate">{bill.name}</span>
+                </span>
+                <button type="button" aria-label="Remove bill" onClick={() => setBill(null)} className="p-1.5 rounded-lg text-slate-500 hover:bg-white">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <label className="flex items-center justify-center gap-2 min-h-[44px] px-3 rounded-xl border border-dashed border-slate-300 hover:border-amber-500 hover:bg-amber-50/30 cursor-pointer text-xs font-semibold text-slate-700">
+                <Upload className="w-4 h-4 text-slate-400" />
+                {uploading ? `Uploading… ${uploading}%` : 'Attach bill photo or PDF'}
+                <input type="file" accept="image/*,application/pdf" className="hidden" onChange={onBill} disabled={uploading > 0} />
+              </label>
+            )}
+          </div>
+
+          <Textarea label={isOwner ? 'Note (optional)' : 'Note for the MD (optional)'} rows={2} maxLength={500} value={remarks} onChange={(e) => setRemarks(e.target.value)} />
+
+          {isOwner && (
+            <div className="rounded-xl border border-slate-200">
+              <label className="flex items-center gap-2.5 p-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="w-4 h-4 accent-amber-500"
+                  checked={paidAlready}
+                  onChange={(e) => setPaidAlready(e.target.checked)}
+                />
+                <span className="text-sm font-semibold text-navy-950">I have already paid this</span>
+              </label>
+              {paidAlready && (
+                <div className="px-3 pb-3 border-t border-slate-100 pt-3">
+                  <PayFields
+                    value={payDraft}
+                    onChange={setPayDraft}
+                    balancePaise={amountPaise}
+                    payee={{ name: payeeName || 'payee', vpa: effectiveVpa || undefined }}
+                    note={purpose || 'BKR INFRA payment'}
+                    disabled={saving}
+                  />
                 </div>
               )}
             </div>
+          )}
 
-            {/* Amount (₹ INR) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-bold text-navy-950 uppercase tracking-wider mb-1.5">
-                  Amount (₹ INR) *
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold">₹</span>
-                  <input
-                    type="number"
-                    min="1"
-                    step="any"
-                    required
-                    value={amountInr}
-                    onChange={(e) => setAmountInr(e.target.value ? Number(e.target.value) : '')}
-                    className="w-full pl-8 pr-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-bold text-navy-950 focus:ring-2 focus:ring-amber-500 outline-none"
-                    placeholder="0.00"
-                  />
-                </div>
-              </div>
-
-              {/* Preferred Transfer Method */}
-              <div>
-                <label className="block text-xs font-bold text-navy-950 uppercase tracking-wider mb-1.5">
-                  Payment Mode *
-                </label>
-                <select
-                  value={preferredMethod}
-                  onChange={(e) => setPreferredMethod(e.target.value as PaymentMethod)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm text-slate-800 bg-white focus:ring-2 focus:ring-amber-500 outline-none font-semibold"
-                >
-                  <option value="NEFT">NEFT (All amounts / Standard)</option>
-                  <option value="RTGS">RTGS (RBI Min ₹2,00,000 / Real-time)</option>
-                  <option value="UPI">UPI Payout (NPCI Max ₹1,00,000 / Instant)</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Method Limit Warnings */}
-            {rtgsUnderLimit && (
-              <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-rose-600 flex-shrink-0" />
-                <span>RTGS requires a minimum of ₹2,00,000. Please select NEFT for smaller amounts.</span>
-              </div>
-            )}
-            {upiOverLimit && (
-              <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-rose-600 flex-shrink-0" />
-                <span>UPI payouts cannot exceed ₹1,00,000. Please select NEFT or RTGS instead.</span>
-              </div>
-            )}
-
-            {/* High-Value Dual Authorization Flag */}
-            {isHighValue && (
-              <div className="p-3 rounded-xl bg-amber-50/80 border border-amber-200 text-amber-900 text-xs flex items-start gap-2">
-                <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-                <div className="leading-relaxed">
-                  <span className="font-bold">High-Value Transaction Policy:</span> This request exceeds ₹1,00,000.
-                  Independent MD dual-authorization is mandatory before funds can be transferred.
-                </div>
-              </div>
-            )}
-
-            {/* Payment Purpose */}
-            <div>
-              <label className="block text-xs font-bold text-navy-950 uppercase tracking-wider mb-1.5">
-                Purpose & Scope of Work *
-              </label>
-              <input
-                type="text"
-                required
-                value={purpose}
-                onChange={(e) => setPurpose(e.target.value)}
-                placeholder="e.g. Foundation reinforcement rebar batch 2 delivery"
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm text-slate-800 focus:ring-2 focus:ring-amber-500 outline-none"
-              />
-            </div>
-
-            {/* Link to Approved Expense (Optional) */}
-            {expenses.length > 0 && (
-              <div>
-                <label className="block text-xs font-bold text-navy-950 uppercase tracking-wider mb-1.5">
-                  Link to Recorded Expense (Optional)
-                </label>
-                <select
-                  value={relatedExpenseId}
-                  onChange={(e) => setRelatedExpenseId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm text-slate-700 bg-white focus:ring-2 focus:ring-amber-500 outline-none"
-                >
-                  <option value="">-- No expense linked --</option>
-                  {expenses.map((exp) => (
-                    <option key={exp._id || exp.id} value={exp._id || exp.id}>
-                      [{exp.category}] ₹{(exp.amount / 100).toLocaleString('en-IN')} — {exp.description.substring(0, 40)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {/* Invoice Attachment & Requested Date */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-bold text-navy-950 uppercase tracking-wider mb-1.5">
-                  Requested Payment Date
-                </label>
-                <input
-                  type="date"
-                  value={requestedDate}
-                  onChange={(e) => setRequestedDate(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm text-slate-800 bg-white focus:ring-2 focus:ring-amber-500 outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-navy-950 uppercase tracking-wider mb-1.5">
-                  Invoice / Bill Document
-                </label>
-                <label className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border border-dashed border-slate-300 hover:border-amber-500 hover:bg-amber-50/20 cursor-pointer transition-colors text-xs font-semibold text-slate-700">
-                  <Upload className="w-4 h-4 text-slate-400" />
-                  <span className="truncate">
-                    {isUploading ? 'Uploading...' : invoiceFileName || 'Upload Invoice (PDF/Img)'}
-                  </span>
-                  <input
-                    type="file"
-                    accept="image/*,application/pdf"
-                    className="hidden"
-                    onChange={handleFileUpload}
-                    disabled={isUploading}
-                  />
-                </label>
-              </div>
-            </div>
-
-            {/* Additional Remarks */}
-            <div>
-              <label className="block text-xs font-bold text-navy-950 uppercase tracking-wider mb-1.5">
-                Remarks for MD Review
-              </label>
-              <textarea
-                rows={2}
-                value={remarks}
-                onChange={(e) => setRemarks(e.target.value)}
-                placeholder="Additional delivery confirmations or site notes"
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs text-slate-800 focus:ring-2 focus:ring-amber-500 outline-none"
-              />
-            </div>
-
-            {/* Actions */}
-            <div className="flex flex-col-reverse sm:flex-row sm:items-center justify-end gap-2 pt-2 border-t border-slate-100 shrink-0 [&>button]:w-full [&>button]:sm:w-auto">
-              <Button variant="ghost" onClick={onClose} type="button">
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                type="submit"
-                isLoading={createRequestMutation.isPending}
-                disabled={rtgsUnderLimit || upiOverLimit}
-              >
-                Submit Payment Request
-              </Button>
-            </div>
-          </form>
+          {showErrors && problems.length > 0 && (
+            <p role="alert" className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-xl p-2.5">
+              Please fix: {problems.join(', ')}.
+            </p>
+          )}
         </div>
-      </div>
+      </Modal>
 
-      {/* QR Scanner Modal */}
-      <UPIQRScannerModal
-        isOpen={isQrScannerOpen}
-        onClose={() => setIsQrScannerOpen(false)}
-        onBeneficiaryScanned={handleBeneficiaryScanned}
-      />
-
-      {/* Add Beneficiary Modal */}
+      <UPIQRScannerModal isOpen={isQrScannerOpen} onClose={() => setIsQrScannerOpen(false)} onBeneficiaryScanned={handleScanned} />
       <BeneficiaryModal
         isOpen={isBeneficiaryModalOpen}
         onClose={() => setIsBeneficiaryModalOpen(false)}
-        initialVpa={scannedInitialVpa}
-        initialName={scannedInitialName}
+        initialVpa={scannedVpa}
+        initialName={scannedName}
       />
     </>
   );

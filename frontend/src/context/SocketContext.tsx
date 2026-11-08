@@ -223,10 +223,14 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
 
     // Real-time payment status updates
-    socketInstance.on('payment:status_changed', () => {
+    const refreshPayments = (data?: { paymentId?: string }) => {
       queryClient.invalidateQueries({ queryKey: ['payment-requests'] });
-      queryClient.invalidateQueries({ queryKey: ['payment-stats'] });
-    });
+      queryClient.invalidateQueries({ queryKey: ['payment-summary'] });
+      if (data?.paymentId) queryClient.invalidateQueries({ queryKey: ['payment-request', String(data.paymentId)] });
+    };
+    socketInstance.on('payment:status_changed', refreshPayments);
+    socketInstance.on('payment:updated', refreshPayments);
+    socketInstance.on('payment:new', refreshPayments);
 
     setSocket(socketInstance);
 

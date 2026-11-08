@@ -119,9 +119,9 @@ describe('payment company isolation', () => {
     assert.equal(r.status, 404);
   });
 
-  test('high-value payment cannot be self-authorized by its creator', async () => {
+  test('high-value in-charge request waits for the MD; the in-charge cannot approve or pay it', async () => {
     const r = await api('POST', '/api/v1/payments/requests', {
-      token: mdA.token,
+      token: inChargeA.token,
       body: {
         projectId: projectA._id,
         amountRupees: 250000,
@@ -132,10 +132,28 @@ describe('payment company isolation', () => {
     });
     assert.equal(r.status, 201, JSON.stringify(r.body));
     assert.equal(r.body.payment.status, 'AWAITING_AUTHORIZATION');
-    const auth = await api('POST', `/api/v1/payments/requests/${r.body.payment._id}/authorize`, { token: mdA.token, body: {} });
-    assert.equal(auth.status, 403);
-    const init = await api('POST', `/api/v1/payments/requests/${r.body.payment._id}/initiate`, { token: mdA.token, body: {} });
-    assert.equal(init.status, 400);
+    const id = r.body.payment._id;
+    assert.equal((await api('POST', `/api/v1/payments/requests/${id}/authorize`, { token: inChargeA.token, body: {} })).status, 403);
+    assert.equal((await api('POST', `/api/v1/payments/requests/${id}/initiate`, { token: inChargeA.token, body: {} })).status, 403);
+    const pay = await api('POST', `/api/v1/payments/requests/${id}/pay`, {
+      token: inChargeA.token,
+      body: { settlementKey: 'k-selfpay-0001', amountRupees: 250000, mode: 'CASH' },
+    });
+    assert.equal(pay.status, 403);
+  });
+
+  test('a request the MD raises is approved by the MD already', async () => {
+    const r = await api('POST', '/api/v1/payments/requests', {
+      token: mdA.token,
+      body: {
+        projectId: projectA._id,
+        amountRupees: 250000,
+        purpose: 'Steel',
+        newBeneficiary: { name: 'Steel Co 2', payeeType: 'SUPPLIER', accountNumber: '123456789013', ifsc: 'HDFC0000240' },
+      },
+    });
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    assert.equal(r.body.payment.status, 'AUTHORIZED');
   });
 });
 

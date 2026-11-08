@@ -13,6 +13,11 @@ import {
   generatePaymentQr,
   getPaymentQrStatus,
   handlePaymentWebhook,
+  payPaymentRequest,
+  voidPaymentEntry,
+  confirmPaymentReceived,
+  getPaymentSummary,
+  exportPaymentsRegister,
 } from '../controllers/paymentController.js';
 import {
   createBeneficiary,
@@ -36,6 +41,10 @@ router.get('/beneficiaries', listBeneficiaries);
 router.get('/beneficiaries/:id', getBeneficiaryById);
 router.post('/beneficiaries/:id/validate', validateBeneficiaryAccount);
 
+// Summary & register
+router.get('/summary', getPaymentSummary);
+router.get('/register', exportPaymentsRegister);
+
 // Payment Requests
 router.post('/requests', createPaymentRequest);
 router.get('/requests', listPaymentRequests);
@@ -46,6 +55,10 @@ router.post('/requests/:id/reject', rejectPaymentRequest);
 router.post('/requests/:id/initiate', initiatePaymentTransfer);
 router.post('/requests/:id/reconcile', reconcilePayment);
 router.post('/requests/:id/cancel', cancelPaymentRequest);
+// MD approves by paying (UPI / bank transfer / cheque / cash), part payments allowed
+router.post('/requests/:id/pay', payPaymentRequest);
+router.post('/requests/:id/settlements/:settlementId/void', voidPaymentEntry);
+router.post('/requests/:id/settlements/:settlementId/confirm', confirmPaymentReceived);
 
 // QR Workflows
 router.post('/qr/parse-upi', parseUpiQr);

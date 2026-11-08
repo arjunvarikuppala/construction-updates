@@ -1,489 +1,417 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  CreditCard,
-  X,
-  Building2,
-  Users,
-  ShieldCheck,
-  ShieldAlert,
-  AlertTriangle,
-  CheckCircle2,
-  FileText,
-  ExternalLink,
-  MessageSquare,
-  Clock,
-  Send,
-  RefreshCw,
+  Wallet,
   Ban,
+  MessageSquare,
+  FileText,
+  CheckCircle2,
+  Clock,
+  Undo2,
+  Download,
+  Send,
+  ShieldAlert,
+  HandCoins,
 } from 'lucide-react';
 import { api } from '../../api/client.js';
+import { Modal } from '../common/Modal.js';
 import { Button } from '../common/Button.js';
+import { Textarea } from '../common/Input.js';
+import { SecureLink } from '../common/SecureMedia.js';
 import { useToast } from '../../context/ToastContext.js';
 import { useAuth } from '../../context/AuthContext.js';
-import { PaymentRequest } from '../../types/index.js';
+import type { PaymentRequest, PaymentSettlement } from '../../types/index.js';
 import { formatDate } from '../../utils/dates.js';
+import {
+  MODE_LABEL,
+  STATUS_META,
+  balancePaiseOf,
+  idOf,
+  inr,
+  isPayable,
+  nameOf,
+  paidPaiseOf,
+  payeeKindOf,
+} from '../../utils/payments.js';
+import { exportPaymentVoucherPdf } from '../../utils/paymentVoucherPdf.js';
+import { useCompanySettings } from '../../utils/gst.js';
+import { PayModal } from './PayModal.js';
 
-import { SecureLink } from '../common/SecureMedia.js';
 interface PaymentReviewModalProps {
   payment: PaymentRequest | null;
   isOpen: boolean;
   onClose: () => void;
+  /** RazorpayX bank payouts are offered only when they are really switched on */
+  payoutsEnabled?: boolean;
 }
 
-export const PaymentReviewModal: React.FC<PaymentReviewModalProps> = ({
-  payment,
-  isOpen,
-  onClose,
-}) => {
+export const PaymentReviewModal: React.FC<PaymentReviewModalProps> = ({ payment: listPayment, isOpen, onClose, payoutsEnabled }) => {
   const navigate = useNavigate();
   const { user, isOwner } = useAuth();
-  const { showToast } = useToast();
+  const { success, error: toastError } = useToast();
   const queryClient = useQueryClient();
+  const { data: company } = useCompanySettings();
+  const id = listPayment?._id || listPayment?.id || '';
 
-  const [reviewNote, setReviewNote] = useState('');
-  const [rejectionReason, setRejectionReason] = useState('');
-  const [showRejectForm, setShowRejectForm] = useState(false);
-
-  // Authorize Mutation
-  const authorizeMutation = useMutation({
-    mutationFn: (note?: string) =>
-      api.post(`/payments/requests/${payment?._id || payment?.id}/authorize`, { note }),
-    onSuccess: () => {
-      showToast('Payment request authorized successfully', 'success');
-      queryClient.invalidateQueries({ queryKey: ['payment-requests'] });
-      queryClient.invalidateQueries({ queryKey: ['payment-stats'] });
-      onClose();
-    },
-    onError: (err: any) => {
-      showToast(err.message || 'Failed to authorize payment', 'error');
-    },
+  const { data: detail } = useQuery({
+    queryKey: ['payment-request', id],
+    queryFn: () => api.get<{ payment: PaymentRequest }>(`/payments/requests/${id}`).then((r) => r.payment),
+    enabled: isOpen && Boolean(id),
   });
+  const payment = detail || listPayment;
 
-  // Reject Mutation
-  const rejectMutation = useMutation({
-    mutationFn: (reason: string) =>
-      api.post(`/payments/requests/${payment?._id || payment?.id}/reject`, { reason }),
-    onSuccess: () => {
-      showToast('Payment request rejected', 'info');
-      queryClient.invalidateQueries({ queryKey: ['payment-requests'] });
-      queryClient.invalidateQueries({ queryKey: ['payment-stats'] });
-      onClose();
-    },
-    onError: (err: any) => {
-      showToast(err.message || 'Failed to reject payment', 'error');
-    },
-  });
-
-  // Initiate Payout Mutation
-  const initiatePayoutMutation = useMutation({
-    mutationFn: () =>
-      api.post(`/payments/requests/${payment?._id || payment?.id}/initiate`, {}),
-    onSuccess: (data: any) => {
-      showToast(data.message || 'Payout transfer submitted to RazorpayX', 'success');
-      queryClient.invalidateQueries({ queryKey: ['payment-requests'] });
-      queryClient.invalidateQueries({ queryKey: ['payment-stats'] });
-      onClose();
-    },
-    onError: (err: any) => {
-      showToast(err.message || 'Payout transfer failed', 'error');
-    },
-  });
-
-  // Reconcile Status Mutation
-  const reconcileMutation = useMutation({
-    mutationFn: () =>
-      api.post(`/payments/requests/${payment?._id || payment?.id}/reconcile`, {}),
-    onSuccess: (data: any) => {
-      showToast(`Status reconciled: ${data.payment?.status}`, 'info');
-      queryClient.invalidateQueries({ queryKey: ['payment-requests'] });
-      queryClient.invalidateQueries({ queryKey: ['payment-stats'] });
-    },
-    onError: (err: any) => {
-      showToast(err.message || 'Reconciliation inquiry failed', 'error');
-    },
-  });
+  const [payOpen, setPayOpen] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+  const [undoing, setUndoing] = useState<PaymentSettlement | null>(null);
+  const [undoReason, setUndoReason] = useState('');
+  const [busy, setBusy] = useState('');
 
   if (!isOpen || !payment) return null;
 
-  const currentUserId = user?.id || (user as any)?._id;
-  const creatorId =
-    typeof payment.createdBy === 'object'
-      ? (payment.createdBy as any)._id || (payment.createdBy as any).id
-      : payment.createdBy;
+  const me = user?.id || (user as any)?._id;
+  const isInCharge = payeeKindOf(payment) === 'INCHARGE';
+  const isPayee = Boolean(me && isInCharge && idOf(payment.payeeUser) === String(me));
+  const isCreator = Boolean(me && idOf(payment.createdBy) === String(me));
+  const paid = paidPaiseOf(payment);
+  const balance = balancePaiseOf(payment);
+  const pct = payment.amount ? Math.min(100, Math.round((paid / payment.amount) * 100)) : 0;
+  const meta = STATUS_META[payment.status] || { label: payment.status, tone: 'bg-slate-100 text-slate-700' };
+  const entries = payment.settlements || [];
+  const projectId = idOf(payment.project);
+  const project = payment.project as any;
 
-  const amount = payment.amountPaise || payment.amount || 0;
-  const isHighValue = Boolean(payment.isHighValue || payment.requiresHighValueAuth || amount >= 10000000);
-  const isCreator = Boolean(currentUserId && creatorId && String(currentUserId) === String(creatorId));
-  const isDualAuthBlocked = isHighValue && isCreator;
-
-  const referenceNumber = payment.referenceNumber || payment.paymentReference;
-  const preferredMethod = payment.preferredMethod || payment.paymentMethod;
-  const payeeName = payment.beneficiarySnapshot?.name || payment.payeeNameSnapshot;
-  const vpa = payment.beneficiarySnapshot?.vpa || payment.vpaSnapshot;
-  const accountNumberMasked = payment.beneficiarySnapshot?.accountNumberMasked || payment.accountNumberMaskedSnapshot;
-  const ifsc = payment.beneficiarySnapshot?.ifsc || payment.ifscSnapshot;
-  const bankName = payment.beneficiarySnapshot?.bankName || payment.bankNameSnapshot;
-  const projectCode = payment.projectSnapshot?.code || payment.project?.code;
-  const projectName = payment.projectSnapshot?.name || payment.project?.name;
-  const requestedDate = payment.requestedDate || payment.requestedPaymentDate;
-  const remarks = payment.remarks || payment.inchargeRemarks;
-  const utr = payment.razorpayxUtr || payment.providerUtr;
-
-  const canAuthorize =
-    isOwner &&
-    !isDualAuthBlocked &&
-    ['SUBMITTED', 'UNDER_REVIEW', 'AWAITING_AUTHORIZATION'].includes(payment.status);
-
-  const canInitiate =
-    isOwner && payment.status === 'AUTHORIZED';
-
-  const canReconcile =
-    isOwner && ['PROCESSING', 'UNKNOWN', 'SUBMITTED'].includes(payment.status);
-
-  const canReject =
-    isOwner &&
-    ['SUBMITTED', 'UNDER_REVIEW', 'AWAITING_AUTHORIZATION', 'AUTHORIZED'].includes(payment.status);
-
-  const projectId =
-    typeof payment.project === 'object' ? payment.project._id : payment.project;
-
-  const handleDiscuss = () => {
-    onClose();
-    navigate(`/messages/${projectId}?paymentId=${payment._id || payment.id}`);
+  const refresh = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['payment-requests'] }),
+      queryClient.invalidateQueries({ queryKey: ['payment-summary'] }),
+      queryClient.invalidateQueries({ queryKey: ['payment-request', id] }),
+    ]);
   };
 
-  const handleRejectSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!rejectionReason.trim()) {
-      showToast('Rejection reason is required', 'error');
-      return;
+  const run = async (label: string, fn: () => Promise<any>, done?: () => void) => {
+    setBusy(label);
+    try {
+      const res = await fn();
+      success(res?.message || 'Done');
+      await refresh();
+      done?.();
+    } catch (err: any) {
+      toastError(err.message || 'Something went wrong');
+    } finally {
+      setBusy('');
     }
-    rejectMutation.mutate(rejectionReason.trim());
   };
+
+  const canPay = isOwner && isPayable(payment);
+  const canReject = isOwner && paid === 0 && ['SUBMITTED', 'UNDER_REVIEW', 'AWAITING_AUTHORIZATION', 'AUTHORIZED'].includes(payment.status);
+  const canCancel = !isOwner && isCreator && paid === 0 && ['SUBMITTED', 'UNDER_REVIEW', 'AWAITING_AUTHORIZATION', 'AUTHORIZED'].includes(payment.status);
+  const canRazorpay = isOwner && payoutsEnabled && payment.status === 'AUTHORIZED' && paid === 0 && Boolean(payment.beneficiary);
 
   return (
-    <div className="fixed inset-0 z-50 bg-navy-950/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
-      <div className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[88dvh] sm:max-h-[92vh] animate-in fade-in zoom-in-95 duration-150">
-        {/* Header */}
-        <div className="px-4 sm:px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/60 shrink-0">
-          <div className="flex items-center gap-2.5 min-w-0 pr-2">
-            <div className="w-9 h-9 rounded-xl bg-amber-500 text-navy-950 flex items-center justify-center font-bold shrink-0">
-              <CreditCard className="w-5 h-5" />
+    <>
+      <Modal
+        isOpen={isOpen && !payOpen}
+        onClose={onClose}
+        title={`${inr(payment.amount)} to ${payment.payeeNameSnapshot}`}
+        description={`${payment.paymentReference} · raised ${formatDate(payment.createdAt, 'dd MMM yyyy, hh:mm a')} by ${nameOf(payment.createdBy, 'Site In-Charge')}`}
+        size="lg"
+        footer={
+          <>
+            <Button variant="ghost" onClick={onClose}>
+              Close
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                onClose();
+                navigate(`/messages/${projectId}?paymentId=${id}`);
+              }}
+              leftIcon={<MessageSquare className="w-4 h-4" />}
+            >
+              Discuss
+            </Button>
+            {paid > 0 && (
+              <Button
+                variant="outline"
+                onClick={() => exportPaymentVoucherPdf(payment, company?.legalName || 'BKR INFRA')}
+                leftIcon={<Download className="w-4 h-4" />}
+              >
+                Voucher PDF
+              </Button>
+            )}
+            {canCancel && (
+              <Button
+                variant="danger"
+                isLoading={busy === 'cancel'}
+                onClick={() => run('cancel', () => api.post(`/payments/requests/${id}/cancel`, { reason: 'Withdrawn by requester' }), onClose)}
+                leftIcon={<Ban className="w-4 h-4" />}
+              >
+                Withdraw request
+              </Button>
+            )}
+            {canReject && !rejecting && (
+              <Button variant="danger" onClick={() => setRejecting(true)} leftIcon={<Ban className="w-4 h-4" />}>
+                Reject
+              </Button>
+            )}
+            {canRazorpay && (
+              <Button
+                variant="outline"
+                isLoading={busy === 'rzp'}
+                onClick={() => run('rzp', () => api.post(`/payments/requests/${id}/initiate`, {}))}
+                leftIcon={<Send className="w-4 h-4" />}
+              >
+                Bank payout (RazorpayX)
+              </Button>
+            )}
+            {canPay && (
+              <Button onClick={() => setPayOpen(true)} leftIcon={<Wallet className="w-4 h-4" />}>
+                {paid > 0 ? `Pay balance ${inr(balance)}` : 'Approve & pay'}
+              </Button>
+            )}
+          </>
+        }
+      >
+        <div className="space-y-4">
+          {/* Status + progress */}
+          <div className="p-4 rounded-2xl bg-navy-950 text-white space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${meta.tone}`}>{meta.label}</span>
+              <span className="text-xs text-slate-300">
+                {isInCharge ? 'To Site In-Charge' : `To ${(payment.payeeType || 'vendor').toLowerCase()}`}
+                {project?.code ? ` · ${project.code}` : ''}
+              </span>
             </div>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                <h3 className="text-base font-extrabold text-navy-950 truncate">Payment Request Details</h3>
-                <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-navy-100 text-navy-800">
-                  {referenceNumber}
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-500 truncate">
-                Created {formatDate(payment.createdAt, 'dd MMM yyyy, hh:mm a')}
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            aria-label="Close dialog"
-            className="p-2 min-w-[40px] min-h-[40px] flex items-center justify-center text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 shrink-0"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Content */}
-        <div className="p-4 sm:p-6 overflow-y-auto space-y-5 overscroll-contain flex-1">
-          {/* Top Status & Amount Banner */}
-          <div className="p-5 rounded-2xl bg-navy-950 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-md">
             <div>
-              <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-bold">
-                Requested Payout Amount
-              </span>
-              <span className="text-3xl font-black text-amber-400">
-                ₹{(amount / 100).toLocaleString('en-IN')}
-              </span>
-              <span className="text-xs text-slate-400 block mt-0.5">
-                Method: <strong className="text-white">{preferredMethod}</strong>
-              </span>
-            </div>
-
-            <div className="flex flex-col items-start sm:items-end gap-1.5">
-              <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">Status</span>
-              <span className="px-3 py-1 rounded-full text-xs font-extrabold tracking-wide uppercase bg-amber-500 text-navy-950">
-                {payment.status.replace(/_/g, ' ')}
-              </span>
-              {isHighValue && (
-                <span className="text-[10px] font-bold text-amber-400 flex items-center gap-1">
-                  <ShieldAlert className="w-3 h-3" />
-                  High-Value Dual Auth Required
+              <div className="h-2.5 rounded-full bg-white/15 overflow-hidden" aria-label={`${pct}% paid`}>
+                <div className="h-full bg-amber-400 rounded-full transition-all" style={{ width: `${pct}%` }} />
+              </div>
+              <div className="flex justify-between text-xs mt-1.5">
+                <span>
+                  Paid <strong className="text-amber-300">{inr(paid)}</strong>
                 </span>
-              )}
-            </div>
-          </div>
-
-          {/* Dual-Authorization Warning Banner */}
-          {isDualAuthBlocked && (
-            <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-950 space-y-1.5">
-              <div className="flex items-center gap-2 font-bold text-xs text-rose-800">
-                <ShieldAlert className="w-4 h-4 text-rose-600 flex-shrink-0" />
-                <span>Dual Authorization Policy Enforcement</span>
-              </div>
-              <p className="text-xs leading-relaxed text-rose-700">
-                You created this payment request of ₹{(amount / 100).toLocaleString('en-IN')}.
-                Under high-value financial compliance, <strong>the creator cannot approve their own high-value payout</strong>.
-                Another Managing Director / Executive must independently authorize this transfer.
-              </p>
-            </div>
-          )}
-
-          {/* Beneficiary & Project Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {/* Beneficiary Card */}
-            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs space-y-2">
-              <span className="text-[10px] text-slate-400 uppercase font-bold block">
-                Beneficiary Details
-              </span>
-              <div className="font-bold text-sm text-navy-950">
-                {payeeName}
-              </div>
-              <div className="text-slate-600 font-mono text-[11px] space-y-0.5">
-                {vpa ? (
-                  <div>UPI VPA: {vpa}</div>
-                ) : (
-                  <>
-                    <div>A/C: {accountNumberMasked}</div>
-                    <div>IFSC: {ifsc}</div>
-                    {bankName && (
-                      <div>Bank: {bankName}</div>
-                    )}
-                  </>
-                )}
+                <span>
+                  Balance <strong className={balance ? 'text-white' : 'text-emerald-300'}>{inr(balance)}</strong>
+                </span>
               </div>
             </div>
-
-            {/* Requester & Project Card */}
-            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs space-y-2">
-              <span className="text-[10px] text-slate-400 uppercase font-bold block">
-                Project & Submitter
-              </span>
-              <div className="font-bold text-sm text-navy-950">
-                [{projectCode}] {projectName}
-              </div>
-              <div className="text-slate-600 text-[11px] space-y-0.5">
-                <div>Requested by: <strong>{payment.createdBy?.name || 'Site In-Charge'}</strong></div>
-                <div>Role: {payment.createdBy?.role || 'IN_CHARGE'}</div>
-                {requestedDate && (
-                  <div>Requested Date: {formatDate(requestedDate, 'dd MMM yyyy')}</div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Purpose & Remarks */}
-          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs space-y-1.5">
-            <span className="text-[10px] text-slate-400 uppercase font-bold block">Purpose</span>
-            <p className="font-semibold text-navy-950 text-sm leading-snug">{payment.purpose}</p>
-            {remarks && (
-              <p className="text-slate-600 pt-1 text-xs border-t border-slate-200 mt-2">
-                <strong>Remarks:</strong> {remarks}
+            {payment.requiresHighValueAuth && paid === 0 && isOwner && (
+              <p className="text-[11px] text-amber-300 flex items-center gap-1">
+                <ShieldAlert className="w-3.5 h-3.5" /> Above ₹1,00,000 — check the bill before paying.
               </p>
             )}
           </div>
 
-          {/* Invoice Document Preview */}
+          {/* Details */}
+          <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-xs">
+            <div className="sm:col-span-2">
+              <dt className="text-slate-500">For</dt>
+              <dd className="font-semibold text-navy-950 text-sm">{payment.purpose}</dd>
+            </div>
+            <div>
+              <dt className="text-slate-500">Site</dt>
+              <dd className="font-semibold text-navy-950">{project ? `${project.code} – ${project.name}` : '—'}</dd>
+            </div>
+            <div>
+              <dt className="text-slate-500">Pay to</dt>
+              <dd className="font-semibold text-navy-950 break-all">
+                {payment.vpaSnapshot ? `UPI ${payment.vpaSnapshot}` : payment.accountNumberMaskedSnapshot ? `A/C ${payment.accountNumberMaskedSnapshot} · ${payment.ifscSnapshot}` : 'No UPI / bank saved'}
+              </dd>
+            </div>
+            {payment.requestedPaymentDate && (
+              <div>
+                <dt className="text-slate-500">Needed by</dt>
+                <dd className="font-semibold text-navy-950">{formatDate(payment.requestedPaymentDate, 'dd MMM yyyy')}</dd>
+              </div>
+            )}
+            {payment.expense && typeof payment.expense === 'object' && (
+              <div>
+                <dt className="text-slate-500">Linked expense</dt>
+                <dd className="font-semibold text-navy-950">
+                  {inr(payment.expense.amount)} · {payment.expense.vendor || payment.expense.category}
+                </dd>
+              </div>
+            )}
+            {payment.inchargeRemarks && (
+              <div className="sm:col-span-2">
+                <dt className="text-slate-500">Note</dt>
+                <dd className="text-slate-700">{payment.inchargeRemarks}</dd>
+              </div>
+            )}
+          </dl>
+
           {payment.invoiceUrl && (
-            <div className="p-3 bg-white rounded-xl border border-slate-200 flex items-center justify-between text-xs">
-              <div className="flex items-center gap-2 text-slate-700 font-semibold truncate">
-                <FileText className="w-4 h-4 text-navy-800 flex-shrink-0" />
-                <span className="truncate">Attached Supporting Invoice / Receipt</span>
-              </div>
-              <SecureLink href={payment.invoiceUrl}
-                className="flex items-center gap-1 text-xs font-bold text-amber-700 hover:text-amber-800 transition-colors flex-shrink-0"
-              >
-                <span>View Attachment</span>
-                <ExternalLink className="w-3.5 h-3.5" />
-              </SecureLink>
-            </div>
+            <SecureLink
+              href={payment.invoiceUrl}
+              className="flex items-center gap-2 p-3 rounded-xl border border-slate-200 text-xs font-semibold text-navy-900 hover:bg-slate-50"
+            >
+              <FileText className="w-4 h-4 text-navy-800" /> View bill / invoice
+            </SecureLink>
           )}
 
-          {/* Rejection notice if rejected */}
           {payment.status === 'REJECTED' && payment.rejectionReason && (
-            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs">
-              <span className="font-bold block mb-0.5">Rejection Reason:</span>
-              <p className="text-[11px]">{payment.rejectionReason}</p>
-            </div>
+            <p className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-900">
+              <strong>Rejected:</strong> {payment.rejectionReason}
+            </p>
           )}
 
-          {/* RazorpayX Transaction Metadata */}
-          {payment.razorpayxPayoutId && (
-            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs space-y-2">
-              <span className="text-[10px] text-slate-400 uppercase font-bold block">
-                RazorpayX Payout Metadata
-              </span>
-              <div className="grid grid-cols-2 gap-2 font-mono text-[11px]">
-                <div>
-                  <span className="text-slate-400 block text-[10px]">Payout ID</span>
-                  <span className="font-bold text-navy-900">{payment.razorpayxPayoutId}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[10px]">UTR / Bank Ref</span>
-                  <span className="font-bold text-navy-900">{utr || 'In-Flight'}</span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Audit Trail Timeline */}
-          {payment.auditTrail && payment.auditTrail.length > 0 && (
-            <div className="space-y-2 pt-2 border-t border-slate-100">
-              <span className="text-xs font-bold text-navy-950 uppercase tracking-wider block">
-                Authorization & Transaction Trail
-              </span>
-              <div className="space-y-2 max-h-40 overflow-y-auto">
-                {payment.auditTrail.map((entry, idx) => (
-                  <div
-                    key={idx}
-                    className="flex items-start gap-2.5 text-[11px] p-2 rounded-xl bg-slate-50 border border-slate-100"
-                  >
-                    <Clock className="w-3.5 h-3.5 text-slate-400 flex-shrink-0 mt-0.5" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-navy-950">{entry.action}</span>
-                        <span className="text-slate-400 text-[10px]">
-                          {formatDate(entry.timestamp, 'dd MMM, hh:mm a')}
-                        </span>
-                      </div>
-                      <div className="text-slate-600">
-                        By {typeof entry.performedBy === 'object' ? entry.performedBy.name : 'System'}
-                        {entry.note ? ` — "${entry.note}"` : ''}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Reject Reason Form Toggle */}
-          {showRejectForm && (
-            <form onSubmit={handleRejectSubmit} className="p-4 rounded-2xl bg-rose-50 border border-rose-200 space-y-3">
-              <span className="text-xs font-bold text-rose-950 block">Enter Reason for Rejection *</span>
-              <textarea
-                required
+          {rejecting && (
+            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 space-y-2">
+              <Textarea
+                label="Why is it rejected?"
                 rows={2}
-                value={rejectionReason}
-                onChange={(e) => setRejectionReason(e.target.value)}
-                placeholder="Explain why this request is rejected so the site engineer can revise"
-                className="w-full p-2.5 rounded-xl border border-rose-300 text-xs bg-white focus:ring-2 focus:ring-rose-500 outline-none"
+                maxLength={500}
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
               />
               <div className="flex justify-end gap-2">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setShowRejectForm(false)}
-                  type="button"
-                >
-                  Cancel
+                <Button size="sm" variant="ghost" onClick={() => setRejecting(false)}>
+                  Back
                 </Button>
                 <Button
                   size="sm"
                   variant="danger"
-                  type="submit"
-                  isLoading={rejectMutation.isPending}
+                  disabled={!rejectReason.trim()}
+                  isLoading={busy === 'reject'}
+                  onClick={() => run('reject', () => api.post(`/payments/requests/${id}/reject`, { reason: rejectReason.trim() }), onClose)}
                 >
-                  Confirm Rejection
+                  Confirm reject
                 </Button>
               </div>
-            </form>
-          )}
-
-          {/* Review Note for Authorizing */}
-          {canAuthorize && !showRejectForm && (
-            <div>
-              <label className="block text-xs font-bold text-navy-950 uppercase tracking-wider mb-1.5">
-                Executive Authorization Note (Optional)
-              </label>
-              <input
-                type="text"
-                value={reviewNote}
-                onChange={(e) => setReviewNote(e.target.value)}
-                placeholder="e.g. Approved against Milestone 3 verification"
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-amber-500 outline-none"
-              />
             </div>
           )}
+
+          {/* Payment entries */}
+          <section className="space-y-2">
+            <h4 className="text-xs font-bold text-navy-950 uppercase tracking-wider">Payments made</h4>
+            {entries.length === 0 ? (
+              <p className="text-xs text-slate-500 p-3 rounded-xl border border-dashed border-slate-300">
+                {isOwner ? 'Nothing paid yet. Use "Approve & pay" after you pay from your UPI app or bank.' : 'Not paid yet. You will be notified when the MD pays.'}
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {entries.map((s) => (
+                  <li
+                    key={s._id}
+                    className={`p-3 rounded-xl border text-xs ${s.voided ? 'border-slate-200 bg-slate-50 opacity-70' : 'border-emerald-200 bg-emerald-50/50'}`}
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <span className={`text-sm font-black ${s.voided ? 'line-through text-slate-500' : 'text-navy-950'}`}>{inr(s.amountPaise)}</span>
+                        <span className="ml-2 font-semibold text-slate-700">{MODE_LABEL[s.mode]}</span>
+                        {s.reference && <span className="ml-1.5 font-mono text-slate-600 break-all">· {s.reference}</span>}
+                        <div className="text-slate-500 mt-0.5">
+                          {formatDate(s.paidOn, 'dd MMM yyyy')} · recorded by {nameOf(s.recordedBy, 'MD')}
+                        </div>
+                        {s.note && <div className="text-slate-600 mt-0.5">“{s.note}”</div>}
+                        {s.voided && (
+                          <div className="text-rose-700 mt-0.5">
+                            Undone{s.voidReason ? `: ${s.voidReason}` : ''}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {s.proofUrl && (
+                          <SecureLink href={s.proofUrl} className="inline-flex items-center gap-1 min-h-[32px] px-2 rounded-lg border border-slate-300 bg-white font-semibold text-navy-900">
+                            <FileText className="w-3.5 h-3.5" /> Proof
+                          </SecureLink>
+                        )}
+                        {!s.voided && isInCharge && (
+                          s.receivedConfirmedAt ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-100 text-emerald-800 font-semibold">
+                              <CheckCircle2 className="w-3.5 h-3.5" /> Received {formatDate(s.receivedConfirmedAt, 'dd MMM')}
+                            </span>
+                          ) : isPayee ? (
+                            <Button
+                              size="sm"
+                              isLoading={busy === `confirm-${s._id}`}
+                              onClick={() => run(`confirm-${s._id}`, () => api.post(`/payments/requests/${id}/settlements/${s._id}/confirm`, {}))}
+                              leftIcon={<HandCoins className="w-3.5 h-3.5" />}
+                            >
+                              I received it
+                            </Button>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-100 text-amber-800 font-semibold">
+                              <Clock className="w-3.5 h-3.5" /> Not confirmed yet
+                            </span>
+                          )
+                        )}
+                        {isOwner && !s.voided && s.mode !== 'RAZORPAYX' && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setUndoing(s);
+                              setUndoReason('');
+                            }}
+                            className="inline-flex items-center gap-1 min-h-[32px] px-2 rounded-lg text-slate-500 hover:bg-white hover:text-rose-700"
+                          >
+                            <Undo2 className="w-3.5 h-3.5" /> Undo
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    {undoing?._id === s._id && (
+                      <div className="mt-2 pt-2 border-t border-slate-200 space-y-2">
+                        <Textarea
+                          label="Why undo this entry? (it stays in the history)"
+                          rows={2}
+                          maxLength={300}
+                          value={undoReason}
+                          onChange={(e) => setUndoReason(e.target.value)}
+                        />
+                        <div className="flex justify-end gap-2">
+                          <Button size="sm" variant="ghost" onClick={() => setUndoing(null)}>
+                            Keep it
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="danger"
+                            disabled={!undoReason.trim()}
+                            isLoading={busy === `undo-${s._id}`}
+                            onClick={() =>
+                              run(
+                                `undo-${s._id}`,
+                                () => api.post(`/payments/requests/${id}/settlements/${s._id}/void`, { reason: undoReason.trim() }),
+                                () => setUndoing(null)
+                              )
+                            }
+                          >
+                            Undo entry
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          {payment.auditTrail?.length > 0 && (
+            <details className="text-xs">
+              <summary className="cursor-pointer font-bold text-navy-950 uppercase tracking-wider">History</summary>
+              <ul className="mt-2 space-y-1.5 max-h-48 overflow-y-auto">
+                {[...payment.auditTrail].reverse().map((entry, i) => (
+                  <li key={i} className="p-2 rounded-lg bg-slate-50 border border-slate-100">
+                    <div className="flex justify-between gap-2">
+                      <span className="font-semibold text-navy-950">{entry.action.replace(/^PAYMENT_/, '').replace(/_/g, ' ').toLowerCase()}</span>
+                      <span className="text-slate-400 shrink-0">{formatDate(entry.timestamp, 'dd MMM, hh:mm a')}</span>
+                    </div>
+                    <div className="text-slate-600">
+                      {nameOf(entry.performedBy, 'System')}
+                      {entry.note ? ` — ${entry.note}` : ''}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
         </div>
+      </Modal>
 
-        {/* Footer Actions */}
-        <div className="px-4 sm:px-6 py-4 border-t border-slate-100 bg-slate-50/60 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 shrink-0">
-          {/* Discuss in Chat Button */}
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleDiscuss}
-            className="w-full sm:w-auto"
-            leftIcon={<MessageSquare className="w-3.5 h-3.5 text-navy-800" />}
-          >
-            Discuss with Site Team
-          </Button>
-
-          {/* Action Buttons */}
-          <div className="flex flex-wrap items-center justify-end gap-2 [&>button]:flex-1 [&>button]:sm:flex-initial">
-            {canReconcile && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => reconcileMutation.mutate()}
-                isLoading={reconcileMutation.isPending}
-                leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
-              >
-                Reconcile Status
-              </Button>
-            )}
-
-            {canReject && !showRejectForm && (
-              <Button
-                size="sm"
-                variant="danger"
-                onClick={() => setShowRejectForm(true)}
-                leftIcon={<Ban className="w-3.5 h-3.5" />}
-              >
-                Reject Request
-              </Button>
-            )}
-
-            {canAuthorize && (
-              <Button
-                size="sm"
-                variant="primary"
-                onClick={() => authorizeMutation.mutate(reviewNote || undefined)}
-                isLoading={authorizeMutation.isPending}
-                leftIcon={<ShieldCheck className="w-4 h-4 text-navy-950" />}
-              >
-                Authorize Payment
-              </Button>
-            )}
-
-            {canInitiate && (
-              <Button
-                size="sm"
-                variant="primary"
-                onClick={() => initiatePayoutMutation.mutate()}
-                isLoading={initiatePayoutMutation.isPending}
-                leftIcon={<Send className="w-4 h-4 text-navy-950" />}
-              >
-                Initiate Transfer (RazorpayX)
-              </Button>
-            )}
-
-            <Button size="sm" variant="ghost" onClick={onClose}>
-              Close
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
+      <PayModal payment={payment} isOpen={payOpen} onClose={() => setPayOpen(false)} />
+    </>
   );
 };

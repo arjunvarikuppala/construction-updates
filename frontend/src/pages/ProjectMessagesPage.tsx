@@ -1327,7 +1327,7 @@ export const ProjectMessagesPage: React.FC = () => {
                         {m.contextId && (
                           <button
                             onClick={() => {
-                              if (m.contextType === 'PAYMENT_REQUEST') navigate('/payments');
+                              if (m.contextType === 'PAYMENT_REQUEST') navigate(`/payments?id=${m.contextId}`);
                               if (m.contextType === 'DAILY_REPORT') navigate(`/reports/${m.contextId}`);
                               if (m.contextType === 'EXPENSE') navigate('/expenses');
                             }}

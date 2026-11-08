@@ -486,7 +486,7 @@ export interface InChargeDashboardData {
 // PAYMENTS & BENEFICIARIES
 // ==========================================
 
-export type PayeeType = 'CONTRACTOR' | 'SUPPLIER' | 'LABOUR';
+export type PayeeType = 'CONTRACTOR' | 'SUPPLIER' | 'LABOUR' | 'SITE_INCHARGE';
 export type BeneficiaryVerificationStatus = 'UNVERIFIED' | 'VERIFIED' | 'FAILED';
 
 export interface Beneficiary {
@@ -525,12 +525,37 @@ export type PaymentRequestStatus =
   | 'AWAITING_AUTHORIZATION'
   | 'AUTHORIZED'
   | 'PROCESSING'
+  | 'PARTIALLY_PAID'
   | 'PAID'
   | 'REJECTED'
   | 'FAILED'
   | 'CANCELLED'
   | 'REVERSED'
   | 'UNKNOWN';
+
+/** How the MD paid: own UPI app, bank transfer, cheque, cash — or a RazorpayX payout */
+export type SettlementMode = 'UPI' | 'BANK_TRANSFER' | 'CHEQUE' | 'CASH' | 'RAZORPAYX';
+/** Who receives the money */
+export type PayeeKind = 'INCHARGE' | 'VENDOR';
+
+export interface PaymentSettlement {
+  _id: string;
+  settlementKey: string;
+  amountPaise: number;
+  mode: SettlementMode;
+  reference?: string;
+  paidOn: string;
+  proofUrl?: string;
+  note?: string;
+  recordedBy?: { _id: string; name: string } | string;
+  recordedAt: string;
+  receivedConfirmedBy?: { _id: string; name: string } | string;
+  receivedConfirmedAt?: string;
+  voided?: boolean;
+  voidedBy?: { _id: string; name: string } | string;
+  voidedAt?: string;
+  voidReason?: string;
+}
 
 export interface PaymentAuditEntry {
   timestamp: string;
@@ -585,7 +610,12 @@ export interface PaymentRequest {
     vpa?: string;
   };
   payeeType: PayeeType;
+  payeeKind?: PayeeKind;
+  payeeUser?: { _id: string; name: string; email?: string; phone?: string } | string;
   amount: number; // integer paise
+  paidPaise?: number;
+  settlements?: PaymentSettlement[];
+  lastPaidAt?: string;
   amountPaise?: number;
   paymentMethod: PaymentMethod;
   preferredMethod?: PaymentMethod;
@@ -647,6 +677,20 @@ export interface PaymentSummary {
   awaitingAuthPaise: number;
   processingPaise: number;
   highValueThresholdPaise: number;
+  payoutsEnabled?: boolean;
+}
+
+export interface PaymentDashboardSummary {
+  awaitingCount: number;
+  awaitingPaise: number;
+  partialCount: number;
+  partialBalancePaise: number;
+  dueThisWeekCount: number;
+  paidThisMonthPaise: number;
+  paidToInChargesPaise: number;
+  paidToVendorsPaise: number;
+  unconfirmedReceipts: number;
+  bySite: { project: { _id: string; name: string; code: string } | null; paidPaise: number; duePaise: number }[];
 }
 
 // ==========================================

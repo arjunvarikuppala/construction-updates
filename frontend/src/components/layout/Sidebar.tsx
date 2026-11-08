@@ -88,7 +88,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       unreadCount: totalUnread > 0 ? totalUnread : undefined,
     },
     { to: '/expenses', label: 'Expenses Register', icon: Receipt },
-    { to: '/payments', label: 'Payments & Transfers', icon: CreditCard },
+    { to: '/payments', label: 'Payments', icon: CreditCard },
     { to: '/messages', label: 'Project Messages', icon: MessageSquare },
     { to: '/team', label: 'In-Charge Accounts', icon: Users },
     { to: '/settings', label: 'Company & GST', icon: Settings },
@@ -100,7 +100,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { to: '/projects', label: 'My Projects', icon: Building2 },
     { to: '/reports', label: 'Daily Reports', icon: ClipboardList },
     { to: '/expenses', label: 'My Expenses', icon: Receipt },
-    { to: '/payments', label: 'Payment Requests', icon: CreditCard },
+    { to: '/payments', label: 'Payments', icon: CreditCard },
     { to: '/messages', label: 'Project Messages', icon: MessageSquare },
   ];
 

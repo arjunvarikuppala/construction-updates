@@ -10,6 +10,7 @@ export type PaymentRequestStatus =
   | 'AWAITING_AUTHORIZATION'
   | 'AUTHORIZED'
   | 'PROCESSING'
+  | 'PARTIALLY_PAID'
   | 'PAID'
   | 'REJECTED'
   | 'FAILED'
@@ -23,6 +24,39 @@ export interface IPaymentAuditEntry {
   performedBy: mongoose.Types.ObjectId;
   note?: string;
   ip?: string;
+}
+
+/** How the MD actually paid: from their own bank/UPI app, by cheque, in cash, or via RazorpayX. */
+export type SettlementMode = 'UPI' | 'BANK_TRANSFER' | 'CHEQUE' | 'CASH' | 'RAZORPAYX';
+export const SETTLEMENT_MODES: SettlementMode[] = ['UPI', 'BANK_TRANSFER', 'CHEQUE', 'CASH', 'RAZORPAYX'];
+
+/** Who receives the money: the Site In-Charge (reimbursement / site advance) or a vendor. */
+export type PayeeKind = 'INCHARGE' | 'VENDOR';
+
+/** One payment the MD made against a request. A request can be paid in parts. */
+export interface IPaymentSettlement {
+  _id: mongoose.Types.ObjectId;
+  /** Client-generated key so a double-tap never records the same payment twice */
+  settlementKey: string;
+  amountPaise: number;
+  mode: SettlementMode;
+  /** UPI/bank UTR or cheque number (empty for cash) */
+  reference?: string;
+  /** Normalised reference used for duplicate detection */
+  referenceKey?: string;
+  paidOn: Date;
+  proofUrl?: string;
+  note?: string;
+  recordedBy: mongoose.Types.ObjectId;
+  recordedAt: Date;
+  /** Payee (in-charge) confirmed the money arrived */
+  receivedConfirmedBy?: mongoose.Types.ObjectId;
+  receivedConfirmedAt?: Date;
+  /** Wrong entry undone by the MD; kept for the audit trail but not counted */
+  voided?: boolean;
+  voidedBy?: mongoose.Types.ObjectId;
+  voidedAt?: Date;
+  voidReason?: string;
 }
 
 export interface IPaymentRequest extends Document {
@@ -39,6 +73,11 @@ export interface IPaymentRequest extends Document {
   bankNameSnapshot?: string;
   vpaSnapshot?: string; // UPI ID (e.g. contractor@okhdfcbank)
   payeeType: PayeeType;
+  payeeKind: PayeeKind;
+  /** Set when payeeKind = INCHARGE: the user who receives the money */
+  payeeUser?: mongoose.Types.ObjectId;
+  /** Company scope (the MD that owns the project) — used for duplicate-UTR checks */
+  company?: mongoose.Types.ObjectId;
 
   // Stored strictly in integer paise (₹1 = 100 paise)
   amount: number;
@@ -77,6 +116,12 @@ export interface IPaymentRequest extends Document {
   reversalReason?: string;
   reversedAt?: Date;
 
+  /** Sum of non-voided settlements, in paise */
+  paidPaise: number;
+  settlements: IPaymentSettlement[];
+  /** Last time money was recorded against this request */
+  lastPaidAt?: Date;
+
   createdBy: mongoose.Types.ObjectId;
   auditTrail: IPaymentAuditEntry[];
   createdAt: Date;
@@ -92,6 +137,33 @@ const PaymentAuditEntrySchema = new Schema<IPaymentAuditEntry>(
     ip: { type: String },
   },
   { _id: false }
+);
+
+const PaymentSettlementSchema = new Schema<IPaymentSettlement>(
+  {
+    settlementKey: { type: String, required: true, trim: true, maxlength: 80 },
+    amountPaise: {
+      type: Number,
+      required: true,
+      min: 100,
+      validate: { validator: Number.isInteger, message: '{VALUE} is not an integer paise value' },
+    },
+    mode: { type: String, enum: SETTLEMENT_MODES, required: true },
+    reference: { type: String, trim: true, maxlength: 40 },
+    referenceKey: { type: String, trim: true, maxlength: 40 },
+    paidOn: { type: Date, required: true },
+    proofUrl: { type: String, trim: true, maxlength: 2048 },
+    note: { type: String, trim: true, maxlength: 300 },
+    recordedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    recordedAt: { type: Date, default: Date.now },
+    receivedConfirmedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+    receivedConfirmedAt: { type: Date },
+    voided: { type: Boolean, default: false },
+    voidedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+    voidedAt: { type: Date },
+    voidReason: { type: String, trim: true, maxlength: 300 },
+  },
+  { _id: true }
 );
 
 const PaymentRequestSchema = new Schema<IPaymentRequest>(
@@ -152,8 +224,24 @@ const PaymentRequestSchema = new Schema<IPaymentRequest>(
     },
     payeeType: {
       type: String,
-      enum: ['CONTRACTOR', 'SUPPLIER', 'LABOUR'],
+      enum: ['CONTRACTOR', 'SUPPLIER', 'LABOUR', 'SITE_INCHARGE'],
       required: true,
+    },
+    payeeKind: {
+      type: String,
+      enum: ['INCHARGE', 'VENDOR'],
+      default: 'VENDOR',
+      index: true,
+    },
+    payeeUser: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      index: true,
+    },
+    company: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      index: true,
     },
 
     amount: {
@@ -215,6 +303,7 @@ const PaymentRequestSchema = new Schema<IPaymentRequest>(
         'AWAITING_AUTHORIZATION',
         'AUTHORIZED',
         'PROCESSING',
+        'PARTIALLY_PAID',
         'PAID',
         'REJECTED',
         'FAILED',
@@ -310,6 +399,16 @@ const PaymentRequestSchema = new Schema<IPaymentRequest>(
       type: Date,
     },
 
+    paidPaise: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    settlements: [PaymentSettlementSchema],
+    lastPaidAt: {
+      type: Date,
+    },
+
     createdBy: {
       type: Schema.Types.ObjectId,
       ref: 'User',
@@ -325,5 +424,7 @@ const PaymentRequestSchema = new Schema<IPaymentRequest>(
 
 PaymentRequestSchema.index({ project: 1, status: 1 });
 PaymentRequestSchema.index({ project: 1, createdAt: -1 });
+PaymentRequestSchema.index({ 'settlements.paidOn': 1 });
+PaymentRequestSchema.index({ company: 1, 'settlements.referenceKey': 1 });
 
 export const PaymentRequest = mongoose.model<IPaymentRequest>('PaymentRequest', PaymentRequestSchema);

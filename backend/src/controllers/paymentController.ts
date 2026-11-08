@@ -15,6 +15,17 @@ import { emitToUser, emitToProjectMDs } from '../services/socketService.js';
 import { getAccessibleProjectIds } from '../services/tenantService.js';
 import { beneficiaryScopeFilter, getProjectCompanyId } from './beneficiaryController.js';
 import { escapeRegex } from '../utils/validation.js';
+import { User } from '../models/User.js';
+import {
+  applySettlement,
+  sanitizeSettlement,
+  voidSettlement,
+  SettlementError,
+  balancePaise,
+  MODE_LABEL,
+  PAYABLE_STATUSES,
+} from '../services/paymentSettlementService.js';
+import { istMonthString, istMonthWindow } from '../utils/istDates.js';
 
 const HIGH_VALUE_THRESHOLD_PAISE = Number(process.env.PAYMENT_HIGH_VALUE_THRESHOLD_PAISE) || 10000000; // ₹1,00,000
 
@@ -24,6 +35,25 @@ const HIGH_VALUE_THRESHOLD_PAISE = Number(process.env.PAYMENT_HIGH_VALUE_THRESHO
  * - `mdOnly` additionally requires the MD/OWNER role.
  * Callers outside the company receive 404 so payment IDs are not disclosed.
  */
+/** RazorpayX confirmed the payout: count it as one settlement so balances stay right. */
+function recordProviderPaid(payment: any, utr: string | undefined) {
+  if ((payment.paidPaise || 0) >= payment.amount) return;
+  const amount = payment.amount - (payment.paidPaise || 0);
+  payment.settlements.push({
+    settlementKey: `rzpx-${payment.razorpayxPayoutId || payment.paymentReference}`,
+    amountPaise: amount,
+    mode: 'RAZORPAYX',
+    reference: utr,
+    referenceKey: utr ? `RAZORPAYX:${String(utr).toUpperCase()}` : undefined,
+    paidOn: new Date(),
+    recordedBy: payment.initiatedBy || payment.createdBy,
+    recordedAt: new Date(),
+  });
+  payment.paidPaise = payment.amount;
+  payment.lastPaidAt = new Date();
+  payment.providerName = 'RAZORPAYX';
+}
+
 async function loadAuthorizedPayment(
   req: AuthenticatedRequest,
   res: Response,
@@ -73,7 +103,13 @@ export async function createPaymentRequest(req: AuthenticatedRequest, res: Respo
       invoiceUrl,
       requestedPaymentDate,
       inchargeRemarks,
+      payeeKind: rawPayeeKind,
+      payeeUserId,
+      payeeVpa,
+      payNow,
     } = req.body;
+    const payeeKind = rawPayeeKind === 'INCHARGE' ? 'INCHARGE' : 'VENDOR';
+    const callerIsMD = isMD(req.user!.role);
 
     if (!projectId || !purpose || (!amountRupees && !suppliedPaise)) {
       res.status(400).json({
@@ -108,27 +144,39 @@ export async function createPaymentRequest(req: AuthenticatedRequest, res: Respo
       return;
     }
 
-    // Payment method limits
-    if (paymentMethod === 'RTGS' && amountPaise < 20000000) {
-      res.status(400).json({
-        success: false,
-        message: 'RBI Regulation: RTGS requires a minimum transaction amount of ₹2,00,000. Please select NEFT or UPI.',
-      });
+    if (!['NEFT', 'RTGS', 'UPI'].includes(String(paymentMethod))) {
+      res.status(400).json({ success: false, message: 'Choose a preferred payment method: UPI, NEFT or RTGS.' });
+      return;
+    }
+    if (typeof purpose !== 'string' || !purpose.trim()) {
+      res.status(400).json({ success: false, message: 'Enter what the payment is for.' });
       return;
     }
 
-    if (paymentMethod === 'UPI' && amountPaise > 10000000) {
-      res.status(400).json({
-        success: false,
-        message: 'UPI Restriction: Standard UPI disbursements are capped at ₹1,00,000 maximum. Please select NEFT or RTGS.',
-      });
-      return;
-    }
-
-    // Resolve or create beneficiary
-    let beneficiaryDoc: any = null;
     const projectCompanyId = getProjectCompanyId(project);
-    if (beneficiaryId) {
+    let beneficiaryDoc: any = null;
+    let payeeUserDoc: any = null;
+    const cleanPayeeVpa =
+      typeof payeeVpa === 'string' && payeeVpa.trim() ? payeeVpa.trim().toLowerCase().slice(0, 100) : undefined;
+    if (cleanPayeeVpa && !/^[a-z0-9._-]{2,256}@[a-z][a-z0-9.-]{1,64}$/.test(cleanPayeeVpa)) {
+      res.status(400).json({ success: false, message: 'That UPI ID does not look right (example: name@okhdfcbank).' });
+      return;
+    }
+
+    if (payeeKind === 'INCHARGE') {
+      // Money goes to a Site In-Charge of this project (reimbursement or site advance)
+      const targetId = callerIsMD ? String(payeeUserId || '') : req.user!.userId;
+      if (!mongoose.Types.ObjectId.isValid(targetId)) {
+        res.status(400).json({ success: false, message: 'Choose which Site In-Charge receives this payment.' });
+        return;
+      }
+      const targetAccess = await verifyUserProjectAccess(project._id, targetId, 'SITE_INCHARGE');
+      payeeUserDoc = targetAccess.allowed ? await User.findById(targetId).select('name email phone role') : null;
+      if (!payeeUserDoc) {
+        res.status(400).json({ success: false, message: 'That Site In-Charge is not assigned to this project.' });
+        return;
+      }
+    } else if (beneficiaryId) {
       beneficiaryDoc = mongoose.Types.ObjectId.isValid(String(beneficiaryId))
         ? await Beneficiary.findOne({
             $and: [{ _id: beneficiaryId }, await beneficiaryScopeFilter([projectCompanyId])],
@@ -151,11 +199,11 @@ export async function createPaymentRequest(req: AuthenticatedRequest, res: Respo
 
       beneficiaryDoc = await Beneficiary.create({
         name: newBeneficiary.name.trim(),
-        payeeType: newBeneficiary.payeeType || 'CONTRACTOR',
+        payeeType: ['CONTRACTOR', 'SUPPLIER', 'LABOUR'].includes(newBeneficiary.payeeType) ? newBeneficiary.payeeType : 'CONTRACTOR',
         accountNumber: cleanAccount,
         accountNumberMasked: cleanAccount ? maskAccountNumber(cleanAccount) : undefined,
         ifsc: cleanIFSC,
-        bankName: newBeneficiary.bankName || (cleanIFSC ? `${cleanIFSC.slice(0, 4)} Bank` : 'Bank Account'),
+        bankName: newBeneficiary.bankName || (cleanIFSC ? `${cleanIFSC.slice(0, 4)} Bank` : undefined),
         vpa: cleanVpa,
         phone: newBeneficiary.phone?.trim(),
         email: newBeneficiary.email?.trim(),
@@ -166,27 +214,31 @@ export async function createPaymentRequest(req: AuthenticatedRequest, res: Respo
     } else {
       res.status(400).json({
         success: false,
-        message: 'Please select an existing beneficiary or provide payee details.',
+        message: 'Choose who is paid: yourself (Site In-Charge) or a vendor.',
       });
       return;
     }
 
-    // If method is UPI, verify beneficiary has VPA
-    if (paymentMethod === 'UPI' && !beneficiaryDoc.vpa) {
-      res.status(400).json({
-        success: false,
-        message: 'The selected beneficiary does not have a UPI ID (VPA) registered. Please select NEFT or update payee UPI details.',
-      });
-      return;
-    }
-
-    // If method is NEFT/RTGS, verify account & IFSC
-    if ((paymentMethod === 'NEFT' || paymentMethod === 'RTGS') && (!beneficiaryDoc.accountNumber || !beneficiaryDoc.ifsc)) {
-      res.status(400).json({
-        success: false,
-        message: 'Bank account number and IFSC code are required for NEFT/RTGS transfers.',
-      });
-      return;
+    // "Pay now" at creation is MD-only, and is validated before anything is saved
+    let payNowSettlement: Awaited<ReturnType<typeof sanitizeSettlement>> | null = null;
+    if (payNow) {
+      if (!callerIsMD) {
+        res.status(403).json({ success: false, message: 'Only the MD can record a payment.' });
+        return;
+      }
+      try {
+        payNowSettlement = await sanitizeSettlement(payNow, req.user!.userId);
+      } catch (e: any) {
+        if (e instanceof SettlementError) {
+          res.status(e.status).json({ success: false, message: e.message });
+          return;
+        }
+        throw e;
+      }
+      if (payNowSettlement.amountPaise > amountPaise) {
+        res.status(400).json({ success: false, message: 'The amount paid cannot be more than the request amount.' });
+        return;
+      }
     }
 
     // Optional Expense Link Verification
@@ -209,10 +261,11 @@ export async function createPaymentRequest(req: AuthenticatedRequest, res: Respo
     }
 
     // Generate unique references
-    const paymentReference = `PAY-RZPX-${Date.now().toString().slice(-8)}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
+    const paymentReference = `BKR-PAY-${istMonthString().slice(2).replace("-", "")}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
     const idempotencyKey = `IDEM-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
 
-    const isHighValue = amountPaise > HIGH_VALUE_THRESHOLD_PAISE;
+    // Requests the MD raises themselves are already approved by the MD
+    const isHighValue = amountPaise > HIGH_VALUE_THRESHOLD_PAISE && !callerIsMD;
 
     // Status: If high-value, requires authorization -> AWAITING_AUTHORIZATION.
     // Otherwise, submitted by in-charge enters SUBMITTED.
@@ -223,23 +276,28 @@ export async function createPaymentRequest(req: AuthenticatedRequest, res: Respo
       idempotencyKey,
       project: project._id,
       expense: expenseDoc?._id,
-      beneficiary: beneficiaryDoc._id,
-      payeeNameSnapshot: beneficiaryDoc.name,
-      accountNumberMaskedSnapshot: beneficiaryDoc.accountNumberMasked,
-      ifscSnapshot: beneficiaryDoc.ifsc,
-      bankNameSnapshot: beneficiaryDoc.bankName,
-      vpaSnapshot: beneficiaryDoc.vpa,
-      payeeType: beneficiaryDoc.payeeType,
+      beneficiary: beneficiaryDoc?._id,
+      payeeKind,
+      payeeUser: payeeUserDoc?._id,
+      company: projectCompanyId,
+      payeeNameSnapshot: payeeUserDoc ? payeeUserDoc.name : beneficiaryDoc.name,
+      accountNumberMaskedSnapshot: beneficiaryDoc?.accountNumberMasked,
+      ifscSnapshot: beneficiaryDoc?.ifsc,
+      bankNameSnapshot: beneficiaryDoc?.bankName,
+      vpaSnapshot: cleanPayeeVpa || beneficiaryDoc?.vpa,
+      payeeType: payeeUserDoc ? 'SITE_INCHARGE' : beneficiaryDoc.payeeType,
       amount: amountPaise,
       paymentMethod,
-      purpose: purpose.trim(),
-      description: description?.trim(),
-      invoiceUrl: invoiceUrl?.trim(),
+      purpose: purpose.trim().slice(0, 300),
+      description: typeof description === 'string' ? description.trim().slice(0, 1000) : undefined,
+      invoiceUrl: typeof invoiceUrl === 'string' && invoiceUrl.trim() ? invoiceUrl.trim().split('?')[0] : undefined,
       requestedPaymentDate: requestedPaymentDate ? new Date(requestedPaymentDate) : undefined,
-      inchargeRemarks: inchargeRemarks?.trim(),
-      status: initialStatus,
+      inchargeRemarks: typeof inchargeRemarks === 'string' ? inchargeRemarks.trim().slice(0, 500) : undefined,
+      status: callerIsMD && !isHighValue ? 'AUTHORIZED' : initialStatus,
+      ...(callerIsMD ? { authorizedBy: req.user!.userId, authorizedAt: new Date(), authorizationNotes: 'Raised by the MD' } : {}),
       requiresHighValueAuth: isHighValue,
-      providerName: 'RAZORPAYX',
+      providerName: 'MANUAL',
+      paidPaise: 0,
       createdBy: req.user!.userId,
       auditTrail: [
         {
@@ -260,14 +318,59 @@ export async function createPaymentRequest(req: AuthenticatedRequest, res: Respo
       await expenseDoc.save();
     }
 
-    // Notify Managing Directors
     const formattedINR = `₹${(amountPaise / 100).toLocaleString('en-IN')}`;
+    const payeeName = payeeUserDoc ? payeeUserDoc.name : beneficiaryDoc.name;
+
+    // MD raised and paid it in one go
+    if (payNowSettlement) {
+      const { payment: paid, fullyPaid } = await applySettlement(paymentRequest._id, payNowSettlement, {
+        userId: req.user!.userId,
+        ip: req.ip,
+      });
+      await notifyPayee(paid, req.user!.userId, payNowSettlement.amountPaise, fullyPaid);
+      await logAudit('PAYMENT_RECORDED', req.user!.userId, 'PAYMENT_REQUEST', paid._id, {
+        reference: paid.paymentReference,
+        amountPaise: payNowSettlement.amountPaise,
+        mode: payNowSettlement.mode,
+      });
+      res.status(201).json({
+        success: true,
+        message: fullyPaid ? `Payment of ${formattedINR} to ${payeeName} recorded.` : 'Part payment recorded.',
+        payment: paid,
+      });
+      return;
+    }
+
+    if (callerIsMD) {
+      // An MD-raised payment for an in-charge: tell them money is coming
+      if (payeeUserDoc) {
+        await createNotification({
+          recipient: payeeUserDoc._id,
+          sender: req.user!.userId,
+          project: project._id,
+          type: 'PAYMENT_REQUEST_AUTHORIZED',
+          title: `Payment approved for you (${formattedINR})`,
+          message: `The MD approved ${formattedINR} to you for ${purpose.trim()}.`,
+          relatedEntity: 'PAYMENT_REQUEST',
+          relatedId: paymentRequest._id.toString(),
+        });
+      }
+      await logAudit('PAYMENT_REQUEST_CREATED', req.user!.userId, 'PAYMENT_REQUEST', paymentRequest._id, {
+        reference: paymentReference,
+        amountPaise,
+        projectId: project._id,
+      });
+      res.status(201).json({ success: true, message: 'Payment added. Pay it whenever you are ready.', payment: paymentRequest });
+      return;
+    }
+
+    // Notify Managing Directors
     await notifyProjectMDs({
       sender: req.user!.userId,
       project: project._id,
       type: 'PAYMENT_REQUEST_NEW',
       title: isHighValue ? `High-Value Payout Request (${formattedINR})` : `New Payment Request (${formattedINR})`,
-      message: `${req.user!.email} requested ${paymentMethod} payout to ${beneficiaryDoc.name} for ${purpose}`,
+      message: `${payeeUserDoc && String(payeeUserDoc._id) === req.user!.userId ? `${payeeUserDoc.name} asked to be paid` : `Payment requested to ${payeeName}`} for ${purpose.trim()}`,
       relatedEntity: 'PAYMENT_REQUEST',
       relatedId: paymentRequest._id.toString(),
       excludeUserId: req.user!.userId,
@@ -290,9 +393,7 @@ export async function createPaymentRequest(req: AuthenticatedRequest, res: Respo
 
     res.status(201).json({
       success: true,
-      message: isHighValue
-        ? 'High-value payment request submitted. Awaiting dual-authorization by Managing Director.'
-        : 'Payment request submitted successfully for review.',
+      message: 'Payment request sent to the MD.',
       payment: paymentRequest,
     });
   } catch (err: any) {
@@ -346,6 +447,10 @@ export async function listPaymentRequests(req: AuthenticatedRequest, res: Respon
       .populate('createdBy', 'name email role')
       .populate('authorizedBy', 'name email role')
       .populate('initiatedBy', 'name email role')
+      .populate('payeeUser', 'name email phone')
+      .populate('settlements.recordedBy', 'name')
+      .populate('settlements.receivedConfirmedBy', 'name')
+      .populate('settlements.voidedBy', 'name')
       .sort({ createdAt: -1 });
 
     // Aggregate summary metrics
@@ -363,6 +468,8 @@ export async function listPaymentRequests(req: AuthenticatedRequest, res: Respon
         .filter((p) => p.status === 'PROCESSING')
         .reduce((sum, p) => sum + p.amount, 0),
       highValueThresholdPaise: HIGH_VALUE_THRESHOLD_PAISE,
+      // RazorpayX bank payouts are only offered when they are really switched on
+      payoutsEnabled: !razorpayXService.isMockMode,
     };
 
     res.json({
@@ -392,6 +499,10 @@ export async function getPaymentRequestById(req: AuthenticatedRequest, res: Resp
       .populate('createdBy', 'name email role')
       .populate('authorizedBy', 'name email role')
       .populate('initiatedBy', 'name email role')
+      .populate('payeeUser', 'name email phone')
+      .populate('settlements.recordedBy', 'name')
+      .populate('settlements.receivedConfirmedBy', 'name')
+      .populate('settlements.voidedBy', 'name')
       .populate('auditTrail.performedBy', 'name email role');
 
     if (!payment) {
@@ -554,6 +665,14 @@ export async function rejectPaymentRequest(req: AuthenticatedRequest, res: Respo
       return;
     }
 
+    if ((payment.paidPaise || 0) > 0) {
+      res.status(400).json({
+        success: false,
+        message: 'Money has already been paid on this request. Undo those payment entries first, or leave the balance unpaid.',
+      });
+      return;
+    }
+
     if (payment.status === 'PAID' || payment.status === 'PROCESSING' || payment.status === 'REVERSED') {
       res.status(400).json({
         success: false,
@@ -649,9 +768,36 @@ export async function initiatePaymentTransfer(req: AuthenticatedRequest, res: Re
       return;
     }
 
+    if ((payment.paidPaise || 0) > 0 || payment.status === 'PARTIALLY_PAID') {
+      res.status(400).json({
+        success: false,
+        message: 'Part of this request is already paid. Record the balance with "Pay" instead of a RazorpayX payout.',
+      });
+      return;
+    }
+
     const beneficiary = payment.beneficiary as any;
     if (!beneficiary) {
-      res.status(400).json({ success: false, message: 'Beneficiary record is missing.' });
+      res.status(400).json({
+        success: false,
+        message: 'RazorpayX payouts need a saved vendor with bank or UPI details. Use "Pay" to record this payment instead.',
+      });
+      return;
+    }
+    if (payment.paymentMethod === 'UPI' && !beneficiary.vpa) {
+      res.status(400).json({ success: false, message: 'This payee has no UPI ID saved. Choose NEFT, or record the payment with "Pay".' });
+      return;
+    }
+    if ((payment.paymentMethod === 'NEFT' || payment.paymentMethod === 'RTGS') && (!beneficiary.accountNumberMasked || !beneficiary.ifsc)) {
+      res.status(400).json({ success: false, message: 'Bank account number and IFSC are needed for a NEFT/RTGS payout.' });
+      return;
+    }
+    if (payment.paymentMethod === 'RTGS' && payment.amount < 20000000) {
+      res.status(400).json({ success: false, message: 'RTGS needs at least ₹2,00,000. Use NEFT for smaller amounts.' });
+      return;
+    }
+    if (payment.paymentMethod === 'UPI' && payment.amount > 10000000) {
+      res.status(400).json({ success: false, message: 'UPI payouts are capped at ₹1,00,000. Use NEFT or RTGS.' });
       return;
     }
 
@@ -695,6 +841,7 @@ export async function initiatePaymentTransfer(req: AuthenticatedRequest, res: Re
 
     if (result.status === 'PAID') {
       payment.reconciledAt = new Date();
+      recordProviderPaid(payment, result.utr);
       if (payment.expense) {
         await Expense.findByIdAndUpdate(payment.expense, {
           paymentStatus: 'PAID',
@@ -769,6 +916,7 @@ export async function reconcilePayment(req: AuthenticatedRequest, res: Response)
 
     if (result.status === 'PAID') {
       payment.reconciledAt = new Date();
+      recordProviderPaid(payment, result.utr);
       if (payment.expense) {
         await Expense.findByIdAndUpdate(payment.expense, {
           paymentStatus: 'PAID',
@@ -815,6 +963,14 @@ export async function cancelPaymentRequest(req: AuthenticatedRequest, res: Respo
 
     if (!isCreator && !callerIsMD) {
       res.status(403).json({ success: false, message: 'Forbidden. You do not have permission to cancel this request.' });
+      return;
+    }
+
+    if ((payment.paidPaise || 0) > 0 || payment.status === 'PARTIALLY_PAID') {
+      res.status(400).json({
+        success: false,
+        message: 'Money has already been paid on this request, so it cannot be cancelled.',
+      });
       return;
     }
 
@@ -985,6 +1141,7 @@ export async function handlePaymentWebhook(req: any, res: Response): Promise<voi
         if (rzpStatus === 'processed' || rzpStatus === 'paid' || rzpStatus === 'success') {
           payment.status = 'PAID';
           if (utr) payment.providerUtr = utr;
+          recordProviderPaid(payment, utr);
           if (payoutEntity.fees !== undefined) payment.fees = payoutEntity.fees;
           if (payoutEntity.tax !== undefined) payment.tax = payoutEntity.tax;
           payment.reconciledAt = new Date();
@@ -1035,5 +1192,317 @@ export async function handlePaymentWebhook(req: any, res: Response): Promise<voi
     res.status(200).json({ success: true, message: 'Webhook processed successfully' });
   } catch (err: any) {
     res.status(500).json({ success: false, message: 'Webhook error', error: err.message });
+  }
+}
+
+const inr = (paise: number) => `₹${(paise / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+
+/** Tell the requester and (if different) the in-charge payee that money was paid. */
+async function notifyPayee(payment: any, senderId: string, amountPaise: number, fullyPaid: boolean) {
+  const recipients = new Set<string>();
+  if (String(payment.createdBy) !== senderId) recipients.add(String(payment.createdBy));
+  if (payment.payeeUser && String(payment.payeeUser) !== senderId) recipients.add(String(payment.payeeUser));
+  const last = payment.settlements[payment.settlements.length - 1];
+  const how = last ? `${MODE_LABEL[last.mode as keyof typeof MODE_LABEL]}${last.reference ? ` · ref ${last.reference}` : ''}` : '';
+  for (const recipient of recipients) {
+    const isPayee = payment.payeeUser && String(payment.payeeUser) === recipient;
+    await createNotification({
+      recipient,
+      sender: senderId,
+      project: payment.project,
+      type: 'PAYMENT_REQUEST_PAID',
+      title: fullyPaid ? `Paid ${inr(amountPaise)}` : `Part payment ${inr(amountPaise)}`,
+      message: `${isPayee ? 'The MD paid you' : `The MD paid ${payment.payeeNameSnapshot}`} ${inr(amountPaise)} for ${payment.purpose} (${how}).${
+        fullyPaid
+          ? payment.settlements.filter((s: any) => !s.voided).length > 1
+            ? ` Fully paid (${inr(payment.amount)}).`
+            : ''
+          : ` Balance ${inr(balancePaise(payment))}.`
+      }${isPayee ? ' Please confirm when you receive it.' : ''}`,
+      relatedEntity: 'PAYMENT_REQUEST',
+      relatedId: payment._id.toString(),
+    });
+    emitToUser(recipient, 'payment:updated', { paymentId: payment._id, status: payment.status });
+  }
+}
+
+/**
+ * MD approves a request by paying it: records how it was paid (UPI / bank
+ * transfer / cheque / cash), the UTR or cheque number, date and proof.
+ * Part payments are allowed; the request is PAID once the full amount is in.
+ */
+export async function payPaymentRequest(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const payment = await loadAuthorizedPayment(req, res, {
+      mdOnly: true,
+      forbiddenMessage: 'Only the MD can record a payment.',
+    });
+    if (!payment) return;
+
+    const clean = await sanitizeSettlement(req.body || {}, req.user!.userId);
+    const { payment: updated, duplicate, fullyPaid } = await applySettlement(payment._id, clean, {
+      userId: req.user!.userId,
+      ip: req.ip,
+    });
+
+    if (!duplicate) {
+      await notifyPayee(updated, req.user!.userId, clean.amountPaise, fullyPaid);
+      await logAudit('PAYMENT_RECORDED', req.user!.userId, 'PAYMENT_REQUEST', updated._id, {
+        reference: updated.paymentReference,
+        amountPaise: clean.amountPaise,
+        mode: clean.mode,
+        utr: clean.reference,
+      });
+      await emitToProjectMDs(updated.project, 'payment:updated', { paymentId: updated._id, status: updated.status });
+    }
+
+    res.json({
+      success: true,
+      message: duplicate
+        ? 'This payment was already recorded.'
+        : fullyPaid
+        ? `Paid in full. ${updated.payeeNameSnapshot} has been notified.`
+        : `Part payment recorded. Balance ${inr(balancePaise(updated))}.`,
+      payment: updated,
+    });
+  } catch (err: any) {
+    if (err instanceof SettlementError) {
+      res.status(err.status).json({ success: false, message: err.message });
+      return;
+    }
+    res.status(500).json({ success: false, message: 'Could not record the payment', error: err.message });
+  }
+}
+
+/** MD undoes a wrongly entered payment (the entry is kept, marked as undone). */
+export async function voidPaymentEntry(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const payment = await loadAuthorizedPayment(req, res, {
+      mdOnly: true,
+      forbiddenMessage: 'Only the MD can undo a payment entry.',
+    });
+    if (!payment) return;
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 300) : '';
+    if (!reason) {
+      res.status(400).json({ success: false, message: 'Say why this entry is being undone.' });
+      return;
+    }
+    const updated = await voidSettlement(String(payment._id), String(req.params.settlementId), reason, {
+      userId: req.user!.userId,
+      ip: req.ip,
+    });
+    await logAudit('PAYMENT_ENTRY_UNDONE', req.user!.userId, 'PAYMENT_REQUEST', updated._id, {
+      reference: updated.paymentReference,
+      settlementId: req.params.settlementId,
+      reason,
+    });
+    emitToUser(String(updated.createdBy), 'payment:updated', { paymentId: updated._id, status: updated.status });
+    res.json({ success: true, message: `Entry undone. Balance now ${inr(balancePaise(updated))}.`, payment: updated });
+  } catch (err: any) {
+    if (err instanceof SettlementError) {
+      res.status(err.status).json({ success: false, message: err.message });
+      return;
+    }
+    res.status(500).json({ success: false, message: 'Could not undo the entry', error: err.message });
+  }
+}
+
+/** The In-Charge who was paid confirms the money reached them. */
+export async function confirmPaymentReceived(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const payment = await loadAuthorizedPayment(req, res, { mdOnly: false });
+    if (!payment) return;
+    const me = req.user!.userId;
+    const isPayee = payment.payeeUser ? String(payment.payeeUser) === me : false;
+    if (!isPayee) {
+      res.status(403).json({ success: false, message: 'Only the Site In-Charge who was paid can confirm receipt.' });
+      return;
+    }
+    const entry = mongoose.Types.ObjectId.isValid(String(req.params.settlementId))
+      ? (payment.settlements as any).id(String(req.params.settlementId))
+      : null;
+    if (!entry || entry.voided) {
+      res.status(404).json({ success: false, message: 'Payment entry not found.' });
+      return;
+    }
+    if (!entry.receivedConfirmedAt) {
+      entry.receivedConfirmedAt = new Date();
+      entry.receivedConfirmedBy = me as any;
+      payment.auditTrail.push({
+        timestamp: new Date(),
+        action: 'PAYMENT_RECEIPT_CONFIRMED',
+        performedBy: me as any,
+        note: `Receipt of ${inr(entry.amountPaise)} confirmed by payee`,
+        ip: req.ip,
+      });
+      await payment.save();
+      await notifyProjectMDs({
+        sender: me,
+        project: payment.project,
+        type: 'PAYMENT_REQUEST_PAID',
+        title: `Received ${inr(entry.amountPaise)}`,
+        message: `${payment.payeeNameSnapshot} confirmed receiving ${inr(entry.amountPaise)} for ${payment.purpose}.`,
+        relatedEntity: 'PAYMENT_REQUEST',
+        relatedId: payment._id.toString(),
+        excludeUserId: me,
+      });
+      await emitToProjectMDs(payment.project, 'payment:updated', { paymentId: payment._id, status: payment.status });
+    }
+    res.json({ success: true, message: 'Thanks — receipt confirmed.', payment });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: 'Could not confirm receipt', error: err.message });
+  }
+}
+
+/**
+ * Payment summary for the dashboard: what is waiting, the balance on part-paid
+ * requests, what was paid this month, split by site and by payee kind.
+ */
+export async function getPaymentSummary(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const projectIds = await getAccessibleProjectIds(req.user!);
+    const month = typeof req.query.month === 'string' && istMonthWindow(req.query.month) ? req.query.month : istMonthString();
+    const win = istMonthWindow(month)!;
+    const all = await PaymentRequest.find({ project: { $in: projectIds } })
+      .select('project status amount paidPaise settlements payeeKind requestedPaymentDate createdAt')
+      .populate('project', 'name code')
+      .lean();
+
+    const awaiting = all.filter((p) => ['SUBMITTED', 'UNDER_REVIEW', 'AWAITING_AUTHORIZATION', 'AUTHORIZED'].includes(p.status));
+    const partial = all.filter((p) => p.status === 'PARTIALLY_PAID');
+    const inWindow = (d: any) => d && new Date(d) >= win.from && new Date(d) < win.to;
+
+    const bySite = new Map<string, { project: any; paidPaise: number; duePaise: number }>();
+    let paidThisMonth = 0;
+    let paidToInCharges = 0;
+    let paidToVendors = 0;
+    let unconfirmed = 0;
+    for (const p of all as any[]) {
+      const key = String(p.project?._id || p.project);
+      const site = bySite.get(key) || { project: p.project, paidPaise: 0, duePaise: 0 };
+      if (PAYABLE_STATUSES.includes(p.status)) site.duePaise += Math.max(0, p.amount - (p.paidPaise || 0));
+      for (const s of p.settlements || []) {
+        if (s.voided) continue;
+        if (p.payeeKind === 'INCHARGE' && !s.receivedConfirmedAt) unconfirmed += 1;
+        if (!inWindow(s.paidOn)) continue;
+        paidThisMonth += s.amountPaise;
+        site.paidPaise += s.amountPaise;
+        if (p.payeeKind === 'INCHARGE') paidToInCharges += s.amountPaise;
+        else paidToVendors += s.amountPaise;
+      }
+      bySite.set(key, site);
+    }
+    const dueSoonCutoff = Date.now() + 7 * 24 * 3600 * 1000;
+
+    res.json({
+      success: true,
+      month,
+      summary: {
+        awaitingCount: awaiting.length,
+        awaitingPaise: awaiting.reduce((s, p) => s + p.amount - (p.paidPaise || 0), 0),
+        partialCount: partial.length,
+        partialBalancePaise: partial.reduce((s, p) => s + p.amount - (p.paidPaise || 0), 0),
+        dueThisWeekCount: [...awaiting, ...partial].filter(
+          (p) => p.requestedPaymentDate && new Date(p.requestedPaymentDate).getTime() <= dueSoonCutoff
+        ).length,
+        paidThisMonthPaise: paidThisMonth,
+        paidToInChargesPaise: paidToInCharges,
+        paidToVendorsPaise: paidToVendors,
+        unconfirmedReceipts: unconfirmed,
+        bySite: Array.from(bySite.values())
+          .filter((s) => s.paidPaise > 0 || s.duePaise > 0)
+          .sort((a, b) => b.paidPaise + b.duePaise - (a.paidPaise + a.duePaise)),
+      },
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: 'Could not load the payment summary', error: err.message });
+  }
+}
+
+/** MD: every payment made in a month (one row per payment entry), as Excel. */
+export async function exportPaymentsRegister(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    if (!isMD(req.user!.role)) {
+      res.status(403).json({ success: false, message: 'Only the MD can download the payments register.' });
+      return;
+    }
+    const month = String(req.query.month || '');
+    const win = istMonthWindow(month);
+    if (!win) {
+      res.status(400).json({ success: false, message: 'Choose a month in YYYY-MM format.' });
+      return;
+    }
+    const ExcelJS = (await import('exceljs')).default;
+    const payments = await PaymentRequest.find({
+      project: { $in: await getAccessibleProjectIds(req.user!) },
+      'settlements.paidOn': { $gte: win.from, $lt: win.to },
+    })
+      .populate('project', 'name code')
+      .populate('settlements.recordedBy', 'name')
+      .lean();
+
+    const rows: any[] = [];
+    for (const p of payments as any[]) {
+      for (const s of p.settlements || []) {
+        const d = new Date(s.paidOn);
+        if (d < win.from || d >= win.to) continue;
+        rows.push({ p, s, d });
+      }
+    }
+    rows.sort((a, b) => a.d.getTime() - b.d.getTime());
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'BKR INFRA';
+    workbook.created = new Date();
+    const sheet = workbook.addWorksheet(`Payments ${month}`);
+    sheet.addRow(['BKR INFRA — Payments register']).font = { bold: true, size: 13 };
+    sheet.addRow([`Month: ${month}`, '', `Generated: ${new Date().toISOString().slice(0, 10)}`]);
+    sheet.addRow([]);
+    const header = sheet.addRow([
+      'Paid on', 'Request ref', 'Site', 'Paid to', 'Payee type', 'Purpose', 'Mode', 'UTR / Cheque no.',
+      'Amount (₹)', 'Request total (₹)', 'Balance after (₹)', 'Receipt confirmed', 'Recorded by', 'Proof', 'Status',
+    ]);
+    header.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    header.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF142B4A' } };
+    [12, 24, 22, 24, 14, 32, 14, 22, 14, 16, 16, 16, 18, 8, 18].forEach((w, i) => (sheet.getColumn(i + 1).width = w));
+
+    let total = 0;
+    let totalVoided = 0;
+    for (const { p, s, d } of rows) {
+      const paidUpTo = (p.settlements || [])
+        .filter((x: any) => !x.voided && new Date(x.recordedAt) <= new Date(s.recordedAt))
+        .reduce((sum: number, x: any) => sum + x.amountPaise, 0);
+      if (s.voided) totalVoided += s.amountPaise;
+      else total += s.amountPaise;
+      const row = sheet.addRow([
+        new Date(d.getTime() + 330 * 60000).toISOString().slice(0, 10),
+        p.paymentReference,
+        p.project ? `${p.project.code} – ${p.project.name}` : '',
+        p.payeeNameSnapshot,
+        p.payeeKind === 'INCHARGE' ? 'Site In-Charge' : p.payeeType || 'Vendor',
+        p.purpose,
+        MODE_LABEL[s.mode as keyof typeof MODE_LABEL] || s.mode,
+        s.reference || (s.mode === 'CASH' ? 'Cash' : ''),
+        s.amountPaise / 100,
+        p.amount / 100,
+        s.voided ? '' : Math.max(0, p.amount - paidUpTo) / 100,
+        p.payeeKind === 'INCHARGE' ? (s.receivedConfirmedAt ? 'Yes' : 'Not yet') : '—',
+        s.recordedBy?.name || '',
+        s.proofUrl ? 'Yes' : 'No',
+        s.voided ? `UNDONE: ${s.voidReason || ''}` : 'Paid',
+      ]);
+      if (s.voided) row.font = { strike: true, color: { argb: 'FF94A3B8' } };
+    }
+    sheet.addRow([]);
+    sheet.addRow(['TOTAL PAID', `${rows.filter((r) => !r.s.voided).length} payment(s)`, '', '', '', '', '', '', total / 100]).font = { bold: true };
+    if (totalVoided) sheet.addRow(['Undone entries (not counted)', '', '', '', '', '', '', '', totalVoided / 100]).font = { italic: true };
+    [9, 10, 11].forEach((c) => (sheet.getColumn(c).numFmt = '#,##0.00'));
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="BKR-INFRA-Payments-${month}.xlsx"`);
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: 'Failed to export payments register' });
   }
 }
