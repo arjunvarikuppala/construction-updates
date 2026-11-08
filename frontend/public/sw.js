@@ -1,4 +1,5 @@
-const CACHE_NAME = 'sitetrack-static-v1';
+// Bump the version whenever caching rules change: old caches are deleted on activate.
+const CACHE_NAME = 'bkr-infra-static-v2';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -43,7 +44,25 @@ self.addEventListener('fetch', (event) => {
     return; // Pass through directly to network
   }
 
-  // For static assets, try cache first, fall back to network
+  // Pages (HTML): network first so a new deploy is picked up immediately. A stale
+  // index.html would point at JS bundles that no longer exist (blank screen).
+  // The cached shell is only used when offline.
+  if (event.request.mode === 'navigate' || (event.request.headers.get('accept') || '').includes('text/html')) {
+    event.respondWith(
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const copy = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put('/', copy));
+          }
+          return networkResponse;
+        })
+        .catch(() => caches.match('/'))
+    );
+    return;
+  }
+
+  // Static assets (hashed file names): cache first, refresh in the background
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {

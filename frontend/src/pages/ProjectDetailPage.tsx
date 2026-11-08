@@ -216,15 +216,15 @@ export const ProjectDetailPage: React.FC = () => {
         <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto [&>button]:flex-1 [&>button]:sm:flex-initial">
           {/* Switch Project Dropdown */}
           {authorizedProjects.length > 1 && (
-            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 w-full sm:w-auto">
-              <span className="text-[11px] font-bold text-slate-600 px-2 flex items-center gap-1">
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 w-full sm:w-auto min-w-0 max-w-full">
+              <span className="text-[11px] font-bold text-slate-600 px-2 flex items-center gap-1 shrink-0 whitespace-nowrap">
                 <ArrowRightLeft className="w-3 h-3 text-navy-900" />
                 Switch Project:
               </span>
               <select
                 value={project._id || project.id}
                 onChange={(e) => navigate(`/projects/${e.target.value}`)}
-                className="text-xs bg-white border border-slate-300 rounded-lg py-1 px-2 font-medium text-navy-950 focus:outline-none focus:ring-1 focus:ring-amber-500 flex-1 sm:flex-initial"
+                className="text-xs bg-white border border-slate-300 rounded-lg py-1 px-2 font-medium text-navy-950 focus:outline-none focus:ring-1 focus:ring-amber-500 flex-1 sm:flex-initial min-w-0 w-0 sm:w-auto sm:max-w-[320px] truncate"
               >
                 {authorizedProjects.map((p) => {
                   const pid = p._id || p.id;
@@ -250,14 +250,17 @@ export const ProjectDetailPage: React.FC = () => {
             </Button>
           )}
 
-          <Button
-            size="sm"
-            variant="amber"
-            onClick={() => setIsAssignModalOpen(true)}
-            leftIcon={<Users className="w-3.5 h-3.5" />}
-          >
-            {hasInCharges ? `Manage In-Charges (${assignedEngineers.length})` : 'Assign In-Charge'}
-          </Button>
+          {/* Assigning In-Charges is an MD action (the API enforces it too) */}
+          {isMDOrOwner && (
+            <Button
+              size="sm"
+              variant="amber"
+              onClick={() => setIsAssignModalOpen(true)}
+              leftIcon={<Users className="w-3.5 h-3.5" />}
+            >
+              {hasInCharges ? `Manage In-Charges (${assignedEngineers.length})` : 'Assign In-Charge'}
+            </Button>
+          )}
 
           <Button
             size="sm"
@@ -284,6 +287,7 @@ export const ProjectDetailPage: React.FC = () => {
               </p>
             </div>
           </div>
+          {isMDOrOwner && (
           <Button
             size="sm"
             variant="amber"
@@ -293,6 +297,7 @@ export const ProjectDetailPage: React.FC = () => {
           >
             Assign In-Charge Now
           </Button>
+          )}
         </div>
       )}
 
@@ -552,6 +557,7 @@ export const ProjectDetailPage: React.FC = () => {
                 Submit Site Expense
               </Button>
 
+              {isMDOrOwner && (
               <Button
                 variant="outline"
                 onClick={() => setIsAssignModalOpen(true)}
@@ -559,6 +565,7 @@ export const ProjectDetailPage: React.FC = () => {
               >
                 Manage In-Charge Assignment
               </Button>
+              )}
             </div>
           </div>
 
@@ -588,7 +595,7 @@ export const ProjectDetailPage: React.FC = () => {
                 <CardTitle>
                   Assigned Site In-Charges {hasInCharges && `(${assignedEngineers.length})`}
                 </CardTitle>
-                {hasInCharges && (
+                {hasInCharges && isMDOrOwner && (
                   <button
                     type="button"
                     onClick={() => setIsAssignModalOpen(true)}
@@ -640,6 +647,7 @@ export const ProjectDetailPage: React.FC = () => {
                       ))}
                     </div>
 
+                    {isMDOrOwner && (
                     <Button
                       size="sm"
                       variant="outline"
@@ -648,6 +656,7 @@ export const ProjectDetailPage: React.FC = () => {
                     >
                       Manage In-Charge Assignments
                     </Button>
+                    )}
                   </>
                 ) : (
                   <div className="text-center py-4 space-y-3">
@@ -658,6 +667,7 @@ export const ProjectDetailPage: React.FC = () => {
                         Assign engineers to enable field daily reports and site expenses.
                       </p>
                     </div>
+                    {isMDOrOwner && (
                     <Button
                       size="sm"
                       variant="amber"
@@ -665,6 +675,7 @@ export const ProjectDetailPage: React.FC = () => {
                     >
                       Assign In-Charge
                     </Button>
+                    )}
                   </div>
                 )}
               </CardContent>

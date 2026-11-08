@@ -127,7 +127,7 @@ app.get('/uploads/:filename', serveSignedUpload);
 app.get('/api/health', (_req, res) => {
   res.json({
     status: 'online',
-    app: 'SiteTrack Construction Management System',
+    app: 'BKR INFRA Site Reports & Payments',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
   });
