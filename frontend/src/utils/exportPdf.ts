@@ -1,343 +1,241 @@
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import { Expense, Project, DailyReport, WorkItem } from '../types/index.js';
-import { formatINR, formatRupees, paiseToRupees } from './currency.js';
 import { formatDate } from './dates.js';
-import { api } from '../api/client.js';
 import { materialCost, machineCost } from './reportOptions.js';
+import { createDoc, getCompany, PdfWriter, rupees, paise, statusColour, titleCase } from './pdfKit.js';
 
-export function exportProjectExpensesPdf(project: Project, expenses: Expense[]) {
-  const doc = new jsPDF();
+const qty = (n: number | undefined | null) => (n === undefined || n === null ? '—' : Number(n).toLocaleString('en-IN', { maximumFractionDigits: 3 }));
 
-  // Primary Navy Header Banner
-  doc.setFillColor(20, 43, 74); // #142B4A
-  doc.rect(0, 0, 210, 36, 'F');
+/** Project expense statement (all bills for one site). */
+export async function exportProjectExpensesPdf(project: Project, expenses: Expense[]) {
+  const [doc, company] = await Promise.all([createDoc(), getCompany()]);
+  const w = new PdfWriter(doc, `${company.legalName} · Expense statement · ${project.code}`);
 
-  // Title
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(18);
-  doc.setFont('helvetica', 'bold');
-  doc.text('BKR INFRA Construction Management', 14, 16);
+  const approved = expenses.filter((e) => e.status === 'APPROVED').reduce((s, e) => s + e.amount, 0);
+  const pending = expenses.filter((e) => e.status === 'PENDING').reduce((s, e) => s + e.amount, 0);
+  const rejected = expenses.filter((e) => e.status === 'REJECTED').reduce((s, e) => s + e.amount, 0);
+  const sorted = [...expenses].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  const period = sorted.length
+    ? `${formatDate(sorted[0].date, 'dd MMM yyyy')} – ${formatDate(sorted[sorted.length - 1].date, 'dd MMM yyyy')}`
+    : '—';
 
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.text('Official Project Expense & Financial Verification Audit Report', 14, 25);
-  doc.text(`Generated: ${formatDate(new Date(), 'dd MMM yyyy, hh:mm a')}`, 14, 31);
-
-  // Project Information Card
-  doc.setFillColor(246, 248, 251);
-  doc.roundedRect(14, 42, 182, 38, 3, 3, 'F');
-  doc.setDrawColor(226, 232, 240);
-  doc.roundedRect(14, 42, 182, 38, 3, 3, 'S');
-
-  doc.setTextColor(20, 43, 74);
-  doc.setFontSize(12);
-  doc.setFont('helvetica', 'bold');
-  doc.text(`${project.name} (${project.code})`, 18, 50);
-
-  doc.setFontSize(9);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(71, 85, 105);
-  doc.text(`Location: ${project.location}`, 18, 57);
-  doc.text(`Site In-Charge: ${project.assignedInCharge?.name || 'N/A'}`, 18, 64);
-  doc.text(`Status: ${project.status}`, 18, 71);
-
-  // Financial summary box on right
-  const approvedTotal = expenses
-    .filter((e) => e.status === 'APPROVED')
-    .reduce((sum, e) => sum + e.amount, 0);
-
-  const pendingTotal = expenses
-    .filter((e) => e.status === 'PENDING')
-    .reduce((sum, e) => sum + e.amount, 0);
-
-  if (project.budget !== undefined && project.budget !== null) {
-    doc.text(`Allocated Budget: ${formatINR(project.budget)}`, 115, 57);
-  } else {
-    doc.text(`Project Code: ${project.code}`, 115, 57);
-  }
-  doc.setTextColor(21, 128, 61); // Green
-  doc.setFont('helvetica', 'bold');
-  doc.text(`Verified Approved: ${formatINR(approvedTotal)}`, 115, 64);
-  doc.setTextColor(180, 83, 9); // Amber
-  doc.text(`Pending Approval: ${formatINR(pendingTotal)}`, 115, 71);
-
-  // Table Data
-  const tableRows = expenses.map((e) => [
-    formatDate(e.date, 'dd/MM/yyyy'),
-    e.category.replace(/_/g, ' '),
-    e.vendor,
-    e.description.length > 40 ? `${e.description.substring(0, 38)}...` : e.description,
-    formatINR(e.amount),
-    e.status,
+  w.letterhead(company, 'Expense Statement', [`Project ${project.code}`, `Period ${period}`]);
+  w.infoGrid([
+    ['Project', `${project.name} (${project.code})`],
+    ['Location', project.location || '—'],
+    ['Site In-Charge', project.assignedInCharge?.name || '—'],
+    ['Status', titleCase(project.status)],
+  ]);
+  w.tiles([
+    { label: 'Approved', value: paise(approved), accent: true },
+    { label: 'Pending approval', value: paise(pending) },
+    { label: 'Rejected', value: paise(rejected) },
+    ...(project.budget ? [{ label: 'Project budget', value: paise(project.budget) }] : []),
   ]);
 
-  autoTable(doc, {
-    startY: 86,
-    head: [['Date', 'Category', 'Vendor / Payee', 'Description', 'Amount (INR)', 'Status']],
-    body: tableRows,
-    headStyles: {
-      fillColor: [20, 43, 74],
-      textColor: [255, 255, 255],
-      fontStyle: 'bold',
-      fontSize: 9,
-    },
-    styles: {
-      fontSize: 8.5,
-      textColor: [30, 41, 59],
-      cellPadding: 3,
-    },
-    alternateRowStyles: {
-      fillColor: [248, 250, 252],
-    },
-    columnStyles: {
-      4: { halign: 'right', fontStyle: 'bold' },
-      5: { halign: 'center' },
-    },
-    didParseCell: (data) => {
-      if (data.section === 'body' && data.column.index === 5) {
-        if (data.cell.raw === 'APPROVED') {
-          data.cell.styles.textColor = [21, 128, 61];
-          data.cell.styles.fontStyle = 'bold';
-        } else if (data.cell.raw === 'PENDING') {
-          data.cell.styles.textColor = [180, 83, 9];
-          data.cell.styles.fontStyle = 'bold';
-        } else if (data.cell.raw === 'REJECTED') {
-          data.cell.styles.textColor = [220, 38, 38];
-          data.cell.styles.fontStyle = 'bold';
-        }
-      }
-    },
+  w.heading('Expenses', `${expenses.length} entr${expenses.length === 1 ? 'y' : 'ies'}`);
+  w.table({
+    head: ['Date', 'Category', 'Vendor / payee', 'Description', 'Status', 'Amount'],
+    body: sorted.map((e) => [
+      formatDate(e.date, 'dd MMM yyyy'),
+      titleCase(e.category),
+      e.vendor || '—',
+      e.description,
+      titleCase(e.status),
+      paise(e.amount),
+    ]),
+    foot: [['', '', '', 'Total (approved + pending)', '', paise(approved + pending)]],
+    money: [5],
+    widths: { 0: 25, 1: 30, 4: 20, 5: 28 },
+    didParseCell: (d) => statusColour(d, 4),
   });
 
-  // Disclaimer footer
-  const pageCount = (doc as any).internal.getNumberOfPages();
-  for (let i = 1; i <= pageCount; i++) {
-    doc.setPage(i);
-    doc.setFontSize(8);
-    doc.setTextColor(148, 163, 184);
-    doc.text(
-      'Notice: Expense approval confirms site verification and does not constitute proof of payment. BKR INFRA Construction PM.',
-      14,
-      290
-    );
-    doc.text(`Page ${i} of ${pageCount}`, 190, 290, { align: 'right' });
-  }
-
-  doc.save(`BKR-INFRA-${project.code}-Expenses.pdf`);
+  w.paragraph('Approval confirms that the expense was verified at site. It is not proof of payment — payments are recorded separately in the Payments register.');
+  w.signatures(['Prepared by', 'Verified by (Site In-Charge)', 'Approved by (Managing Director)']);
+  w.finish(`BKR-INFRA-${project.code}-Expenses.pdf`);
 }
 
+/** Daily progress report for one site and day. */
 export async function exportDailyReportPdf(report: DailyReport) {
-  // BKR INFRA legal name / GSTIN for the header (optional)
-  const company = await api
-    .get<{ settings: { legalName: string; gstin: string } }>('/company-settings')
-    .then((r) => r.settings)
-    .catch(() => null);
+  const [doc, company] = await Promise.all([createDoc(), getCompany()]);
+  const date = formatDate(report.workDate, 'dd MMM yyyy');
+  const w = new PdfWriter(doc, `${company.legalName} · Daily progress report · ${report.project?.code || ''} · ${date}`);
 
-  const doc = new jsPDF();
+  w.letterhead(company, 'Daily Progress Report', [
+    `${report.project?.code || ''}  ·  ${formatDate(report.workDate, 'EEEE, dd MMMM yyyy')}`,
+    `Status: ${titleCase(report.status)}${report.version && report.version > 1 ? `  ·  Revision ${report.version}` : ''}`,
+  ]);
 
-  // Header Banner
-  doc.setFillColor(20, 43, 74);
-  doc.rect(0, 0, 210, 36, 'F');
+  w.infoGrid([
+    ['Project', `${report.project?.name || ''} (${report.project?.code || ''})`],
+    ['Work date', formatDate(report.workDate, 'EEEE, dd MMM yyyy')],
+    ['Title of work', report.titleOfWork || '—'],
+    ['Shift / location', `${report.shift ? titleCase(report.shift) : '—'}${report.workLocation ? ` · ${report.workLocation}` : ''}`],
+    ['Prepared by', report.submittedBy?.name || 'Site In-Charge'],
+    ['Submitted', report.status === 'DRAFT' ? 'Draft (not submitted)' : formatDate(report.submittedAt || report.createdAt, 'dd MMM yyyy, hh:mm a')],
+  ]);
 
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(14);
-  doc.setFont('helvetica', 'bold');
-  doc.text(`${company?.legalName || 'BKR INFRA'} — Daily Construction Progress Report`, 14, 13);
-  if (company?.gstin) {
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`GSTIN: ${company.gstin}`, 196, 13, { align: 'right' });
-    doc.setFont('helvetica', 'bold');
+  // ----- figures -----
+  const items = report.workItems || [];
+  const labour = report.labourBreakdown || [];
+  const materials = report.materials || [];
+  const machinery = report.machinery || [];
+  const expenses = report.expenses || [];
+  const workTotal = report.totalWorkBudget ?? items.reduce((s, i) => s + (i.budget || 0), 0);
+  const labourTotal = labour.reduce((s, l) => s + (l.count || 0) * (l.wagePerDay || 0), 0);
+  const materialTotal = materials.reduce((s, m) => s + materialCost(m), 0);
+  const machineTotal = machinery.reduce((s, m) => s + machineCost(m), 0);
+  const expenseRupees = expenses.filter((e) => e.status !== 'REJECTED').reduce((s, e) => s + (e.amount || 0), 0) / 100;
+  // Same lines and grand total as the Cost summary on screen
+  const grandTotal = Math.round((workTotal + labourTotal + materialTotal + machineTotal + expenseRupees) * 100) / 100;
+
+  w.tiles([
+    { label: 'Workers on site', value: String(report.totalLabourCount || 0) },
+    { label: 'Work items value', value: rupees(workTotal) },
+    { label: 'Grand total', value: rupees(grandTotal), accent: true },
+  ]);
+
+  if (report.workSummary) {
+    w.heading('Work summary');
+    w.paragraph(report.workSummary);
   }
 
-  doc.setFontSize(12);
-  doc.setTextColor(245, 166, 35); // Amber
-  doc.text(`Work Title: ${report.titleOfWork || 'Daily Construction Work'}`, 14, 22);
-
-  doc.setFontSize(9);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(226, 232, 240);
-  doc.text(`Project: ${report.project?.name} (${report.project?.code}) | Date: ${formatDate(report.workDate, 'EEEE, dd MMMM yyyy')}`, 14, 30);
-
-  // Meta info
-  doc.setFillColor(246, 248, 251);
-  doc.roundedRect(14, 42, 182, 30, 2, 2, 'F');
-  doc.setTextColor(51, 65, 85);
-  doc.setFontSize(9);
-  doc.text(`Title of Work: ${report.titleOfWork || 'N/A'}`, 18, 50);
-  doc.text(`Submitted By: ${report.submittedBy?.name || 'In-Charge'}`, 18, 57);
-  doc.text(`Report Status: ${report.status}`, 18, 64);
-  doc.text(`Total Labour Count: ${report.totalLabourCount} workers`, 115, 50);
-  const totalBudget = report.totalWorkBudget ?? report.workItems?.reduce((s, i) => s + (i.budget || 0), 0) ?? 0;
-  doc.text(`Shift / Location: ${report.shift || '—'} / ${(report.workLocation || '—').slice(0, 38)}`, 115, 57);
-  doc.text(
-    `Progress: ${typeof report.overallProgressPercent === 'number' ? `${report.overallProgressPercent}%` : 'not reported'} | Submitted: ${
-      report.status === 'SUBMITTED' ? formatDate(report.submittedAt || report.createdAt, 'dd MMM yyyy, h:mm a') : 'draft'
-    }`,
-    115,
-    64
-  );
-
-  const PAGE_BOTTOM = 280;
-  let currentY = 80;
-  const ensureSpace = (needed: number) => {
-    if (currentY + needed > PAGE_BOTTOM) {
-      doc.addPage();
-      currentY = 18;
-    }
-  };
-  const textBlock = (title: string, body?: string) => {
-    if (!body) return;
-    const lines = doc.splitTextToSize(body, 182) as string[];
-    ensureSpace(12);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(20, 43, 74);
-    doc.text(title, 14, currentY);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(51, 65, 85);
-    currentY += 6;
-    for (const line of lines) {
-      ensureSpace(5);
-      doc.text(line, 14, currentY);
-      currentY += 4.5;
-    }
-    currentY += 6;
-  };
-  const table = (head: string[], body: string[][], color: [number, number, number], textColor: [number, number, number] = [255, 255, 255], foot?: string[][]) => {
-    if (!body.length) return;
-    ensureSpace(20);
-    autoTable(doc, {
-      startY: currentY,
-      head: [head],
-      body,
-      foot,
-      headStyles: { fillColor: color, textColor, fontSize: 9 },
-      footStyles: { fillColor: [240, 243, 246], textColor: [20, 43, 74], fontStyle: 'bold', fontSize: 8.5 },
-      styles: { fontSize: 8.5 },
+  if (items.length) {
+    const hasStatus = items.some((i) => !!i.status);
+    const itemStatus = (item: WorkItem) =>
+      item.status
+        ? `${titleCase(item.status)}${item.status === 'IN_PROGRESS' && item.progressPercent !== undefined ? ` (${item.progressPercent}%)` : ''}`
+        : '—';
+    w.heading('Work done', `${items.length} item${items.length === 1 ? '' : 's'}`);
+    const amountCol = hasStatus ? 6 : 5;
+    w.table({
+      head: ['Activity', 'Location', 'Qty', 'Unit', 'Rate', ...(hasStatus ? ['Status'] : []), 'Amount'],
+      body: items.map((i) => [
+        i.description,
+        i.location || '—',
+        qty(i.quantity),
+        i.unit,
+        i.rate ? `${rupees(i.rate)} / ${i.unit}` : '—',
+        ...(hasStatus ? [itemStatus(i)] : []),
+        i.budget ? rupees(i.budget) : '—',
+      ]),
+      foot: [['Total work value (estimated)', '', '', '', '', ...(hasStatus ? [''] : []), rupees(workTotal)]],
+      money: [2, 4, amountCol],
+      widths: { [amountCol]: 28 },
     });
-    currentY = (doc as any).lastAutoTable.finalY + 10;
-  };
+  }
 
-  textBlock('Work Summary & Details:', report.workSummary || 'No summary provided.');
+  if (labour.length) {
+    const hasHours = labour.some((l) => l.hours !== undefined && l.hours !== null);
+    w.heading('Labour', `${report.totalLabourCount || 0} worker${report.totalLabourCount === 1 ? '' : 's'}`);
+    const costCol = hasHours ? 5 : 4;
+    w.table({
+      head: ['Trade / role', 'Category', 'Workers', ...(hasHours ? ['Hours'] : []), 'Wage / day', 'Cost'],
+      body: labour.map((l) => [
+        l.role,
+        l.category ? titleCase(l.category) : '—',
+        String(l.count),
+        ...(hasHours ? [l.hours !== undefined && l.hours !== null ? String(l.hours) : '—'] : []),
+        l.wagePerDay ? rupees(l.wagePerDay) : '—',
+        l.wagePerDay ? rupees(l.count * l.wagePerDay) : '—',
+      ]),
+      foot: [['Total labour', '', String(report.totalLabourCount || 0), ...(hasHours ? [''] : []), '', labourTotal ? rupees(labourTotal) : '—']],
+      money: [costCol - 1, costCol],
+      center: [2],
+      widths: { [costCol]: 28 },
+    });
+  }
 
-  const hasItemStatus = (report.workItems || []).some((i) => !!i.status);
-  const itemStatus = (item: WorkItem) =>
-    item.status
-      ? `${item.status.replace('_', ' ')}${item.status === 'IN_PROGRESS' && item.progressPercent !== undefined ? ` ${item.progressPercent}%` : ''}`
-      : '—';
-  table(
-    ['Work Item / Activity', 'Location', 'Qty', 'Unit', 'Rate (INR)', ...(hasItemStatus ? ['Status'] : []), 'Amount (INR)'],
-    (report.workItems || []).map((item) => [
-      item.description,
-      item.location || '—',
-      item.quantity.toString(),
-      item.unit,
-      item.rate ? `${formatRupees(item.rate)} / ${item.unit}` : '—',
-      ...(hasItemStatus ? [itemStatus(item)] : []),
-      formatRupees(item.budget || 0),
-    ]),
-    [20, 43, 74],
-    [255, 255, 255],
-    [['Total Work Budget (Estimated)', '', '', '', '', ...(hasItemStatus ? [''] : []), formatRupees(totalBudget)]]
-  );
+  if (materials.length) {
+    w.heading('Materials used / received');
+    w.table({
+      head: ['Material', 'Quantity', 'Unit', 'Rate', 'Cost'],
+      body: materials.map((m) => [m.name, qty(m.quantity), m.unit, m.rate ? `${rupees(m.rate)} / ${m.unit}` : '—', m.rate ? rupees(materialCost(m)) : '—']),
+      foot: [['Total materials', '', '', '', materialTotal ? rupees(materialTotal) : '—']],
+      money: [1, 3, 4],
+      widths: { 4: 28 },
+    });
+  }
 
-  const labour = report.labourBreakdown || [];
-  const hasHours = labour.some((l) => l.hours !== undefined && l.hours !== null);
-  const labourCost = labour.reduce((s, l) => s + (l.count || 0) * (l.wagePerDay || 0), 0);
-  table(
-    ['Labour Trade / Role', 'Category', 'Headcount', ...(hasHours ? ['Hours'] : []), 'Wage / day (INR)', 'Cost (INR)'],
-    labour.map((l) => [
-      l.role,
-      l.category || '—',
-      l.count.toString(),
-      ...(hasHours ? [l.hours !== undefined ? String(l.hours) : '—'] : []),
-      l.wagePerDay ? formatRupees(l.wagePerDay) : '—',
-      l.wagePerDay ? formatRupees(l.count * l.wagePerDay) : '—',
-    ]),
-    [245, 166, 35],
-    [20, 43, 74],
-    labourCost > 0
-      ? [['Total Labour Cost', '', String(report.totalLabourCount), ...(hasHours ? [''] : []), '', formatRupees(labourCost)]]
-      : undefined
-  );
-
-  const materialTotal = (report.materials || []).reduce((s, m) => s + materialCost(m), 0);
-  table(
-    ['Material', 'Quantity', 'Unit', 'Rate (INR)', 'Cost (INR)'],
-    (report.materials || []).map((m) => [
-      m.name,
-      String(m.quantity),
-      m.unit,
-      m.rate ? `${formatRupees(m.rate)} / ${m.unit}` : '—',
-      m.rate ? formatRupees(materialCost(m)) : '—',
-    ]),
-    [20, 43, 74],
-    [255, 255, 255],
-    materialTotal > 0 ? [['Total Material Cost', '', '', '', formatRupees(materialTotal)]] : undefined
-  );
-
-  if (report.machinery && report.machinery.length > 0) {
-    const machineryTotal = report.machinery.reduce((s, m) => s + machineCost(m), 0);
-    table(
-      ['Machinery / Equipment', 'Nos', 'Hours used', 'Rate (INR)', 'Cost (INR)'],
-      report.machinery.map((m) => [
+  if (machinery.length) {
+    w.heading('Machinery & equipment');
+    w.table({
+      head: ['Machine', 'Nos', 'Hours used', 'Rate', 'Cost'],
+      body: machinery.map((m) => [
         m.name,
         String(m.quantity),
-        m.hoursUsed !== undefined ? String(m.hoursUsed) : '—',
-        m.rate ? `${formatRupees(m.rate)} / ${m.rateBasis === 'HOUR' ? 'hour' : 'day'}` : '—',
-        m.rate ? formatRupees(machineCost(m)) : '—',
+        m.hoursUsed !== undefined && m.hoursUsed !== null ? String(m.hoursUsed) : '—',
+        m.rate ? `${rupees(m.rate)} / ${m.rateBasis === 'HOUR' ? 'hour' : 'day'}` : '—',
+        m.rate ? rupees(machineCost(m)) : '—',
       ]),
-      [20, 43, 74],
-      [255, 255, 255],
-      machineryTotal > 0 ? [['Total Machinery Cost', '', '', '', formatRupees(machineryTotal)]] : undefined
-    );
-  } else {
-    textBlock('Machinery & Equipment:', report.equipmentDetails);
+      foot: [['Total machinery', '', '', '', machineTotal ? rupees(machineTotal) : '—']],
+      money: [3, 4],
+      center: [1, 2],
+      widths: { 4: 28 },
+    });
+  } else if (report.equipmentDetails) {
+    w.heading('Machinery & equipment');
+    w.paragraph(report.equipmentDetails);
   }
 
-  const expenses = report.expenses || [];
-  table(
-    ['Expense', 'Category', 'Vendor', 'Status', 'Amount', 'Bill'],
-    expenses.map((e) => [e.description, e.category.replace(/_/g, ' '), e.vendor, e.status, formatINR(e.amount), e.receiptUrl ? 'Attached' : '—']),
-    [20, 43, 74],
-    [255, 255, 255],
-    expenses.length ? [['Total', '', '', '', formatINR(expenses.reduce((s, e) => s + e.amount, 0)), '']] : undefined
-  );
+  if (expenses.length) {
+    w.heading('Bills & expenses', 'Rejected bills are not counted');
+    w.table({
+      head: ['Expense', 'Category', 'Vendor', 'Bill', 'Status', 'Amount'],
+      body: expenses.map((e) => [
+        e.description,
+        titleCase(e.category),
+        e.vendor || '—',
+        e.gst ? `GST ${e.gst.invoiceNumber}` : e.receiptUrl ? 'Attached' : '—',
+        titleCase(e.status),
+        paise(e.amount),
+      ]),
+      foot: [['Total (excluding rejected)', '', '', '', '', rupees(expenseRupees)]],
+      money: [5],
+      widths: { 5: 28 },
+      didParseCell: (d) => {
+        statusColour(d, 4);
+        if (d.section === 'body' && String((d.row.raw as any[])[4]).toUpperCase() === 'REJECTED' && d.column.index === 5) {
+          d.cell.styles.textColor = [148, 163, 184];
+        }
+      },
+    });
+  }
 
-  // Grand total of every section (expenses are stored in paise)
-  const labourTotal = (report.labourBreakdown || []).reduce((s, l) => s + (l.count || 0) * (l.wagePerDay || 0), 0);
-  const machineTotal = (report.machinery || []).reduce((s, m) => s + machineCost(m), 0);
-  const expenseRupees = expenses.reduce((s, e) => s + (e.amount || 0), 0) / 100;
-  const sections: Array<[string, number]> = [
-    ['Work items', totalBudget],
-    ['Labour (daily wages)', labourTotal],
-    ['Materials', materialTotal],
-    ['Machinery & equipment', machineTotal],
-    ['Expenses & bills', expenseRupees],
+  // ----- cost summary -----
+  const gstPaid =
+    expenses
+      .filter((e) => e.status !== 'REJECTED')
+      .reduce((s, e) => s + (e.gst ? e.gst.cgstPaise + e.gst.sgstPaise + e.gst.igstPaise : 0), 0) / 100;
+  const rows: Array<{ label: string; value: string; strong?: boolean; muted?: boolean }> = [
+    { label: 'Work items', value: rupees(workTotal) },
+    { label: 'Labour (daily wages)', value: rupees(labourTotal) },
+    { label: 'Materials', value: rupees(materialTotal) },
+    { label: 'Machinery & equipment', value: rupees(machineTotal) },
+    { label: 'Bills & expenses', value: rupees(expenseRupees) },
+    { label: 'GRAND TOTAL', value: rupees(grandTotal), strong: true },
   ];
-  const grandTotal = Math.round(sections.reduce((s, [, v]) => s + v, 0) * 100) / 100;
-  const gstPaid = expenses.reduce((s, e) => s + (e.gst ? e.gst.cgstPaise + e.gst.sgstPaise + e.gst.igstPaise : 0), 0) / 100;
-  table(
-    ['Cost summary', 'Amount (INR)'],
-    sections.map(([label, v]) => [label, v > 0 ? formatRupees(v) : '—']),
-    [20, 43, 74],
-    [255, 255, 255],
-    [
-      ['GRAND TOTAL', formatRupees(grandTotal)],
-      ...(gstPaid > 0
-        ? [
-            ['  of which GST on bills (input tax credit)', formatRupees(gstPaid)],
-            ['  Cost after GST credit', formatRupees(Math.round((grandTotal - gstPaid) * 100) / 100)],
-          ]
-        : []),
-    ]
-  );
+  if (gstPaid > 0) {
+    rows.push({ label: 'of which GST on bills (input credit)', value: rupees(gstPaid), muted: true });
+    rows.push({ label: 'Total after GST credit', value: rupees(grandTotal - gstPaid) });
+  }
+  w.totals(rows);
 
-  textBlock('Issues & Delays:', report.issuesAndDelays);
-  textBlock('Next Day Plan:', report.nextDayPlan);
-  textBlock('Remarks:', report.remarks);
-  if (report.photos?.length) textBlock('Site Photos:', `${report.photos.length} photo(s)/video(s) attached — view them in BKR INFRA.`);
+  if (report.issuesAndDelays) {
+    w.heading('Issues & delays');
+    w.paragraph(report.issuesAndDelays);
+  }
+  if (report.nextDayPlan) {
+    w.heading('Plan for tomorrow');
+    w.paragraph(report.nextDayPlan);
+  }
+  if (report.remarks) {
+    w.heading('Remarks');
+    w.paragraph(report.remarks);
+  }
+  if (report.photos?.length) {
+    w.paragraph(`${report.photos.length} site photo(s)/video(s) are attached to this report in the BKR INFRA app.`);
+  }
 
-  doc.save(`BKR-INFRA-DailyReport-${formatDate(report.workDate, 'yyyy-MM-dd')}.pdf`);
+  w.signatures(['Prepared by (Site In-Charge)', 'Reviewed by (Managing Director)']);
+  w.finish(`BKR-INFRA-DailyReport-${report.project?.code || 'site'}-${formatDate(report.workDate, 'yyyy-MM-dd')}.pdf`);
 }

@@ -1,7 +1,7 @@
 {
   "rewrites": [
     {
-      "source": "/((?!assets/|sw.js|manifest.webmanifest|icons/).*)",
+      "source": "/((?!assets/|sw.js|manifest.webmanifest|icons/|fonts/).*)",
       "destination": "/index.html"
     }
   ],
@@ -9,6 +9,10 @@
     {
       "source": "/sw.js",
       "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+    },
+    {
+      "source": "/fonts/(.*)",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=2592000" }]
     },
     {
       "source": "/assets/(.*)",

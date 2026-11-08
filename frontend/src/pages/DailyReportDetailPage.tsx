@@ -124,7 +124,8 @@ export const DailyReportDetailPage: React.FC = () => {
   const myId = user?.id || (user as any)?._id;
   const canEdit = isMDUser || report.submittedBy?._id === myId;
   const expenses = report.expenses || [];
-  const expenseTotal = expenses.reduce((s, e) => s + (e.amount || 0), 0);
+  // Rejected bills are not part of the day's cost
+  const expenseTotal = expenses.filter((e) => e.status !== 'REJECTED').reduce((s, e) => s + (e.amount || 0), 0);
   const labourHours = (report.labourBreakdown || []).reduce((s, l) => s + (l.count || 0) * (l.hours || 0), 0);
   const materialTotal = report.totalMaterialCost || (report.materials || []).reduce((s, m) => s + materialCost(m), 0);
   const machineryTotal = report.totalMachineryCost || (report.machinery || []).reduce((s, m) => s + machineCost(m), 0);
@@ -454,7 +455,7 @@ export const DailyReportDetailPage: React.FC = () => {
           materials: materialTotal,
           machinery: machineryTotal,
           expenses: expenseTotal / 100, // stored in paise
-          gst: expenses.reduce((s, e) => s + (e.gst ? e.gst.cgstPaise + e.gst.sgstPaise + e.gst.igstPaise : 0), 0) / 100,
+          gst: expenses.filter((e) => e.status !== 'REJECTED').reduce((s, e) => s + (e.gst ? e.gst.cgstPaise + e.gst.sgstPaise + e.gst.igstPaise : 0), 0) / 100,
         }}
       />
 

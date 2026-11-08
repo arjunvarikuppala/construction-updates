@@ -1,11 +1,7 @@
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import type { PaymentRequest } from '../types/index.js';
 import { formatDate } from './dates.js';
 import { MODE_LABEL, balancePaiseOf, nameOf, paidPaiseOf, payeeKindOf } from './payments.js';
-
-// The built-in PDF font has no ₹ glyph, so vouchers print "Rs."
-const rs = (paise: number) => `Rs. ${((paise || 0) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+import { createDoc, getCompany, PdfWriter, paise, titleCase } from './pdfKit.js';
 
 const ONES = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
 const TENS = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
@@ -17,10 +13,10 @@ function threeDigits(n: number) {
   const r = n % 100;
   return `${h ? `${ONES[h]} Hundred${r ? ' ' : ''}` : ''}${r ? twoDigits(r) : ''}`;
 }
-/** Indian numbering in words: 1,25,000 → "One Lakh Twenty Five Thousand" */
-export function rupeesInWords(paise: number): string {
-  let n = Math.floor(paise / 100);
-  const p = paise % 100;
+/** Indian numbering in words: 1,25,000 → "One Lakh Twenty Five Thousand Rupees Only" */
+export function rupeesInWords(amountPaise: number): string {
+  let n = Math.floor(amountPaise / 100);
+  const p = amountPaise % 100;
   if (n === 0 && p === 0) return 'Zero Rupees Only';
   const parts: string[] = [];
   const crore = Math.floor(n / 10000000);
@@ -33,83 +29,58 @@ export function rupeesInWords(paise: number): string {
   if (lakh) parts.push(`${twoDigits(lakh)} Lakh`);
   if (thousand) parts.push(`${twoDigits(thousand)} Thousand`);
   if (n) parts.push(threeDigits(n));
-  const rupees = parts.length ? `${parts.join(' ')} Rupees` : '';
-  return `${rupees}${p ? `${rupees ? ' and ' : ''}${twoDigits(p)} Paise` : ''} Only`;
+  const r = parts.length ? `${parts.join(' ')} Rupees` : '';
+  return `${r}${p ? `${r ? ' and ' : ''}${twoDigits(p)} Paise` : ''} Only`;
 }
 
 /** Printable payment voucher with every payment entry, for the file and for signatures. */
-export function exportPaymentVoucherPdf(payment: PaymentRequest, companyName = 'BKR INFRA') {
-  const doc = new jsPDF();
+export async function exportPaymentVoucherPdf(payment: PaymentRequest) {
+  const [doc, company] = await Promise.all([createDoc(), getCompany()]);
+  const w = new PdfWriter(doc, `${company.legalName} · Payment voucher · ${payment.paymentReference}`);
   const entries = (payment.settlements || []).filter((s) => !s.voided);
-
-  doc.setFillColor(20, 43, 74);
-  doc.rect(0, 0, 210, 30, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(16);
-  doc.text(companyName, 14, 14);
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.text('PAYMENT VOUCHER', 14, 22);
-  doc.text(payment.paymentReference, 196, 14, { align: 'right' });
-  doc.text(`Printed ${formatDate(new Date(), 'dd MMM yyyy')}`, 196, 22, { align: 'right' });
-
-  doc.setTextColor(30, 41, 59);
-  doc.setFontSize(10);
   const project = payment.project as any;
-  const rows: [string, string][] = [
-    ['Paid to', `${payment.payeeNameSnapshot} (${payeeKindOf(payment) === 'INCHARGE' ? 'Site In-Charge' : payment.payeeType || 'Vendor'})`],
-    ['Site', project ? `${project.code} - ${project.name}` : ''],
+  const isInCharge = payeeKindOf(payment) === 'INCHARGE';
+  const paid = paidPaiseOf(payment);
+  const balance = balancePaiseOf(payment);
+
+  w.letterhead(company, 'Payment Voucher', [`Voucher ${payment.paymentReference}`, `Date ${formatDate(payment.lastPaidAt || new Date(), 'dd MMM yyyy')}`]);
+
+  const payTo = [payment.vpaSnapshot && `UPI ${payment.vpaSnapshot}`, payment.accountNumberMaskedSnapshot && `A/C ${payment.accountNumberMaskedSnapshot} · ${payment.ifscSnapshot || ''}`]
+    .filter(Boolean)
+    .join('  ·  ');
+  w.infoGrid([
+    ['Paid to', payment.payeeNameSnapshot],
+    ['Payee type', isInCharge ? 'Site In-Charge' : titleCase(payment.payeeType || 'Vendor')],
+    ['Site', project ? `${project.code} – ${project.name}` : '—'],
+    ['Account / UPI', payTo || '—'],
     ['Purpose', payment.purpose],
-    ['Requested by', `${nameOf(payment.createdBy, '')} on ${formatDate(payment.createdAt, 'dd MMM yyyy')}`],
-    ['Request amount', rs(payment.amount)],
-    ['Paid', rs(paidPaiseOf(payment))],
-    ['Balance due', rs(balancePaiseOf(payment))],
-  ];
-  if (payment.vpaSnapshot) rows.splice(1, 0, ['UPI ID', payment.vpaSnapshot]);
-  if (payment.accountNumberMaskedSnapshot) rows.splice(1, 0, ['Bank A/C', `${payment.accountNumberMaskedSnapshot}  IFSC ${payment.ifscSnapshot || ''}`]);
+    ['Requested by', `${nameOf(payment.createdBy, '—')} on ${formatDate(payment.createdAt, 'dd MMM yyyy')}`],
+  ]);
 
-  autoTable(doc, {
-    startY: 38,
-    body: rows,
-    theme: 'plain',
-    styles: { fontSize: 10, cellPadding: 1.8 },
-    columnStyles: { 0: { fontStyle: 'bold', cellWidth: 40, textColor: [100, 116, 139] } },
-  });
+  w.tiles([
+    { label: 'Request amount', value: paise(payment.amount) },
+    { label: 'Paid', value: paise(paid), accent: true },
+    { label: 'Balance due', value: paise(balance) },
+  ]);
 
-  const afterInfo = (doc as any).lastAutoTable.finalY + 6;
-  doc.setFont('helvetica', 'bold');
-  doc.text('Payments made', 14, afterInfo);
-  autoTable(doc, {
-    startY: afterInfo + 3,
-    head: [['Date', 'Mode', 'UTR / Cheque no.', 'Amount', 'Received']],
+  w.heading('Payments made', `${entries.length} entr${entries.length === 1 ? 'y' : 'ies'}`);
+  w.table({
+    head: ['Date', 'Mode', 'UTR / cheque no.', ...(isInCharge ? ['Received'] : []), 'Amount'],
     body: entries.length
       ? entries.map((s) => [
           formatDate(s.paidOn, 'dd MMM yyyy'),
           MODE_LABEL[s.mode],
-          s.reference || (s.mode === 'CASH' ? 'Cash' : '-'),
-          rs(s.amountPaise),
-          payeeKindOf(payment) === 'INCHARGE' ? (s.receivedConfirmedAt ? `Confirmed ${formatDate(s.receivedConfirmedAt, 'dd MMM')}` : 'Not confirmed') : '-',
+          s.reference || (s.mode === 'CASH' ? 'Cash' : '—'),
+          ...(isInCharge ? [s.receivedConfirmedAt ? `Confirmed ${formatDate(s.receivedConfirmedAt, 'dd MMM')}` : 'Not confirmed'] : []),
+          paise(s.amountPaise),
         ])
-      : [['-', '-', 'No payment recorded yet', '-', '-']],
-    foot: [['', '', 'Total paid', rs(paidPaiseOf(payment)), '']],
-    headStyles: { fillColor: [20, 43, 74] },
-    footStyles: { fillColor: [241, 245, 249], textColor: [20, 43, 74], fontStyle: 'bold' },
-    styles: { fontSize: 9 },
-    columnStyles: { 3: { halign: 'right' } },
+      : [['—', '—', 'No payment recorded yet', ...(isInCharge ? ['—'] : []), '—']],
+    foot: [['', '', 'Total paid', ...(isInCharge ? [''] : []), paise(paid)]],
+    money: [isInCharge ? 4 : 3],
+    widths: { [isInCharge ? 4 : 3]: 32 },
   });
 
-  let y = (doc as any).lastAutoTable.finalY + 8;
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.text(`Amount paid in words: ${rupeesInWords(paidPaiseOf(payment))}`, 14, y, { maxWidth: 182 });
-  y += 26;
-  doc.setDrawColor(148, 163, 184);
-  [14, 82, 150].forEach((x) => doc.line(x, y, x + 46, y));
-  doc.setFontSize(8);
-  doc.text('Prepared by', 14, y + 5);
-  doc.text('Approved by (MD)', 82, y + 5);
-  doc.text("Receiver's signature", 150, y + 5);
-
-  doc.save(`Voucher-${payment.paymentReference}.pdf`);
+  w.paragraph(`Amount paid in words: ${rupeesInWords(paid)}.`);
+  w.signatures(['Prepared by', 'Approved by (Managing Director)', "Receiver's signature"]);
+  w.finish(`Voucher-${payment.paymentReference}.pdf`);
 }

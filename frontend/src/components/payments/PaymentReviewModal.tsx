@@ -138,7 +138,7 @@ export const PaymentReviewModal: React.FC<PaymentReviewModalProps> = ({ payment:
             {paid > 0 && (
               <Button
                 variant="outline"
-                onClick={() => exportPaymentVoucherPdf(payment, company?.legalName || 'BKR INFRA')}
+                onClick={() => exportPaymentVoucherPdf(payment).catch(() => toastError('Could not create the voucher PDF'))}
                 leftIcon={<Download className="w-4 h-4" />}
               >
                 Voucher PDF
