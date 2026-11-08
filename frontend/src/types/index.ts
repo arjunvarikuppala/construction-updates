@@ -647,6 +647,9 @@ export interface ProjectMessage {
   };
   content: string;
   attachments: MessageAttachment[];
+  messageType?: 'TEXT' | 'ATTACHMENT' | 'MIXED';
+  replyTo?: Partial<ProjectMessage> | string | null;
+  clientMessageId?: string;
   contextType: MessageContextType;
   contextId?: string;
   contextSummary?: string;

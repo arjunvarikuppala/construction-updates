@@ -310,6 +310,11 @@ export function emitToProject(projectId: string, event: string, data: any): void
   }
 }
 
+/** Drop a user's live sockets from a project room (used when an assignment is revoked). */
+export function removeUserFromProjectRoom(userId: string, projectId: string): void {
+  if (io) io.in(`user:${userId}`).socketsLeave(`project:${projectId}`);
+}
+
 export function emitToUser(userId: string, event: string, data: any): void {
   if (io) {
     io.to(`user:${userId}`).emit(event, data);

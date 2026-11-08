@@ -15,10 +15,15 @@ export interface IMessageAttachment {
   thumbnailUrl?: string;
 }
 
+export type MessageType = 'TEXT' | 'ATTACHMENT' | 'MIXED';
+
 export interface IProjectMessage extends Document {
   project: mongoose.Types.ObjectId;
   sender: mongoose.Types.ObjectId;
   content: string;
+  messageType: MessageType;
+  replyTo?: mongoose.Types.ObjectId;
+  clientMessageId?: string;
   attachments: IMessageAttachment[];
   contextType: MessageContextType;
   contextId?: string;
@@ -68,6 +73,21 @@ const ProjectMessageSchema = new Schema<IProjectMessage>(
       default: '',
     },
     attachments: [MessageAttachmentSchema],
+    messageType: {
+      type: String,
+      enum: ['TEXT', 'ATTACHMENT', 'MIXED'],
+      default: 'TEXT',
+    },
+    replyTo: {
+      type: Schema.Types.ObjectId,
+      ref: 'ProjectMessage',
+    },
+    // Client-generated idempotency key: retries / reconnects never create duplicates
+    clientMessageId: {
+      type: String,
+      trim: true,
+      maxlength: 64,
+    },
     contextType: {
       type: String,
       enum: ['GENERAL', 'DAILY_REPORT', 'EXPENSE', 'PAYMENT_REQUEST'],
@@ -102,9 +122,14 @@ ProjectMessageSchema.pre('validate', function (next) {
   if (!hasContent && !hasAttachments) {
     this.invalidate('content', 'Message must contain either text or at least one attachment.');
   }
+  this.messageType = hasAttachments ? (hasContent ? 'MIXED' : 'ATTACHMENT') : 'TEXT';
   next();
 });
 
 ProjectMessageSchema.index({ project: 1, createdAt: -1 });
+ProjectMessageSchema.index(
+  { sender: 1, clientMessageId: 1 },
+  { unique: true, partialFilterExpression: { clientMessageId: { $type: 'string' } } }
+);
 
 export const ProjectMessage = mongoose.model<IProjectMessage>('ProjectMessage', ProjectMessageSchema);

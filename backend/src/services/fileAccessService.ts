@@ -110,3 +110,82 @@ export async function recordUpload(params: {
     console.error('Failed to record upload ownership:', (err as Error).message);
   }
 }
+
+export interface ShareableAttachment {
+  url: string;
+  name: string;
+  type: 'image' | 'video' | 'document';
+  mimeType: string;
+  size?: number;
+  storageKey?: string;
+}
+
+function inferMime(url: string, fallback?: string): string {
+  if (fallback) return fallback;
+  const ext = path.extname(url.split('?')[0]).toLowerCase();
+  if (ext === '.pdf') return 'application/pdf';
+  if (ext === '.png') return 'image/png';
+  if (ext === '.webp') return 'image/webp';
+  if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
+  if (ext === '.webm') return 'video/webm';
+  if (ext === '.mp4' || ext === '.mov') return 'video/mp4';
+  return 'application/octet-stream';
+}
+
+function mediaTypeFor(mime: string): 'image' | 'video' | 'document' {
+  if (mime.startsWith('image/')) return 'image';
+  if (mime.startsWith('video/')) return 'video';
+  return 'document';
+}
+
+/**
+ * Validate an attachment a client wants to post in a project chat. Accepted only if
+ * the caller uploaded it themselves, or it already belongs to a record of THIS
+ * project (sharing an existing receipt/invoice/photo without duplicating the file).
+ * Metadata is taken from the server record, never trusted from the client.
+ */
+export async function resolveShareableAttachment(
+  user: Pick<AuthUserPayload, 'userId'>,
+  projectId: string,
+  raw: any
+): Promise<ShareableAttachment | null> {
+  const url = typeof raw?.url === 'string' ? raw.url.trim() : '';
+  if (!url || url.length > 2048) return null;
+  if (!/^https:\/\//i.test(url) && !extractLocalFilename(url)) return null;
+
+  const name = String(raw?.name || path.basename(url.split('?')[0]) || 'file').slice(0, 200);
+
+  // Chat media URLs are bound to the project they were uploaded into
+  const chatProject = url.match(/^\/api\/v1\/projects\/([^/]+)\/messages\/media\//)?.[1];
+  if (chatProject && chatProject !== String(projectId)) return null;
+
+  const own =await UploadedFile.findOne({ url, uploadedBy: new mongoose.Types.ObjectId(user.userId) });
+  if (own) {
+    const mimeType = inferMime(url, own.mimetype);
+    return { url, name, type: mediaTypeFor(mimeType), mimeType, size: own.size, storageKey: raw?.storageKey };
+  }
+
+  const project = new mongoose.Types.ObjectId(projectId);
+  const local = extractLocalFilename(url);
+  const match: any = local ? new RegExp(`/${escapeRegex(local)}$`) : url;
+  const [report, expense, payment, message] = await Promise.all([
+    DailyReport.exists({ project, 'photos.url': match }),
+    Expense.exists({ project, receiptUrl: match }),
+    PaymentRequest.exists({ project, invoiceUrl: match }),
+    ProjectMessage.exists({ project, 'attachments.url': match }),
+  ]);
+  if (!report && !expense && !payment && !message) return null;
+
+  const mimeType = inferMime(url);
+  return { url, name, type: mediaTypeFor(mimeType), mimeType, size: typeof raw?.size === 'number' ? raw.size : undefined };
+}
+
+/** Record an externally stored (Cloudinary/R2) upload so it can later be validated as the caller's own. */
+export async function recordExternalUpload(params: { url: string; uploadedBy: string; mimetype?: string; size?: number }) {
+  if (extractLocalFilename(params.url)) return recordUpload(params);
+  try {
+    await UploadedFile.create({ filename: `ext:${params.url.slice(-120)}`, ...params });
+  } catch (err) {
+    console.error('Failed to record external upload:', (err as Error).message);
+  }
+}

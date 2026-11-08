@@ -26,6 +26,8 @@ import {
   RefreshCw,
   ArrowLeft,
   WifiOff,
+  CornerUpLeft,
+  FolderOpen,
 } from 'lucide-react';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.js';
@@ -43,6 +45,16 @@ import { formatDate } from '../utils/dates.js';
 
 import { SecureImage, SecureVideo } from '../components/common/SecureMedia.js';
 import { resolveMediaUrl } from '../utils/media.js';
+import {
+  DocumentViewer,
+  ReplyQuote,
+  ReplyComposerBar,
+  ShareProjectFileModal,
+  ShareableFile,
+  uploadWithProgress,
+  formatFileSize,
+  fileTypeLabel,
+} from '../components/chat/ChatParts.js';
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
 const ALLOWED_DOC_TYPES = ['application/pdf'];
@@ -53,7 +65,8 @@ const MAX_DOC_SIZE = 25 * 1024 * 1024; // 25 MB
 
 interface StagedAttachment {
   id: string;
-  file: File;
+  file?: File; // absent for existing project files shared by reference
+  shared?: boolean;
   previewUrl: string;
   name: string;
   size: number;
@@ -64,14 +77,6 @@ interface StagedAttachment {
   uploadedUrl?: string;
   storageKey?: string;
   error?: string;
-}
-
-function formatFileSize(bytes?: number): string {
-  if (!bytes || bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
 // Media is fetched through short-lived signed URLs (see utils/media.ts);
@@ -125,6 +130,13 @@ export const ProjectMessagesPage: React.FC = () => {
   } | null>(null);
   const [zoomLevel, setZoomLevel] = useState<number>(1);
   const [rotation, setRotation] = useState<number>(0);
+
+  // Reply-to, document viewer, share-from-records
+  const [replyTarget, setReplyTarget] = useState<ProjectMessage | null>(null);
+  const [viewerDoc, setViewerDoc] = useState<MessageAttachment | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const clientMessageIdRef = useRef<string | null>(null);
 
   // Fetch Projects list
   const { data: projectsData, isLoading: isLoadingProjects } = useQuery({
@@ -194,6 +206,8 @@ export const ProjectMessagesPage: React.FC = () => {
         setContextSummary('');
       }
 
+      setReplyTarget(null);
+      clientMessageIdRef.current = null;
       setMobileView('chat');
       navigate(`/messages/${targetProjectId}`);
     },
@@ -328,6 +342,8 @@ export const ProjectMessagesPage: React.FC = () => {
       api.post(`/projects/${activeProjectId}/messages`, data),
     onSuccess: (res: any) => {
       setContent('');
+      setReplyTarget(null);
+      clientMessageIdRef.current = null;
       // Clean up previews
       stagedAttachments.forEach((a) => {
         if (a.previewUrl && a.previewUrl.startsWith('blob:')) {
@@ -445,61 +461,83 @@ export const ProjectMessagesPage: React.FC = () => {
 
     setStagedAttachments((prev) => [...prev, ...newStaged]);
 
-    // Upload each staged item
     for (const staged of newStaged) {
-      try {
-        const formData = new FormData();
-        formData.append('files', staged.file);
-
-        const res = await api.post<{
-          success: boolean;
-          message?: string;
-          attachments: MessageAttachment[];
-        }>(`/projects/${currentChannelId}/messages/upload`, formData);
-
-        // Discard if user switched projects during upload
-        if (activeProjectId !== currentChannelId) {
-          return;
-        }
-
-        if (res.success && res.attachments && res.attachments.length > 0) {
-          const uploaded = res.attachments[0];
-          setStagedAttachments((prev) =>
-            prev.map((item) =>
-              item.id === staged.id
-                ? {
-                    ...item,
-                    uploading: false,
-                    progress: 100,
-                    uploadedUrl: uploaded.url,
-                    storageKey: uploaded.storageKey,
-                    type: (uploaded.type as any) || item.type,
-                  }
-                : item
-            )
-          );
-        } else {
-          throw new Error(res.message || 'Server rejected media upload');
-        }
-      } catch (err: any) {
-        if (activeProjectId !== currentChannelId) return;
-        setStagedAttachments((prev) =>
-          prev.map((item) =>
-            item.id === staged.id
-              ? {
-                  ...item,
-                  uploading: false,
-                  error: err.message || 'Upload failed',
-                }
-              : item
-          )
-        );
-        showToast(
-          `Failed to upload "${staged.name}": ${err.message || 'Network error'}`,
-          'error'
-        );
-      }
+      await uploadStaged(staged, currentChannelId);
     }
+  };
+
+  const patchStaged = (id: string, patch: Partial<StagedAttachment>) =>
+    setStagedAttachments((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+
+  // Upload one staged file with progress; also used for retry after a failure
+  const uploadStaged = async (staged: StagedAttachment, channelId: string) => {
+    if (!staged.file) return;
+    patchStaged(staged.id, { uploading: true, error: undefined, progress: 0 });
+    try {
+      const formData = new FormData();
+      formData.append('files', staged.file);
+      const res = await uploadWithProgress<{ success: boolean; message?: string; attachments: MessageAttachment[] }>(
+        `/projects/${channelId}/messages/upload`,
+        formData,
+        (pct) => patchStaged(staged.id, { progress: pct })
+      );
+      const uploaded = res.attachments?.[0];
+      if (!res.success || !uploaded) throw new Error(res.message || 'Server rejected media upload');
+      patchStaged(staged.id, {
+        uploading: false,
+        progress: 100,
+        uploadedUrl: uploaded.url,
+        storageKey: uploaded.storageKey,
+        type: (uploaded.type as any) || staged.type,
+        mimeType: uploaded.mimeType || staged.mimeType,
+        size: uploaded.size || staged.size,
+      });
+    } catch (err: any) {
+      patchStaged(staged.id, { uploading: false, error: err.message || 'Upload failed' });
+      showToast(`Failed to upload "${staged.name}": ${err.message || 'Network error'}`, 'error');
+    }
+  };
+
+  const handleRetryStaged = (id: string) => {
+    const item = stagedAttachments.find((a) => a.id === id);
+    if (item && activeProjectId) void uploadStaged(item, activeProjectId);
+  };
+
+  // Share an existing receipt / invoice / report photo by reference (no re-upload)
+  const handleShareFile = (f: ShareableFile) => {
+    const isPdf = /\.pdf($|\?)/i.test(f.url);
+    setStagedAttachments((prev) =>
+      prev.some((a) => a.uploadedUrl === f.url)
+        ? prev
+        : [
+            ...prev,
+            {
+              id: `shared-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+              shared: true,
+              previewUrl: '',
+              name: f.name,
+              size: 0,
+              type: isPdf ? 'document' : 'image',
+              mimeType: isPdf ? 'application/pdf' : 'image/jpeg',
+              uploading: false,
+              progress: 100,
+              uploadedUrl: f.url,
+            },
+          ]
+    );
+    setShareOpen(false);
+  };
+
+  // Scroll to a quoted message and flash it
+  const jumpToMessage = (messageId: string) => {
+    const el = document.getElementById(`msg-${messageId}`);
+    if (!el) {
+      showToast('The original message is older than the loaded conversation history.', 'info');
+      return;
+    }
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setHighlightId(messageId);
+    window.setTimeout(() => setHighlightId((cur) => (cur === messageId ? null : cur)), 2000);
   };
 
   const handleFilesSelected = (files: File[]) => {
@@ -583,7 +621,7 @@ export const ProjectMessagesPage: React.FC = () => {
     }
 
     const readyAttachments = stagedAttachments
-      .filter((a) => a.uploadedUrl)
+      .filter((a) => a.uploadedUrl && !a.error)
       .map((a) => ({
         url: a.uploadedUrl!,
         name: a.name,
@@ -598,9 +636,15 @@ export const ProjectMessagesPage: React.FC = () => {
       return;
     }
 
+    if (!clientMessageIdRef.current) {
+      clientMessageIdRef.current = `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+    }
+
     sendMessageMutation.mutate({
       content: content.trim(),
       attachments: readyAttachments,
+      replyToMessageId: replyTarget ? replyTarget._id || replyTarget.id : undefined,
+      clientMessageId: clientMessageIdRef.current,
       contextType: contextType !== 'GENERAL' ? contextType : undefined,
       contextId: contextId || undefined,
       contextSummary: contextSummary || undefined,
@@ -1205,7 +1249,8 @@ export const ProjectMessagesPage: React.FC = () => {
               return (
                 <div
                   key={id}
-                  className={`flex flex-col ${isMine ? 'items-end' : 'items-start'} space-y-1`}
+                  id={`msg-${id}`}
+                  className={`flex flex-col ${isMine ? 'items-end' : 'items-start'} space-y-1 scroll-mt-24`}
                 >
                   {/* Sender Header */}
                   <div className="flex items-center gap-1.5 px-1 text-[11px] text-slate-400">
@@ -1221,16 +1266,40 @@ export const ProjectMessagesPage: React.FC = () => {
                     </span>
                     <span>•</span>
                     <span>{formatDate(m.createdAt, 'hh:mm a')}</span>
+                    <button
+                      type="button"
+                      onClick={() => setReplyTarget(m)}
+                      className="ml-1 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md font-semibold text-slate-500 hover:text-amber-600 hover:bg-amber-50 cursor-pointer"
+                      aria-label={`Reply to ${m.sender?.name || 'message'}`}
+                    >
+                      <CornerUpLeft className="w-3 h-3" />
+                      <span>Reply</span>
+                    </button>
                   </div>
 
                   {/* Message Bubble */}
                   <div
-                    className={`max-w-[85%] sm:max-w-xl rounded-2xl p-3 sm:p-3.5 shadow-xs space-y-2 break-words overflow-hidden ${
+                    className={`max-w-[85%] sm:max-w-xl min-w-0 rounded-2xl p-3 sm:p-3.5 shadow-xs space-y-2 break-words overflow-hidden transition-shadow ${
+                      highlightId === id ? 'ring-4 ring-amber-400' : ''
+                    } ${
                       isMine
                         ? 'bg-navy-950 text-white rounded-tr-none'
                         : 'bg-white text-navy-950 border border-slate-200/90 rounded-tl-none'
                     }`}
                   >
+                    {/* Quoted original (reply-to) */}
+                    {m.replyTo && (
+                      <ReplyQuote
+                        original={typeof m.replyTo === 'object' ? m.replyTo : null}
+                        dark={isMine}
+                        onClick={() =>
+                          jumpToMessage(
+                            String(typeof m.replyTo === 'object' ? (m.replyTo as any)?._id : m.replyTo)
+                          )
+                        }
+                      />
+                    )}
+
                     {/* Linked Context Card (Payment Request, Daily Report, Expense) */}
                     {m.contextType && m.contextType !== 'GENERAL' && (
                       <div
@@ -1408,17 +1477,25 @@ export const ProjectMessagesPage: React.FC = () => {
                                       : 'bg-slate-50 border-slate-200 text-navy-950'
                                   }`}
                                 >
-                                  <div className="flex items-center gap-2 truncate min-w-0">
-                                    <FileText className="w-4 h-4 text-amber-400 flex-shrink-0" />
-                                    <div className="truncate">
-                                      <p className="font-bold truncate text-[11px]">{att.name}</p>
-                                      {att.size && (
-                                        <p className="text-[10px] text-slate-400 font-mono">
-                                          {formatFileSize(att.size)}
-                                        </p>
-                                      )}
-                                    </div>
-                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => setViewerDoc(att)}
+                                    className="flex items-center gap-2 min-w-0 flex-1 text-left cursor-pointer"
+                                    title="Preview document"
+                                  >
+                                    <span className="w-9 h-10 rounded-md bg-rose-50 text-rose-600 border border-rose-200 flex flex-col items-center justify-center shrink-0">
+                                      <FileText className="w-4 h-4" />
+                                      <span className="text-[8px] font-black">{fileTypeLabel(att)}</span>
+                                    </span>
+                                    <span className="min-w-0">
+                                      <span className="block font-bold truncate text-[11px]">{att.name}</span>
+                                      <span className="block text-[10px] text-slate-400 font-mono truncate">
+                                        {[fileTypeLabel(att), formatFileSize(att.size), formatDate(m.createdAt, 'dd MMM, hh:mm a')]
+                                          .filter(Boolean)
+                                          .join(' • ')}
+                                      </span>
+                                    </span>
+                                  </button>
                                   <button
                                     type="button"
                                     onClick={(e) => handleDownload(e, att.url, att.name)}
@@ -1497,6 +1574,8 @@ export const ProjectMessagesPage: React.FC = () => {
           <div ref={messagesEndRef} />
         </div>
 
+        {replyTarget && <ReplyComposerBar target={replyTarget} onCancel={() => setReplyTarget(null)} />}
+
         {/* Active Context Tag Pill */}
         {contextType !== 'GENERAL' && (
           <div className="px-6 py-2 bg-amber-50 border-t border-amber-200 flex items-center justify-between text-xs text-amber-950">
@@ -1558,7 +1637,9 @@ export const ProjectMessagesPage: React.FC = () => {
                 >
                   {/* Thumbnail Preview */}
                   <div className="relative w-12 h-12 rounded-lg bg-slate-100 overflow-hidden flex items-center justify-center flex-shrink-0 border border-slate-200">
-                    {att.type === 'image' ? (
+                    {att.type === 'image' && att.shared ? (
+                      <SecureImage src={att.uploadedUrl} alt={att.name} className="w-full h-full object-cover" />
+                    ) : att.type === 'image' ? (
                       <img
                         src={att.previewUrl}
                         alt={att.name}
@@ -1587,17 +1668,34 @@ export const ProjectMessagesPage: React.FC = () => {
                       {att.name}
                     </p>
                     <p className="text-[10px] text-slate-500 font-mono">
-                      {formatFileSize(att.size)} •{' '}
+                      {att.shared ? 'Project file' : formatFileSize(att.size)} •{' '}
                       {att.error ? (
                         <span className="text-rose-600 font-bold">Failed</span>
                       ) : att.uploading ? (
-                        <span className="text-amber-600 font-bold">Uploading</span>
+                        <span className="text-amber-600 font-bold">Uploading {att.progress}%</span>
                       ) : (
                         <span className="text-emerald-600 font-bold">Ready</span>
                       )}
                     </p>
-                    {/* Controls: Replace / Remove */}
+                    {att.uploading && (
+                      <div className="mt-1 h-1 w-full max-w-[130px] rounded-full bg-slate-200 overflow-hidden">
+                        <div className="h-full bg-amber-500 transition-all" style={{ width: `${att.progress}%` }} />
+                      </div>
+                    )}
+                    {/* Controls: Retry / Replace / Remove */}
                     <div className="flex items-center gap-2 mt-1">
+                      {att.error && att.file && (
+                        <button
+                          type="button"
+                          onClick={() => handleRetryStaged(att.id)}
+                          className="text-[10px] font-bold text-rose-600 hover:text-rose-800 flex items-center gap-0.5 cursor-pointer"
+                          title="Retry upload"
+                        >
+                          <RefreshCw className="w-2.5 h-2.5" />
+                          <span>Retry</span>
+                        </button>
+                      )}
+                      {att.file && (
                       <button
                         type="button"
                         onClick={() => handleTriggerReplace(att.id)}
@@ -1607,6 +1705,7 @@ export const ProjectMessagesPage: React.FC = () => {
                         <RefreshCw className="w-2.5 h-2.5" />
                         <span>Replace</span>
                       </button>
+                      )}
                     </div>
                   </div>
 
@@ -1638,15 +1737,25 @@ export const ProjectMessagesPage: React.FC = () => {
             >
               <Paperclip className="w-5 h-5 text-slate-600 hover:text-amber-600" />
             </button>
+            <button
+              type="button"
+              onClick={() => setShareOpen(true)}
+              className="p-2.5 min-w-[42px] min-h-[42px] flex items-center justify-center text-slate-500 hover:text-navy-900 hover:bg-slate-100 rounded-xl cursor-pointer transition-colors flex-shrink-0"
+              title="Share a receipt, invoice or report photo from this project"
+              aria-label="Share project file"
+            >
+              <FolderOpen className="w-5 h-5 text-slate-600" />
+            </button>
 
             {/* Textarea */}
             <textarea
               rows={1}
+              aria-label="Message"
               value={content}
               onChange={(e) => setContent(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Type your message... (Shift + Enter for newline)"
-              className="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm text-navy-950 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none resize-none max-h-32 min-h-[42px] leading-relaxed bg-slate-50 focus:bg-white transition-colors"
+              placeholder=""
+              className="flex-1 min-w-0 px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm text-navy-950 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none resize-none max-h-32 min-h-[42px] leading-relaxed bg-slate-50 focus:bg-white transition-colors"
             />
 
             {/* Send Button */}
@@ -1757,6 +1866,13 @@ export const ProjectMessagesPage: React.FC = () => {
           </div>
         </div>
       )}
+      <DocumentViewer attachment={viewerDoc} onClose={() => setViewerDoc(null)} />
+      <ShareProjectFileModal
+        projectId={activeProjectId}
+        isOpen={shareOpen}
+        onClose={() => setShareOpen(false)}
+        onPick={handleShareFile}
+      />
     </div>
   );
 };

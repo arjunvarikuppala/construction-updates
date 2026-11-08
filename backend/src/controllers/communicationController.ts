@@ -8,7 +8,10 @@ import { Project } from '../models/Project.js';
 import { ProjectAssignment } from '../models/ProjectAssignment.js';
 import { User } from '../models/User.js';
 import { verifyUserProjectAccess } from '../middleware/auth.js';
-import { recordUpload, canUserAccessFile } from '../services/fileAccessService.js';
+import { recordExternalUpload, canUserAccessFile, resolveShareableAttachment, ShareableAttachment } from '../services/fileAccessService.js';
+import { Expense } from '../models/Expense.js';
+import { PaymentRequest } from '../models/PaymentRequest.js';
+import { DailyReport } from '../models/DailyReport.js';
 import { emitToProject, isUserOnline, isUserInProject } from '../services/socketService.js';
 import { createNotification, notifyAllMDs } from '../services/notificationService.js';
 import { logAudit } from '../services/auditService.js';
@@ -16,6 +19,13 @@ import { storageService } from '../services/storageService.js';
 
 const MAX_IMAGE_SIZE = parseInt(process.env.CHAT_MAX_IMAGE_SIZE_MB || '10', 10) * 1024 * 1024;
 const MAX_VIDEO_SIZE = parseInt(process.env.CHAT_MAX_VIDEO_SIZE_MB || '100', 10) * 1024 * 1024;
+const MAX_DOC_SIZE = parseInt(process.env.CHAT_MAX_DOC_SIZE_MB || '25', 10) * 1024 * 1024;
+
+const REPLY_POPULATE = {
+  path: 'replyTo',
+  select: 'content attachments sender createdAt messageType',
+  populate: { path: 'sender', select: 'name role' },
+};
 
 export function validateMediaMagicBytes(
   filePath: string
@@ -109,6 +119,7 @@ export async function listProjectMessages(req: AuthenticatedRequest, res: Respon
 
     const messages = await ProjectMessage.find(query)
       .populate('sender', 'name email role')
+      .populate(REPLY_POPULATE)
       .populate('readBy.user', 'name email role')
       .sort({ createdAt: -1 })
       .limit(Math.min(Number(limit) || 100, 200));
@@ -163,7 +174,8 @@ export async function listProjectMessages(req: AuthenticatedRequest, res: Respon
 export async function sendProjectMessage(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
     const { projectId } = req.params;
-    const { content, attachments, contextType = 'GENERAL', contextId, contextSummary } = req.body;
+    const { content, attachments, contextType = 'GENERAL', contextId, contextSummary, replyToMessageId, clientMessageId } =
+      req.body;
 
     const access = await verifyUserProjectAccess(projectId, req.user!.userId, req.user!.role);
     if (!access.allowed) {
@@ -178,12 +190,48 @@ export async function sendProjectMessage(req: AuthenticatedRequest, res: Respons
       return;
     }
 
-    const textContent = (content || '').trim();
-    const messageAttachments = Array.isArray(attachments) ? attachments : [];
+    const textContent = typeof content === 'string' ? content.trim() : '';
+    const rawAttachments = Array.isArray(attachments) ? attachments.slice(0, 10) : [];
+    const clientKey =
+      typeof clientMessageId === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(clientMessageId) ? clientMessageId : undefined;
 
-    if (!textContent && messageAttachments.length === 0) {
+    // Idempotent retry / reconnect: return the already-stored message instead of duplicating it
+    if (clientKey) {
+      const existing = await ProjectMessage.findOne({ sender: req.user!.userId, clientMessageId: clientKey })
+        .populate('sender', 'name email role')
+        .populate(REPLY_POPULATE);
+      if (existing) {
+        res.status(200).json({ success: true, message: 'Message already delivered', data: existing, duplicate: true });
+        return;
+      }
+    }
+
+    if (!textContent && rawAttachments.length === 0) {
       res.status(400).json({ success: false, message: 'Message content or at least one attachment is required.' });
       return;
+    }
+
+    // Every attachment must be the sender's own upload or an existing file of this project
+    const messageAttachments: ShareableAttachment[] = [];
+    for (const raw of rawAttachments) {
+      const safe = await resolveShareableAttachment(req.user!, String(resolvedProjectId), raw);
+      if (!safe) {
+        res.status(400).json({ success: false, message: 'One or more attachments are invalid or not accessible in this project.' });
+        return;
+      }
+      messageAttachments.push(safe);
+    }
+
+    let replyTo: mongoose.Types.ObjectId | undefined;
+    if (replyToMessageId !== undefined && replyToMessageId !== null && replyToMessageId !== '') {
+      const original = mongoose.Types.ObjectId.isValid(String(replyToMessageId))
+        ? await ProjectMessage.findOne({ _id: String(replyToMessageId), project: resolvedProjectId }).select('_id')
+        : null;
+      if (!original) {
+        res.status(400).json({ success: false, message: 'The message you are replying to is not in this project.' });
+        return;
+      }
+      replyTo = original._id as mongoose.Types.ObjectId;
     }
 
     const message = await ProjectMessage.create({
@@ -191,13 +239,17 @@ export async function sendProjectMessage(req: AuthenticatedRequest, res: Respons
       sender: req.user!.userId,
       content: textContent,
       attachments: messageAttachments,
+      replyTo,
+      clientMessageId: clientKey,
       contextType: contextType as MessageContextType,
       contextId: contextId ? String(contextId) : undefined,
       contextSummary: contextSummary ? String(contextSummary) : undefined,
       readBy: [{ user: req.user!.userId, readAt: new Date() }],
     });
 
-    const populatedMessage = await ProjectMessage.findById(message._id).populate('sender', 'name email role');
+    const populatedMessage = await ProjectMessage.findById(message._id)
+      .populate('sender', 'name email role')
+      .populate(REPLY_POPULATE);
 
     // Broadcast message via Socket.IO to project room
     emitToProject(projectId, 'message:new', populatedMessage);
@@ -526,6 +578,14 @@ export async function uploadProjectMessageMedia(req: AuthenticatedRequest, res: 
         });
         return;
       }
+      if (detected.mediaType === 'document' && stat.size > MAX_DOC_SIZE) {
+        try { fs.unlinkSync(filePath); } catch (e) { /* ignore */ }
+        res.status(400).json({
+          success: false,
+          message: `Document "${file.originalname}" exceeds maximum allowed size of ${MAX_DOC_SIZE / (1024 * 1024)}MB.`,
+        });
+        return;
+      }
       if (detected.mediaType === 'video' && stat.size > MAX_VIDEO_SIZE) {
         try { fs.unlinkSync(filePath); } catch (e) { /* ignore */ }
         res.status(400).json({
@@ -543,12 +603,12 @@ export async function uploadProjectMessageMedia(req: AuthenticatedRequest, res: 
       if (fileUrl.startsWith('/uploads/')) {
         fileUrl = `/api/v1/projects/${resolvedProjectId}/messages/media/${file.filename}`;
       }
-      await recordUpload({ url: fileUrl, uploadedBy: req.user!.userId, mimetype: detected.detectedMime, size: uploadResult.size });
+      await recordExternalUpload({ url: fileUrl, uploadedBy: req.user!.userId, mimetype: detected.detectedMime, size: uploadResult.size });
 
       processedAttachments.push({
         type: detected.mediaType,
         url: fileUrl,
-        name: file.originalname,
+        name: file.originalname.slice(0, 200),
         size: uploadResult.size,
         mimeType: detected.detectedMime,
         storageKey: uploadResult.key,
@@ -594,10 +654,12 @@ export async function serveProjectMessageMedia(req: AuthenticatedRequest, res: R
     const fileSize = stat.size;
     const mimeType = getMimeTypeFromFilename(safeFilename);
 
-    // Optional download disposition
-    if (req.query.download === 'true') {
-      res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`);
-    }
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader(
+      'Content-Disposition',
+      `${req.query.download === 'true' ? 'attachment' : 'inline'}; filename="${safeFilename}"`
+    );
 
     // Support HTTP 206 Partial Content Range requests for smooth video playback & seeking
     const range = req.headers.range;
@@ -632,5 +694,74 @@ export async function serveProjectMessageMedia(req: AuthenticatedRequest, res: R
     }
   } catch (err: any) {
     res.status(500).json({ success: false, message: 'Failed to serve media', error: err.message });
+  }
+}
+
+/**
+ * GET /projects/:projectId/messages/shareable
+ * Existing receipts, invoices and report photos of this project that can be shared
+ * in chat by reference (no file duplication).
+ */
+export async function listShareableProjectFiles(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const access = await verifyUserProjectAccess(req.params.projectId, req.user!.userId, req.user!.role);
+    if (!access.allowed || !access.project) {
+      res.status(403).json({ success: false, message: 'Forbidden. You do not have access to this project.' });
+      return;
+    }
+    const project = access.project._id;
+
+    const [expenses, payments, reports] = await Promise.all([
+      Expense.find({ project, receiptUrl: { $nin: [null, ''] } })
+        .select('receiptUrl description vendor amount createdAt')
+        .sort({ createdAt: -1 })
+        .limit(50),
+      PaymentRequest.find({ project, invoiceUrl: { $nin: [null, ''] } })
+        .select('invoiceUrl description amount createdAt')
+        .sort({ createdAt: -1 })
+        .limit(50),
+      DailyReport.find({ project, 'photos.0': { $exists: true } })
+        .select('photos titleOfWork workDate')
+        .sort({ workDate: -1 })
+        .limit(20),
+    ]);
+
+    const files: Array<{ kind: string; url: string; name: string; recordId: string; createdAt: Date; amount?: number }> = [];
+    expenses.forEach((e: any) =>
+      files.push({
+        kind: 'EXPENSE_RECEIPT',
+        url: e.receiptUrl,
+        name: `Receipt - ${e.vendor || e.description || 'Expense'}`.slice(0, 120),
+        recordId: String(e._id),
+        createdAt: e.createdAt,
+        amount: e.amount,
+      })
+    );
+    payments.forEach((p: any) =>
+      files.push({
+        kind: 'PAYMENT_INVOICE',
+        url: p.invoiceUrl,
+        name: `Invoice - ${p.description || 'Payment request'}`.slice(0, 120),
+        recordId: String(p._id),
+        createdAt: p.createdAt,
+        amount: p.amount,
+      })
+    );
+    reports.forEach((r: any) =>
+      (r.photos || []).slice(0, 6).forEach((ph: any, i: number) => {
+        if (!ph?.url) return;
+        files.push({
+          kind: 'REPORT_PHOTO',
+          url: ph.url,
+          name: `${r.titleOfWork || 'Daily report'} - photo ${i + 1}`.slice(0, 120),
+          recordId: String(r._id),
+          createdAt: r.workDate,
+        });
+      })
+    );
+
+    res.json({ success: true, files });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: 'Failed to list shareable files' });
   }
 }

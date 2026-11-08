@@ -7,6 +7,7 @@ import {
   getProjectPresence,
   uploadProjectMessageMedia,
   serveProjectMessageMedia,
+  listShareableProjectFiles,
 } from '../controllers/communicationController.js';
 import { authenticate } from '../middleware/auth.js';
 import { upload } from '../middleware/upload.js';
@@ -20,6 +21,7 @@ router.post('/', sendProjectMessage);
 router.put('/read', markProjectMessagesRead);
 router.get('/unread-count', getUnreadMessagesCount);
 router.get('/presence', getProjectPresence);
+router.get('/shareable', listShareableProjectFiles);
 
 // Media upload & streaming endpoints
 router.post(

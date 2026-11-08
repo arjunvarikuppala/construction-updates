@@ -12,6 +12,7 @@ import { isInChargeInCompany } from '../services/tenantService.js';
 import { rupeesToPaise } from '../utils/currency.js';
 import { verifyUserProjectAccess } from '../middleware/auth.js';
 import { WeatherService } from '../services/weatherService.js';
+import { removeUserFromProjectRoom } from '../services/socketService.js';
 
 export async function listProjects(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
@@ -687,6 +688,8 @@ export async function removeProjectAssignment(req: AuthenticatedRequest, res: Re
     await User.findByIdAndUpdate(siteInChargeId, {
       $pull: { assignedProjects: project._id },
     });
+
+    removeUserFromProjectRoom(siteInChargeId, String(project._id));
 
     await logAudit('PROJECT_ASSIGNMENT_REVOKED', req.user!.userId, 'PROJECT', project._id, {
       siteInChargeId,
