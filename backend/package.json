@@ -11,7 +11,7 @@
     "seed": "tsx src/scripts/seed.ts",
     "verify:full": "tsx src/scripts/verify-full-system.ts",
     "verify:weather": "tsx src/scripts/verify-weather-integration.ts",
-    "test": "node --import tsx --test --test-concurrency=1 tests/security.test.ts tests/reportWorkflow.test.ts tests/chatDocuments.test.ts tests/gst.test.ts tests/payments.test.ts tests/razorpayx.test.ts",
+    "test": "node --import tsx --test --test-concurrency=1 tests/security.test.ts tests/reportWorkflow.test.ts tests/chatDocuments.test.ts tests/gst.test.ts tests/payments.test.ts tests/razorpayx.test.ts tests/push.test.ts",
     "test:weather": "tsx src/scripts/verify-weather-integration.ts",
     "migrate:tenant": "tsx src/scripts/migrate-tenant-fields.ts"
   },
@@ -40,6 +40,7 @@
     "morgan": "^1.10.0",
     "multer": "^1.4.5-lts.1",
     "socket.io": "^4.8.4",
+    "web-push": "^3.6.7",
     "zod": "^3.24.2"
   },
   "devDependencies": {
@@ -50,6 +51,7 @@
     "@types/morgan": "^1.9.9",
     "@types/multer": "^1.4.12",
     "@types/node": "^22.13.10",
+    "@types/web-push": "^3.6.4",
     "mongodb-memory-server": "^10.1.4",
     "tsx": "^4.19.3",
     "typescript": "^5.8.2"

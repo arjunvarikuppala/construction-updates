@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { PushSettingsCard } from '../components/common/PushSettingsCard.js';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -90,7 +91,7 @@ export const NotificationsPage: React.FC = () => {
         navigate('/reports');
       }
     } else if (n.relatedEntity === 'EXPENSE') {
-      navigate('/expenses');
+      navigate(n.type === 'EXPENSE_SUBMITTED' ? '/approvals' : '/expenses');
     }
   };
 
@@ -228,6 +229,8 @@ export const NotificationsPage: React.FC = () => {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
+      <PushSettingsCard />
+
       {/* Page Header */}
       <div className="bg-white rounded-2xl border border-slate-200/80 p-5 sm:p-6 shadow-xs">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">

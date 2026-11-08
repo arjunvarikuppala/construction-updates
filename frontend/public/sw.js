@@ -1,5 +1,5 @@
 // Bump the version whenever caching rules change: old caches are deleted on activate.
-const CACHE_NAME = 'bkr-infra-static-v2';
+const CACHE_NAME = 'bkr-infra-static-v3';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -85,6 +85,52 @@ self.addEventListener('fetch', (event) => {
           return caches.match('/');
         }
       });
+    })
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Push notifications (new messages, payment requests, reports, approvals)
+// ---------------------------------------------------------------------------
+self.addEventListener('push', (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch (e) {
+    data = { title: 'BKR INFRA', body: event.data ? event.data.text() : '' };
+  }
+  const title = data.title || 'BKR INFRA';
+  const options = {
+    body: data.body || '',
+    icon: '/icons/icon-192.png',
+    badge: '/icons/icon-192.png',
+    tag: data.tag || undefined,
+    renotify: Boolean(data.tag),
+    data: { url: data.url || '/notifications', id: data.id },
+    vibrate: [120, 60, 120],
+  };
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      // App open and in front: it shows its own popup with sound instead
+      const inFront = clients.some((c) => c.visibilityState === 'visible' && c.focused);
+      if (inFront) return undefined;
+      return self.registration.showNotification(title, options);
+    })
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = new URL((event.notification.data && event.notification.data.url) || '/', self.location.origin).href;
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if (new URL(client.url).origin === self.location.origin && 'focus' in client) {
+          client.postMessage({ type: 'open-url', url: target });
+          return client.focus();
+        }
+      }
+      return self.clients.openWindow(target);
     })
   );
 });

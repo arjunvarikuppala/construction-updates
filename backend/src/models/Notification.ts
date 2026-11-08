@@ -12,6 +12,9 @@ export type NotificationType =
   | 'DAILY_REPORT_COMMENT'
   | 'DAILY_REPORT_CHANGES_REQUESTED'
   | 'DAILY_REPORT_REJECTED'
+  | 'EXPENSE_SUBMITTED'
+  | 'EXPENSE_APPROVED'
+  | 'EXPENSE_REJECTED'
   | 'SYSTEM';
 
 export type NotificationRelatedEntity =
@@ -89,5 +92,31 @@ const NotificationSchema = new Schema<INotification>(
 );
 
 NotificationSchema.index({ recipient: 1, isRead: 1, createdAt: -1 });
+
+/**
+ * Every new notification also goes to the recipient's phone / computer as a
+ * Web Push (works with the website closed). Notes to yourself
+ * ("Report submitted successfully") stay in-app only.
+ */
+NotificationSchema.post('save', function (doc) {
+  if (!(doc as any).$__wasNew) return;
+  if (doc.sender && String(doc.sender) === String(doc.recipient)) return;
+  import('../services/pushService.js')
+    .then(({ sendPushToUser, notificationUrl }) =>
+      sendPushToUser(doc.recipient, {
+        title: doc.title,
+        body: doc.message,
+        url: notificationUrl(doc as any),
+        // One notification per chat / request on the lock screen, updated in place
+        tag: doc.relatedEntity === 'PROJECT_MESSAGE' ? `chat-${String(doc.project || '')}` : `${doc.relatedEntity || 'n'}-${doc.relatedId || doc._id}`,
+        id: String(doc._id),
+      })
+    )
+    .catch((err) => console.error('Push dispatch failed:', err?.message));
+});
+NotificationSchema.pre('save', function (next) {
+  (this as any).$__wasNew = this.isNew;
+  next();
+});
 
 export const Notification = mongoose.model<INotification>('Notification', NotificationSchema);

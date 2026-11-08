@@ -6,6 +6,7 @@ import { TopHeader } from './TopHeader.js';
 import { MobileBottomNav } from './MobileBottomNav.js';
 import { OfflineBanner } from '../common/OfflineBanner.js';
 import { PWAInstallPrompt } from '../common/PWAInstallPrompt.js';
+import { LiveNotifications, EnableNotificationsPrompt } from '../common/LiveNotifications.js';
 import { useAuth } from '../../context/AuthContext.js';
 import { api } from '../../api/client.js';
 
@@ -72,6 +73,10 @@ export const AppLayout: React.FC = () => {
 
         {/* PWA Install Notification Prompt */}
         <PWAInstallPrompt />
+
+        {/* New message / request popups and the "turn on notifications" ask */}
+        <LiveNotifications />
+        <EnableNotificationsPrompt />
       </div>
     </div>
   );

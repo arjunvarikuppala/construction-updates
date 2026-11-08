@@ -1,5 +1,6 @@
 import { Response } from 'express';
 import { sanitizeGstBill, getCompanyGstinForProject } from '../services/gstService.js';
+import { createNotification, notifyProjectMDs } from '../services/notificationService.js';
 import mongoose from 'mongoose';
 import { Expense } from '../models/Expense.js';
 import { Project } from '../models/Project.js';
@@ -213,6 +214,19 @@ export async function createExpense(req: AuthenticatedRequest, res: Response): P
       }
     );
 
+    if (expense.status === 'PENDING') {
+      await notifyProjectMDs({
+        sender: req.user!.userId,
+        project: projectDoc._id,
+        type: 'EXPENSE_SUBMITTED',
+        title: `Expense for approval: ${formatInr(expense.amount)}`,
+        message: `${req.user!.name || 'Site In-Charge'} added ${formatInr(expense.amount)} to ${expense.vendor} (${projectDoc.code}): ${expense.description.slice(0, 120)}`,
+        relatedEntity: 'EXPENSE',
+        relatedId: String(expense._id),
+        excludeUserId: req.user!.userId,
+      });
+    }
+
     res.status(201).json({
       success: true,
       message: status === 'DRAFT' ? 'Expense draft saved' : 'Expense submitted directly and visible to Managing Director',
@@ -255,6 +269,19 @@ export async function approveExpense(req: AuthenticatedRequest, res: Response): 
     expense.rejectionReason = undefined;
 
     await expense.save();
+
+    if (String(expense.submittedBy) !== req.user!.userId) {
+      await createNotification({
+        recipient: expense.submittedBy,
+        sender: req.user!.userId,
+        project: (expense.project as any)._id || expense.project,
+        type: 'EXPENSE_APPROVED',
+        title: `Expense approved: ${formatInr(expense.amount)}`,
+        message: `The MD approved ${formatInr(expense.amount)} to ${expense.vendor} — ${expense.description.slice(0, 120)}`,
+        relatedEntity: 'EXPENSE',
+        relatedId: String(expense._id),
+      });
+    }
 
     await logAudit('EXPENSE_APPROVED', req.user!.userId, 'EXPENSE', expense._id, {
       amount: expense.amount,
@@ -311,6 +338,19 @@ export async function rejectExpense(req: AuthenticatedRequest, res: Response): P
     expense.rejectionReason = reason.trim();
 
     await expense.save();
+
+    if (String(expense.submittedBy) !== req.user!.userId) {
+      await createNotification({
+        recipient: expense.submittedBy,
+        sender: req.user!.userId,
+        project: expense.project,
+        type: 'EXPENSE_REJECTED',
+        title: `Expense rejected: ${formatInr(expense.amount)}`,
+        message: `${expense.vendor}: ${expense.rejectionReason}`.slice(0, 300),
+        relatedEntity: 'EXPENSE',
+        relatedId: String(expense._id),
+      });
+    }
 
     await logAudit('EXPENSE_REJECTED', req.user!.userId, 'EXPENSE', expense._id, {
       reason: expense.rejectionReason,
@@ -371,6 +411,17 @@ export async function resubmitExpense(req: AuthenticatedRequest, res: Response):
 
     await expense.save();
 
+    await notifyProjectMDs({
+      sender: req.user!.userId,
+      project: expense.project,
+      type: 'EXPENSE_SUBMITTED',
+      title: `Expense resubmitted: ${formatInr(expense.amount)}`,
+      message: `${req.user!.name || 'Site In-Charge'} corrected and resubmitted ${formatInr(expense.amount)} to ${expense.vendor}.`,
+      relatedEntity: 'EXPENSE',
+      relatedId: String(expense._id),
+      excludeUserId: req.user!.userId,
+    });
+
     await logAudit('EXPENSE_RESUBMITTED', req.user!.userId, 'EXPENSE', expense._id, {
       resubmissionCount: expense.resubmissionCount,
       amount: expense.amount,
@@ -380,4 +431,9 @@ export async function resubmitExpense(req: AuthenticatedRequest, res: Response):
   } catch (error: any) {
     res.status(500).json({ success: false, message: 'Failed to resubmit expense', error: error.message });
   }
+}
+
+
+function formatInr(paise: number): string {
+  return `₹${(paise / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 }

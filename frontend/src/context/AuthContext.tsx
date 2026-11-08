@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import { disablePush } from '../utils/push.js';
 import { User } from '../types/index.js';
 import { api } from '../api/client.js';
 
@@ -63,12 +64,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const logout = useCallback(() => {
+    const previousToken = localStorage.getItem('sitetrack_token');
     setToken(null);
     setUser(null);
     setIsLoading(false);
     localStorage.removeItem('sitetrack_token');
     localStorage.removeItem('sitetrack_user');
-    window.location.href = '/login';
+    // Stop this device getting the signed-out user's notifications, then leave
+    Promise.race([disablePush(previousToken), new Promise((r) => setTimeout(r, 1500))]).finally(() => {
+      window.location.href = '/login';
+    });
   }, []);
 
   const refreshUser = useCallback(async () => {

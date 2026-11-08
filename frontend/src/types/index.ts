@@ -812,6 +812,9 @@ export type NotificationType =
   | 'DAILY_REPORT_COMMENT'
   | 'DAILY_REPORT_CHANGES_REQUESTED'
   | 'DAILY_REPORT_REJECTED'
+  | 'EXPENSE_SUBMITTED'
+  | 'EXPENSE_APPROVED'
+  | 'EXPENSE_REJECTED'
   | 'SYSTEM';
 
 export type NotificationRelatedEntity =

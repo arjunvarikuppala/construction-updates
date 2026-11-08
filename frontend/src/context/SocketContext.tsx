@@ -79,9 +79,11 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
 
     // Real-time notification updates
-    socketInstance.on('notification:new', () => {
+    socketInstance.on('notification:new', (notification) => {
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
       queryClient.invalidateQueries({ queryKey: ['notifications-unread-count'] });
+      // Popup + sound while the website is open (see LiveNotifications)
+      window.dispatchEvent(new CustomEvent('bkr:notification', { detail: notification }));
     });
 
     // Real-time project message updates (with message deduplication)

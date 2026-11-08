@@ -157,7 +157,7 @@ export const NotificationCenter: React.FC = () => {
         navigate('/reports');
       }
     } else if (notification.relatedEntity === 'EXPENSE') {
-      navigate('/expenses');
+      navigate(notification.type === 'EXPENSE_SUBMITTED' ? '/approvals' : '/expenses');
     }
   };
 
