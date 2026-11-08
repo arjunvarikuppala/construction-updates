@@ -38,7 +38,7 @@ router.post('/upload-receipt', upload.single('receipt'), async (req: Authenticat
       mimetype: result.mimetype,
     });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: 'Failed to upload receipt', error: error.message });
+    res.status(error?.status === 400 ? 400 : 500).json({ success: false, message: error?.userMessage || 'Failed to upload receipt', error: error.message });
   }
 });
 

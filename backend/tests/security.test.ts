@@ -334,6 +334,26 @@ describe('safe error responses', () => {
   });
 });
 
+describe('payment cancellation', () => {
+  test('a cancelled request is marked CANCELLED and can never be paid out', async () => {
+    const created = await api('POST', '/api/v1/payments/requests', {
+      token: inChargeA.token,
+      body: { projectId: projectA._id, amountRupees: 10, paymentMethod: 'UPI', purpose: 'Cancel me', newBeneficiary: { name: 'Cancel Vendor', payeeType: 'SUPPLIER', vpa: 'cancelvendor@okhdfcbank' } },
+    });
+    assert.equal(created.status, 201, JSON.stringify(created.body));
+    const id = created.body.payment._id;
+    assert.equal((await api('POST', `/api/v1/payments/requests/${id}/authorize`, { token: mdA.token, body: {} })).status, 200);
+    const cancel = await api('POST', `/api/v1/payments/requests/${id}/cancel`, { token: mdA.token, body: { reason: 'Not needed' } });
+    assert.equal(cancel.status, 200);
+    const after = await api('GET', `/api/v1/payments/requests/${id}`, { token: mdA.token });
+    assert.equal(after.body.payment.status, 'CANCELLED');
+    const initiate = await api('POST', `/api/v1/payments/requests/${id}/initiate`, { token: mdA.token, body: {} });
+    assert.equal(initiate.status, 400);
+    const again = await api('POST', `/api/v1/payments/requests/${id}/cancel`, { token: mdA.token, body: {} });
+    assert.equal(again.status, 400);
+  });
+});
+
 describe('single-company registration', () => {
   test('public sign-up is closed once an MD exists (default deployment)', async () => {
     const prev = process.env.ALLOW_PUBLIC_REGISTRATION;

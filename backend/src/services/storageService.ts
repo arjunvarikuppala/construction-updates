@@ -126,7 +126,11 @@ export class StorageService {
         };
       } catch (err: any) {
         console.error('Cloudinary upload error:', err);
-        throw new Error(`Cloudinary upload failed: ${err.message || err}`);
+        // Cloudinary rejects files it cannot read (damaged / password-protected PDFs, bad images)
+        const e: any = new Error(`Cloudinary upload failed: ${err.message || err}`);
+        e.userMessage = 'This file could not be processed. It may be damaged or password-protected — please try another copy or a photo of it.';
+        e.status = 400;
+        throw e;
       }
     }
 

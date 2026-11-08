@@ -617,7 +617,7 @@ export async function initiatePaymentTransfer(req: AuthenticatedRequest, res: Re
     if (!payment) return;
 
     // Rejected / failed / reversed requests can never be dispatched
-    if (['REJECTED', 'FAILED', 'REVERSED'].includes(payment.status as string)) {
+    if (['REJECTED', 'FAILED', 'CANCELLED', 'REVERSED'].includes(payment.status as string)) {
       res.status(400).json({ success: false, message: `Cannot initiate a payment with status '${payment.status}'.` });
       return;
     }
@@ -818,7 +818,7 @@ export async function cancelPaymentRequest(req: AuthenticatedRequest, res: Respo
       return;
     }
 
-    if (['PROCESSING', 'PAID', 'REVERSED', 'FAILED', 'REJECTED'].includes(payment.status as string)) {
+    if (['PROCESSING', 'PAID', 'REVERSED', 'FAILED', 'CANCELLED', 'REJECTED'].includes(payment.status as string)) {
       res.status(400).json({
         success: false,
         message: `Cannot cancel a payment with status '${payment.status}'. Once submitted to bank, reconciliation is required.`,
@@ -826,7 +826,8 @@ export async function cancelPaymentRequest(req: AuthenticatedRequest, res: Respo
       return;
     }
 
-    payment.status = 'FAILED';
+    // Cancelled on purpose: not a failed bank transfer
+    payment.status = 'CANCELLED';
     const cleanReason = typeof reason === 'string' && reason.trim() ? reason.trim().slice(0, 500) : 'No reason provided';
     payment.failureReason = `Cancelled by user: ${cleanReason}`;
     payment.auditTrail.push({

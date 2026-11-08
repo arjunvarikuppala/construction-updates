@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { localDateString } from '../utils/dates.js';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -39,7 +40,7 @@ export const ExpenseFormPage: React.FC = () => {
   const { success, error: toastError } = useToast();
 
   const [projectId, setProjectId] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(localDateString());
   const [category, setCategory] = useState<ExpenseCategory>('CONSTRUCTION_MATERIALS');
   const [amountRupees, setAmountRupees] = useState('');
   const [vendor, setVendor] = useState('');

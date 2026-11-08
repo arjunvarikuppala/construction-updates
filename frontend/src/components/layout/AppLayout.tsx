@@ -48,8 +48,10 @@ export const AppLayout: React.FC = () => {
         <main
           className={`flex-1 min-w-0 ${
             isMessagesPage
-              ? 'overflow-hidden p-2 sm:p-4 md:p-6 pt-[calc(4.5rem+env(safe-area-inset-top,0px))] md:pt-6 pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] md:pb-6 flex flex-col min-h-0'
-              : 'overflow-y-auto px-3 py-4 sm:px-6 sm:py-6 pt-[calc(4.75rem+env(safe-area-inset-top,0px))] md:pt-6 pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] md:pb-8'
+              ? // Below md the header and bottom nav are fixed: keep their clearance at every
+                // width up to md (a plain sm:p-* would cancel it between 640 and 767px)
+                'overflow-hidden px-2 sm:px-4 md:px-6 pt-[calc(4.5rem+env(safe-area-inset-top,0px))] md:pt-6 pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] md:pb-6 flex flex-col min-h-0'
+              : 'overflow-y-auto px-3 sm:px-6 pt-[calc(4.75rem+env(safe-area-inset-top,0px))] md:pt-6 pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] md:pb-8'
           }`}
         >
           <div className={`max-w-7xl mx-auto w-full ${isMessagesPage ? 'h-full flex flex-col flex-1 min-h-0' : ''}`}>

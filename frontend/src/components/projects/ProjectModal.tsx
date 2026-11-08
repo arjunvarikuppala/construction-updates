@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { localDateString } from '../../utils/dates.js';
 import { Building2, MapPin, Search, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { Modal } from '../common/Modal.js';
 import { Button } from '../common/Button.js';
@@ -68,10 +69,10 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
         setDescription('');
         setBudgetRupees('');
         setAssignedInCharge('');
-        setStartDate(new Date().toISOString().split('T')[0]);
+        setStartDate(localDateString());
         const nextYear = new Date();
         nextYear.setFullYear(nextYear.getFullYear() + 1);
-        setExpectedCompletionDate(nextYear.toISOString().split('T')[0]);
+        setExpectedCompletionDate(localDateString(nextYear));
         setStatus('IN_PROGRESS');
       }
       setLocationFeedback(null);

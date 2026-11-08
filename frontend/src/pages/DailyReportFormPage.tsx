@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { localDateString } from '../utils/dates.js';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, CheckCircle2, Save, History, WifiOff, RotateCcw, X, AlertCircle, Copy } from 'lucide-react';
@@ -52,10 +53,7 @@ interface FormState {
   clientRequestId: string;
 }
 
-const localToday = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
+const localToday = () => localDateString();
 
 const initialState = (): FormState => ({
   projectId: '',

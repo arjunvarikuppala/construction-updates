@@ -1,4 +1,5 @@
 import React from 'react';
+import { localDateString } from '../../utils/dates.js';
 import { BadgeCheck, AlertTriangle } from 'lucide-react';
 import { GstBillDraft } from '../../types/index.js';
 import { Input, Select } from '../common/Input.js';
@@ -76,7 +77,7 @@ export const GstBillFields: React.FC<Props> = ({ value, onChange, companyGstin, 
               type="date"
               aria-label="GST invoice date"
               value={value.invoiceDate}
-              max={new Date().toISOString().slice(0, 10)}
+              max={localDateString()}
               onChange={(e) => set({ invoiceDate: e.target.value })}
             />
             <div className="grid grid-cols-[1fr_auto] gap-2">

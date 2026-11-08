@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { localDateString } from '../utils/dates.js';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -53,11 +54,11 @@ export const OwnerDashboard: React.FC = () => {
       if (selectedDateRange === 'LAST_30_DAYS') {
         const d = new Date();
         d.setDate(d.getDate() - 30);
-        queryParams.append('startDate', d.toISOString().split('T')[0]);
+        queryParams.append('startDate', localDateString(d));
       } else if (selectedDateRange === 'THIS_MONTH') {
         const d = new Date();
         d.setDate(1);
-        queryParams.append('startDate', d.toISOString().split('T')[0]);
+        queryParams.append('startDate', localDateString(d));
       }
 
       const res = await api.get<OwnerDashboardData>(`/dashboard/owner?${queryParams.toString()}`);

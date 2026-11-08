@@ -174,6 +174,12 @@ export const PaymentsPage: React.FC = () => {
             <Clock className="w-3 h-3" /> Needs Review
           </span>
         );
+      case 'CANCELLED':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-200 text-slate-700">
+            <AlertCircle className="w-3 h-3" /> Cancelled
+          </span>
+        );
       case 'REJECTED':
       case 'FAILED':
         return (
@@ -363,6 +369,7 @@ export const PaymentsPage: React.FC = () => {
                   <option value="PAID">Paid / Completed</option>
                   <option value="REJECTED">Rejected</option>
                   <option value="FAILED">Failed</option>
+                  <option value="CANCELLED">Cancelled</option>
                 </select>
               </div>
 

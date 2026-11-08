@@ -528,6 +528,7 @@ export type PaymentRequestStatus =
   | 'PAID'
   | 'REJECTED'
   | 'FAILED'
+  | 'CANCELLED'
   | 'REVERSED'
   | 'UNKNOWN';
 

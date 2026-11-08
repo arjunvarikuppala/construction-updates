@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { localDateString } from '../../utils/dates.js';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   CreditCard,
@@ -42,7 +43,7 @@ export const PaymentRequestModal: React.FC<PaymentRequestModalProps> = ({
   const [purpose, setPurpose] = useState('');
   const [preferredMethod, setPreferredMethod] = useState<PaymentMethod>('NEFT');
   const [relatedExpenseId, setRelatedExpenseId] = useState(defaultExpenseId || '');
-  const [requestedDate, setRequestedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [requestedDate, setRequestedDate] = useState(localDateString());
   const [remarks, setRemarks] = useState('');
   const [invoiceUrl, setInvoiceUrl] = useState('');
   const [invoiceFileName, setInvoiceFileName] = useState('');

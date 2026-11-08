@@ -3,6 +3,7 @@
  * The server recomputes everything; these only drive the live preview.
  */
 import { useQuery } from '@tanstack/react-query';
+import { localDateString } from './dates.js';
 import { api } from '../api/client.js';
 import type { GstBillDraft, ExpenseGst } from '../types/index.js';
 
@@ -39,7 +40,7 @@ export const emptyGstDraft = (): GstBillDraft => ({
   isGstBill: true,
   vendorGstin: '',
   invoiceNumber: '',
-  invoiceDate: new Date().toISOString().slice(0, 10),
+  invoiceDate: localDateString(),
   taxable: '',
   ratePercent: 18,
 });

@@ -627,7 +627,7 @@ export async function uploadProjectMessageMedia(req: AuthenticatedRequest, res: 
       attachments: processedAttachments,
     });
   } catch (err: any) {
-    res.status(500).json({ success: false, message: 'Media upload failed', error: err.message });
+    res.status(err?.status === 400 ? 400 : 500).json({ success: false, message: err?.userMessage || 'Media upload failed', error: err.message });
   }
 }
 

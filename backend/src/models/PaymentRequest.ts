@@ -13,6 +13,7 @@ export type PaymentRequestStatus =
   | 'PAID'
   | 'REJECTED'
   | 'FAILED'
+  | 'CANCELLED'
   | 'REVERSED'
   | 'UNKNOWN';
 
@@ -217,6 +218,7 @@ const PaymentRequestSchema = new Schema<IPaymentRequest>(
         'PAID',
         'REJECTED',
         'FAILED',
+        'CANCELLED',
         'REVERSED',
         'UNKNOWN',
       ],

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { localMonthString } from '../utils/dates.js';
 import { useQueryClient } from '@tanstack/react-query';
 import { Building2, FileSpreadsheet, BadgeCheck, Download } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/common/Card.js';
@@ -18,7 +19,7 @@ export const CompanySettingsPage: React.FC = () => {
   const [gstin, setGstin] = useState('');
   const [address, setAddress] = useState('');
   const [saving, setSaving] = useState(false);
-  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [month, setMonth] = useState(localMonthString());
   const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
@@ -125,7 +126,7 @@ export const CompanySettingsPage: React.FC = () => {
           </p>
           <div className="flex flex-wrap items-end gap-3">
             <div className="w-48">
-              <Input label="Month" type="month" value={month} max={new Date().toISOString().slice(0, 7)} onChange={(e) => setMonth(e.target.value)} />
+              <Input label="Month" type="month" value={month} max={localMonthString()} onChange={(e) => setMonth(e.target.value)} />
             </div>
             <Button variant="outline" onClick={downloadRegister} isLoading={downloading} disabled={!month} leftIcon={<Download className="w-4 h-4" />}>
               Download Excel

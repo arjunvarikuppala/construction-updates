@@ -61,10 +61,10 @@ router.post('/single', upload.single('file'), async (req: AuthenticatedRequest, 
       originalName: req.file.originalname,
       size: result.size,
       mimetype: result.mimetype,
-      storage: storageService.isR2Enabled() ? 'R2' : 'LOCAL',
+      storage: result.provider || storageService.getActiveProvider(),
     });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: 'Failed to store uploaded file', error: error.message });
+    res.status(error?.status === 400 ? 400 : 500).json({ success: false, message: error?.userMessage || 'Failed to store uploaded file', error: error.message });
   }
 });
 
@@ -87,7 +87,7 @@ router.post('/multiple', upload.array('files', 15), async (req: AuthenticatedReq
           originalName: file.originalname,
           size: result.size,
           mimetype: result.mimetype,
-          storage: storageService.isR2Enabled() ? 'R2' : 'LOCAL',
+          storage: result.provider || storageService.getActiveProvider(),
         };
       })
     );
@@ -98,7 +98,7 @@ router.post('/multiple', upload.array('files', 15), async (req: AuthenticatedReq
       files: uploadedFiles,
     });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: 'Failed to store uploaded files', error: error.message });
+    res.status(error?.status === 400 ? 400 : 500).json({ success: false, message: error?.userMessage || 'Failed to store uploaded files', error: error.message });
   }
 });
 
