@@ -1,10 +1,10 @@
 import React from 'react';
 import { Plus, Trash2, Copy } from 'lucide-react';
-import { WorkItem, WorkItemStatus } from '../../types/index.js';
+import { WorkItem } from '../../types/index.js';
 import { Button } from '../common/Button.js';
 import { Input, Select } from '../common/Input.js';
 import { formatRupees } from '../../utils/currency.js';
-import { UNIT_OPTIONS, WORK_STATUS_OPTIONS } from '../../utils/reportOptions.js';
+import { UNIT_OPTIONS } from '../../utils/reportOptions.js';
 
 interface WorkItemsInputProps {
   items: WorkItem[];
@@ -12,19 +12,12 @@ interface WorkItemsInputProps {
   defaultLocation?: string;
 }
 
-const statusTone: Record<string, string> = {
-  emerald: 'bg-emerald-600 text-white border-emerald-600',
-  amber: 'bg-amber-500 text-navy-950 border-amber-500',
-  slate: 'bg-slate-600 text-white border-slate-600',
-};
-
 export const emptyWorkItem = (location = ''): WorkItem => ({
   description: '',
   quantity: 0,
   unit: 'sq.m',
   budget: 0,
   location,
-  status: 'COMPLETED',
 });
 
 /** Multiple measured work items per report (no one-item-per-day restriction). */
@@ -161,47 +154,6 @@ export const WorkItemsInput: React.FC<WorkItemsInputProps> = ({ items, onChange,
                   <span className="font-bold text-emerald-700">{formatRupees(item.budget || 0)}</span>
                 </p>
               )}
-
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mr-1">Status</span>
-                {WORK_STATUS_OPTIONS.map((opt) => {
-                  const active = (item.status || 'COMPLETED') === opt.value;
-                  return (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      aria-pressed={active}
-                      onClick={() =>
-                        updateItem(index, {
-                          status: opt.value as WorkItemStatus,
-                          progressPercent: opt.value === 'COMPLETED' ? 100 : opt.value === 'NOT_STARTED' ? 0 : item.progressPercent,
-                        })
-                      }
-                      className={`min-h-[36px] px-3 rounded-full border text-xs font-semibold transition ${
-                        active ? statusTone[opt.tone] : 'bg-white text-slate-600 border-slate-300 hover:border-slate-400'
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  );
-                })}
-                {item.status === 'IN_PROGRESS' && (
-                  <label className="flex items-center gap-2 text-xs text-slate-600 ml-auto">
-                    <span className="font-semibold">Done</span>
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      min={0}
-                      max={100}
-                      aria-label="Percent complete"
-                      value={item.progressPercent ?? ''}
-                      onChange={(e) => updateItem(index, { progressPercent: Math.min(100, Math.max(0, parseInt(e.target.value) || 0)) })}
-                      className="w-16 min-h-[36px] rounded-lg border border-slate-300 px-2 text-sm"
-                    />
-                    <span>%</span>
-                  </label>
-                )}
-              </div>
 
               <details className="group">
                 <summary className="cursor-pointer text-xs font-semibold text-navy-800 select-none py-1">

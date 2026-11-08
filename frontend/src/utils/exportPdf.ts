@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { Expense, Project, DailyReport } from '../types/index.js';
+import { Expense, Project, DailyReport, WorkItem } from '../types/index.js';
 import { formatINR, formatRupees, paiseToRupees } from './currency.js';
 import { formatDate } from './dates.js';
 
@@ -207,20 +207,25 @@ export function exportDailyReportPdf(report: DailyReport) {
 
   textBlock('Work Summary & Details:', report.workSummary || 'No summary provided.');
 
+  const hasItemStatus = (report.workItems || []).some((i) => !!i.status);
+  const itemStatus = (item: WorkItem) =>
+    item.status
+      ? `${item.status.replace('_', ' ')}${item.status === 'IN_PROGRESS' && item.progressPercent !== undefined ? ` ${item.progressPercent}%` : ''}`
+      : '—';
   table(
-    ['Work Item / Activity', 'Location', 'Qty', 'Unit', 'Rate (INR)', 'Status', 'Amount (INR)'],
+    ['Work Item / Activity', 'Location', 'Qty', 'Unit', 'Rate (INR)', ...(hasItemStatus ? ['Status'] : []), 'Amount (INR)'],
     (report.workItems || []).map((item) => [
       item.description,
       item.location || '—',
       item.quantity.toString(),
       item.unit,
       item.rate ? `${formatRupees(item.rate)} / ${item.unit}` : '—',
-      item.status ? `${item.status.replace('_', ' ')}${item.status === 'IN_PROGRESS' && item.progressPercent !== undefined ? ` ${item.progressPercent}%` : ''}` : '—',
+      ...(hasItemStatus ? [itemStatus(item)] : []),
       formatRupees(item.budget || 0),
     ]),
     [20, 43, 74],
     [255, 255, 255],
-    [['Total Work Budget (Estimated)', '', '', '', '', '', formatRupees(totalBudget)]]
+    [['Total Work Budget (Estimated)', '', '', '', '', ...(hasItemStatus ? [''] : []), formatRupees(totalBudget)]]
   );
 
   table(

@@ -110,6 +110,8 @@ export const DailyReportDetailPage: React.FC = () => {
   }
 
   const report = data.report;
+  // Item status is no longer captured; show the column only for older reports that have it
+  const hasItemStatus = (report.workItems || []).some((i) => !!i.status);
   const myId = user?.id || (user as any)?._id;
   const canEdit = isMDUser || report.submittedBy?._id === myId;
   const expenses = report.expenses || [];
@@ -286,7 +288,7 @@ export const DailyReportDetailPage: React.FC = () => {
                   <th className="py-3 px-4 text-right">Quantity</th>
                   <th className="py-3 px-4 text-left">Unit</th>
                   <th className="py-3 px-4 text-right">Rate (₹)</th>
-                  <th className="py-3 px-4">Status</th>
+                  {hasItemStatus && <th className="py-3 px-4">Status</th>}
                   <th className="py-3 px-4 text-right">Work Budget (₹)</th>
                 </tr>
               </thead>
@@ -303,7 +305,7 @@ export const DailyReportDetailPage: React.FC = () => {
                     <td className="py-3 px-4 text-right text-slate-700 whitespace-nowrap">
                       {item.rate ? `${formatRupees(item.rate)} / ${item.unit}` : '—'}
                     </td>
-                    <td className="py-3 px-4">
+                    {hasItemStatus && <td className="py-3 px-4">
                       {item.status ? (
                         <span className={`inline-block px-2 py-0.5 rounded-md border text-[11px] font-semibold whitespace-nowrap ${statusChip[item.status] || ''}`}>
                           {WORK_STATUS_OPTIONS.find((o) => o.value === item.status)?.label}
@@ -312,7 +314,7 @@ export const DailyReportDetailPage: React.FC = () => {
                       ) : (
                         <span className="text-slate-400">—</span>
                       )}
-                    </td>
+                    </td>}
                     <td className="py-3 px-4 text-right font-bold text-emerald-700">
                       {formatRupees(item.budget || 0)}
                     </td>
@@ -321,7 +323,7 @@ export const DailyReportDetailPage: React.FC = () => {
               </tbody>
               <tfoot>
                 <tr className="border-t-2 border-slate-200 bg-slate-50/80 font-bold">
-                  <td className="py-3 px-4 text-slate-700" colSpan={6}>
+                  <td className="py-3 px-4 text-slate-700" colSpan={hasItemStatus ? 6 : 5}>
                     <div className="flex flex-col">
                       <span className="text-xs uppercase tracking-wider text-slate-600">Total Work Budget (Estimated)</span>
                       <span className="text-[11px] text-slate-400 font-normal">Planned task allocations; separate from actual paid expenses</span>
