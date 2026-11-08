@@ -277,4 +277,30 @@ describe('daily report workflow', () => {
     assert.equal(items[2].budget, 1500);
     assert.equal(r.body.report.totalWorkBudget, 11000);
   });
+
+  test('labour cost is workers × daily wage, computed on the server', async () => {
+    const r = await api('POST', '/api/v1/daily-reports', {
+      token: ic.token,
+      body: {
+        project: project._id,
+        titleOfWork: 'Plastering block C',
+        workDate: new Date(Date.now() - 2 * 86400000).toISOString(),
+        workSummary: 'Internal plastering',
+        status: 'DRAFT',
+        totalLabourCost: 1, // tampered total must be ignored
+        labourBreakdown: [
+          { role: 'Mason', count: 3, category: 'SKILLED', wagePerDay: 900 },
+          { role: 'Helper (Female)', count: 4, wagePerDay: 550 },
+          { role: 'Helper (Male)', count: 2 }, // no wage entered
+        ],
+      },
+    });
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    const rows = r.body.report.labourBreakdown;
+    assert.equal(rows[0].wagePerDay, 900);
+    assert.equal(rows[1].category, 'UNSKILLED');
+    assert.equal(rows[2].wagePerDay, undefined);
+    assert.equal(r.body.report.totalLabourCount, 9);
+    assert.equal(r.body.report.totalLabourCost, 4900);
+  });
 });

@@ -66,8 +66,10 @@ export interface LabourCountItem {
   role: string;
   count: number;
   category?: LabourCategory;
-  /** Hours worked per person for this trade */
+  /** Hours worked per person for this trade (older reports) */
   hours?: number;
+  /** Daily wage per worker in rupees */
+  wagePerDay?: number;
 }
 
 export interface MaterialItem {

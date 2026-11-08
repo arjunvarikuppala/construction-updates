@@ -29,6 +29,7 @@ export interface IDailyReport extends Document {
   workItems: WorkItem[];
   labourBreakdown: LabourCountItem[];
   totalLabourCount: number;
+  totalLabourCost?: number;
   totalWorkBudget?: number;
   equipmentDetails?: string;
   issuesAndDelays?: string;
@@ -114,6 +115,7 @@ const DailyReportSchema = new Schema<IDailyReport>(
         count: { type: Number, required: true, min: 0 },
         category: { type: String, enum: ['SKILLED', 'UNSKILLED', 'SUPERVISOR', 'OTHER'] },
         hours: { type: Number, min: 0, max: 24 },
+        wagePerDay: { type: Number, min: 0 }, // ₹ per worker per day
       },
     ],
     materials: {
@@ -151,6 +153,11 @@ const DailyReportSchema = new Schema<IDailyReport>(
       default: 0,
     },
     totalWorkBudget: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    totalLabourCost: {
       type: Number,
       default: 0,
       min: 0,

@@ -228,11 +228,24 @@ export function exportDailyReportPdf(report: DailyReport) {
     [['Total Work Budget (Estimated)', '', '', '', '', ...(hasItemStatus ? [''] : []), formatRupees(totalBudget)]]
   );
 
+  const labour = report.labourBreakdown || [];
+  const hasHours = labour.some((l) => l.hours !== undefined && l.hours !== null);
+  const labourCost = labour.reduce((s, l) => s + (l.count || 0) * (l.wagePerDay || 0), 0);
   table(
-    ['Labour Trade / Role', 'Category', 'Headcount', 'Hours'],
-    (report.labourBreakdown || []).map((l) => [l.role, l.category || '—', l.count.toString(), l.hours !== undefined ? String(l.hours) : '—']),
+    ['Labour Trade / Role', 'Category', 'Headcount', ...(hasHours ? ['Hours'] : []), 'Wage / day (INR)', 'Cost (INR)'],
+    labour.map((l) => [
+      l.role,
+      l.category || '—',
+      l.count.toString(),
+      ...(hasHours ? [l.hours !== undefined ? String(l.hours) : '—'] : []),
+      l.wagePerDay ? formatRupees(l.wagePerDay) : '—',
+      l.wagePerDay ? formatRupees(l.count * l.wagePerDay) : '—',
+    ]),
     [245, 166, 35],
-    [20, 43, 74]
+    [20, 43, 74],
+    labourCost > 0
+      ? [['Total Labour Cost', '', String(report.totalLabourCount), ...(hasHours ? [''] : []), '', formatRupees(labourCost)]]
+      : undefined
   );
 
   table(

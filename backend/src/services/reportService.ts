@@ -49,6 +49,7 @@ export interface SanitizedReportFields {
   workItems?: any[];
   labourBreakdown?: any[];
   totalLabourCount?: number;
+  totalLabourCost?: number;
   totalWorkBudget?: number;
   equipmentDetails?: string;
   issuesAndDelays?: string;
@@ -139,15 +140,20 @@ export function sanitizeReportInput(
         const count = Math.floor(nonNegativeNumber(item?.count, 0, 10000));
         if (!role || count <= 0) return null;
         const hoursRaw = item?.hours;
+        const wage = nonNegativeNumber(item?.wagePerDay);
         return {
           role,
           count,
           category: LABOUR_CATEGORIES.includes(item?.category) ? item.category : guessLabourCategory(role),
           hours: hoursRaw === undefined || hoursRaw === null || hoursRaw === '' ? undefined : Math.min(24, nonNegativeNumber(hoursRaw)),
+          wagePerDay: wage > 0 ? wage : undefined,
         };
       })
       .filter(Boolean) as any[];
     data.totalLabourCount = data.labourBreakdown.reduce((sum, l) => sum + l.count, 0);
+    // Labour cost = workers × daily wage, always computed on the server
+    data.totalLabourCost =
+      Math.round(data.labourBreakdown.reduce((sum, l) => sum + l.count * ((l as any).wagePerDay || 0), 0) * 100) / 100;
   }
 
   if (has('materials') || !opts.partial) {

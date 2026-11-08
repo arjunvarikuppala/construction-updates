@@ -191,6 +191,7 @@ export interface LabourCountItem {
   count: number;
   category?: LabourCategory;
   hours?: number;
+  wagePerDay?: number; // ₹ per worker per day
 }
 
 export interface MaterialItem {
@@ -281,6 +282,7 @@ export interface DailyReport {
   workItems: WorkItem[];
   labourBreakdown: LabourCountItem[];
   totalLabourCount: number;
+  totalLabourCost?: number;
   totalWorkBudget?: number;
   equipmentDetails?: string;
   issuesAndDelays?: string;

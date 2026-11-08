@@ -117,6 +117,8 @@ export const DailyReportDetailPage: React.FC = () => {
   const expenses = report.expenses || [];
   const expenseTotal = expenses.reduce((s, e) => s + (e.amount || 0), 0);
   const labourHours = (report.labourBreakdown || []).reduce((s, l) => s + (l.count || 0) * (l.hours || 0), 0);
+  const labourCost =
+    report.totalLabourCost || (report.labourBreakdown || []).reduce((s, l) => s + (l.count || 0) * (l.wagePerDay || 0), 0);
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto pb-8 sm:pb-12 min-w-0">
@@ -347,6 +349,7 @@ export const DailyReportDetailPage: React.FC = () => {
               <CardTitle>Labour Attendance by Trade</CardTitle>
               <span className="text-xs font-bold text-amber-800 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200">
                 Total: {report.totalLabourCount} Headcount
+                {labourCost > 0 ? ` · ${formatRupees(labourCost)}` : ''}
               </span>
             </div>
           </CardHeader>
@@ -359,6 +362,11 @@ export const DailyReportDetailPage: React.FC = () => {
                   {labourCategoryLabel(l.category)}
                   {l.hours ? ` · ${l.hours} hrs` : ''}
                 </span>
+                {!!l.wagePerDay && (
+                  <span className="text-[11px] text-emerald-700 font-semibold block mt-0.5">
+                    {formatRupees(l.wagePerDay)}/day · {formatRupees(l.count * l.wagePerDay)}
+                  </span>
+                )}
               </div>
             ))}
           </div>
