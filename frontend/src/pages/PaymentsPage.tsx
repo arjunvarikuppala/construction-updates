@@ -334,9 +334,9 @@ export const PaymentsPage: React.FC = () => {
       {activeTab === 'requests' && (
         <div className="space-y-4">
           {/* Filters Bar */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-card">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-card">
             {/* Search */}
-            <div className="relative flex-1">
+            <div className="relative flex-1 min-w-0 lg:min-w-[240px]">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
@@ -354,7 +354,7 @@ export const PaymentsPage: React.FC = () => {
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
-                  className="w-full sm:w-auto px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white text-slate-800 focus:ring-2 focus:ring-amber-500 outline-none"
+                  className="w-full sm:w-auto sm:max-w-[200px] truncate px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white text-slate-800 focus:ring-2 focus:ring-amber-500 outline-none"
                 >
                   <option value="ALL">All Statuses</option>
                   <option value="SUBMITTED">Submitted / Needs Review</option>
@@ -370,7 +370,7 @@ export const PaymentsPage: React.FC = () => {
               <select
                 value={projectFilter}
                 onChange={(e) => setProjectFilter(e.target.value)}
-                className="w-full sm:w-auto px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white text-slate-800 focus:ring-2 focus:ring-amber-500 outline-none"
+                className="w-full sm:w-auto sm:max-w-[200px] truncate px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white text-slate-800 focus:ring-2 focus:ring-amber-500 outline-none"
               >
                 <option value="ALL">All Projects</option>
                 {projects.map((p: any) => (

@@ -1,25 +1,27 @@
-import React from 'react';
+import React, { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext.js';
 import { AppLayout } from './components/layout/AppLayout.js';
 import { Login } from './pages/Login.js';
-import { RegisterPage } from './pages/RegisterPage.js';
-import { OwnerDashboard } from './pages/OwnerDashboard.js';
-import { InChargeDashboard } from './pages/InChargeDashboard.js';
-import { ProjectsPage } from './pages/ProjectsPage.js';
-import { ProjectDetailPage } from './pages/ProjectDetailPage.js';
-import { DailyReportsPage } from './pages/DailyReportsPage.js';
-import { DailyReportFormPage } from './pages/DailyReportFormPage.js';
-import { DailyReportDetailPage } from './pages/DailyReportDetailPage.js';
-import { ExpensesPage } from './pages/ExpensesPage.js';
-import { ExpenseFormPage } from './pages/ExpenseFormPage.js';
-import { ApprovalsPage } from './pages/ApprovalsPage.js';
-import { InChargeUsersPage } from './pages/InChargeUsersPage.js';
-import { AuditLogsPage } from './pages/AuditLogsPage.js';
-import { PaymentsPage } from './pages/PaymentsPage.js';
-import { ProjectMessagesPage } from './pages/ProjectMessagesPage.js';
-import { NotificationsPage } from './pages/NotificationsPage.js';
 import { ErrorBoundary } from './components/common/ErrorBoundary.js';
+
+// Route-level code splitting: each page loads only when first visited
+const RegisterPage = lazy(() => import('./pages/RegisterPage.js').then((m) => ({ default: m.RegisterPage })));
+const OwnerDashboard = lazy(() => import('./pages/OwnerDashboard.js').then((m) => ({ default: m.OwnerDashboard })));
+const InChargeDashboard = lazy(() => import('./pages/InChargeDashboard.js').then((m) => ({ default: m.InChargeDashboard })));
+const ProjectsPage = lazy(() => import('./pages/ProjectsPage.js').then((m) => ({ default: m.ProjectsPage })));
+const ProjectDetailPage = lazy(() => import('./pages/ProjectDetailPage.js').then((m) => ({ default: m.ProjectDetailPage })));
+const DailyReportsPage = lazy(() => import('./pages/DailyReportsPage.js').then((m) => ({ default: m.DailyReportsPage })));
+const DailyReportFormPage = lazy(() => import('./pages/DailyReportFormPage.js').then((m) => ({ default: m.DailyReportFormPage })));
+const DailyReportDetailPage = lazy(() => import('./pages/DailyReportDetailPage.js').then((m) => ({ default: m.DailyReportDetailPage })));
+const ExpensesPage = lazy(() => import('./pages/ExpensesPage.js').then((m) => ({ default: m.ExpensesPage })));
+const ExpenseFormPage = lazy(() => import('./pages/ExpenseFormPage.js').then((m) => ({ default: m.ExpenseFormPage })));
+const ApprovalsPage = lazy(() => import('./pages/ApprovalsPage.js').then((m) => ({ default: m.ApprovalsPage })));
+const InChargeUsersPage = lazy(() => import('./pages/InChargeUsersPage.js').then((m) => ({ default: m.InChargeUsersPage })));
+const AuditLogsPage = lazy(() => import('./pages/AuditLogsPage.js').then((m) => ({ default: m.AuditLogsPage })));
+const PaymentsPage = lazy(() => import('./pages/PaymentsPage.js').then((m) => ({ default: m.PaymentsPage })));
+const ProjectMessagesPage = lazy(() => import('./pages/ProjectMessagesPage.js').then((m) => ({ default: m.ProjectMessagesPage })));
+const NotificationsPage = lazy(() => import('./pages/NotificationsPage.js').then((m) => ({ default: m.NotificationsPage })));
 
 // Protected Route Guard
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -57,7 +59,14 @@ export const App: React.FC = () => {
     <Routes>
       {/* Public Routes */}
       <Route path="/login" element={<Login />} />
-      <Route path="/register" element={<RegisterPage />} />
+      <Route
+        path="/register"
+        element={
+          <Suspense fallback={null}>
+            <RegisterPage />
+          </Suspense>
+        }
+      />
 
       {/* Protected App Shell */}
       <Route

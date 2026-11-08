@@ -42,8 +42,12 @@ import { Project, Expense, DailyReport, ProjectWeatherResponse } from '../types/
 import { WeatherCard } from '../components/weather/WeatherCard.js';
 import { formatCompactINR, formatINR } from '../utils/currency.js';
 import { formatDate } from '../utils/dates.js';
-import { exportProjectExpensesPdf } from '../utils/exportPdf.js';
-import { downloadExpensesExcel } from '../utils/exportExcel.js';
+// Heavy export libraries (jsPDF / SheetJS) load only when an export is triggered
+const exportProjectExpensesPdf = (...args: Parameters<typeof import('../utils/exportPdf.js').exportProjectExpensesPdf>) =>
+  import('../utils/exportPdf.js').then((m) => m.exportProjectExpensesPdf(...args));
+// Heavy export libraries (jsPDF / SheetJS) load only when an export is triggered
+const downloadExpensesExcel = (...args: Parameters<typeof import('../utils/exportExcel.js').downloadExpensesExcel>) =>
+  import('../utils/exportExcel.js').then((m) => m.downloadExpensesExcel(...args));
 import { api } from '../api/client.js';
 
 export const ProjectDetailPage: React.FC = () => {

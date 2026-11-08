@@ -41,10 +41,10 @@ export const TopHeader: React.FC<TopHeaderProps> = ({ onOpenMobileDrawer }) => {
           <span className="font-bold text-navy-950 text-sm sm:text-base tracking-tight">SiteTrack</span>
         </div>
 
-        <div className="hidden md:flex items-center gap-2 text-xs text-slate-500">
+        <div className="hidden md:flex items-center gap-2 text-xs text-slate-500 whitespace-nowrap min-w-0">
           <span className="font-semibold text-navy-900">Enterprise Workspace</span>
-          <span>/</span>
-          <span>Real-time Construction Operations</span>
+          <span className="hidden xl:inline">/</span>
+          <span className="hidden xl:inline truncate">Real-time Construction Operations</span>
         </div>
       </div>
 

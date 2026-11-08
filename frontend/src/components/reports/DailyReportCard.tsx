@@ -9,7 +9,9 @@ import { ReadReceiptBadge } from './ReadReceiptBadge.js';
 import { useAuth } from '../../context/AuthContext.js';
 import { useUnreadReports } from '../../hooks/useUnreadReports.js';
 import { formatDate } from '../../utils/dates.js';
-import { exportDailyReportPdf } from '../../utils/exportPdf.js';
+// Heavy export libraries (jsPDF / SheetJS) load only when an export is triggered
+const exportDailyReportPdf = (...args: Parameters<typeof import('../../utils/exportPdf.js').exportDailyReportPdf>) =>
+  import('../../utils/exportPdf.js').then((m) => m.exportDailyReportPdf(...args));
 
 import { SecureImage, SecureLink } from '../common/SecureMedia.js';
 interface DailyReportCardProps {

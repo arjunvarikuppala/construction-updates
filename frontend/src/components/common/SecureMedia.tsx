@@ -6,18 +6,32 @@ import { useToast } from '../../context/ToastContext.js';
 type ImgProps = Omit<React.ImgHTMLAttributes<HTMLImageElement>, 'src'> & { src?: string | null };
 
 /** <img> for private uploads: fetches a short-lived signed URL first. */
-export const SecureImage: React.FC<ImgProps> = ({ src, className = '', alt = '', ...rest }) => {
+export const SecureImage: React.FC<ImgProps> = ({ src, className = '', alt = '', onError, ...rest }) => {
   const { url, loading, denied } = useMediaUrl(src);
+  const [failed, setFailed] = React.useState(false);
+  React.useEffect(() => setFailed(false), [url]);
   if (loading) return <div className={`bg-slate-200 animate-pulse ${className}`} aria-label="Loading image" />;
-  if (!url) {
+  if (!url || failed) {
     return (
       <div className={`flex flex-col items-center justify-center gap-1 bg-slate-100 text-slate-400 ${className}`} role="img" aria-label={alt || 'Image unavailable'}>
         {denied ? <Lock className="w-5 h-5" /> : <ImageOff className="w-5 h-5" />}
-        <span className="text-[10px] font-semibold">{denied ? 'No access' : 'Unavailable'}</span>
+        <span className="text-[10px] font-semibold">{denied ? 'No access' : failed ? 'File no longer available' : 'Unavailable'}</span>
       </div>
     );
   }
-  return <img src={url} alt={alt} className={className} loading="lazy" {...rest} />;
+  return (
+    <img
+      src={url}
+      alt={alt}
+      className={className}
+      loading="lazy"
+      onError={(e) => {
+        setFailed(true);
+        onError?.(e);
+      }}
+      {...rest}
+    />
+  );
 };
 
 type VideoProps = Omit<React.VideoHTMLAttributes<HTMLVideoElement>, 'src'> & { src?: string | null };

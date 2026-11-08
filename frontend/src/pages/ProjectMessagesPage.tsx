@@ -626,7 +626,7 @@ export const ProjectMessagesPage: React.FC = () => {
         url: a.uploadedUrl!,
         name: a.name,
         type: a.type,
-        size: a.size,
+        size: a.size || undefined,
         mimeType: a.mimeType,
         storageKey: a.storageKey,
       }));
@@ -978,7 +978,7 @@ export const ProjectMessagesPage: React.FC = () => {
                     <span>Online</span>
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-500 border border-slate-200">
+                  <span className="inline-flex shrink-0 items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-500 border border-slate-200">
                     <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
                     <span>Offline</span>
                   </span>
@@ -986,13 +986,13 @@ export const ProjectMessagesPage: React.FC = () => {
               </div>
 
               {/* Subtitle: Linked Accounts status */}
-              <div className="text-[11px] text-slate-500 truncate flex items-center gap-1.5">
-                <span className="font-medium text-slate-700">
+              <div className="text-[11px] text-slate-500 flex items-center gap-1.5 min-w-0">
+                <span className="font-medium text-slate-700 truncate max-w-[45%] shrink-0">
                   MD: <strong className="text-navy-950">{mdName}</strong>
                 </span>
-                <span className="text-slate-300">•</span>
+                <span className="text-slate-300 shrink-0">•</span>
                 {hasAssignedInCharge ? (
-                  <span className="font-medium text-slate-700">
+                  <span className="font-medium text-slate-700 truncate min-w-0">
                     In-Charge:{' '}
                     <strong className="text-navy-950">
                       {assignedInChargeNames || 'Assigned Site Engineer'}
@@ -1210,7 +1210,8 @@ export const ProjectMessagesPage: React.FC = () => {
               </p>
               <div className="flex items-center gap-2 pt-1 text-[11px] text-slate-500 bg-slate-100/80 px-3 py-1.5 rounded-xl border border-slate-200">
                 <UploadCloud className="w-4 h-4 text-amber-500" />
-                <span>Drag & drop photos or videos anywhere to upload</span>
+                <span className="hidden md:inline">Drag & drop photos, videos or PDFs anywhere to share</span>
+                <span className="md:hidden">Tap the clip to share photos, videos or PDFs</span>
               </div>
             </div>
           ) : (
@@ -1387,7 +1388,7 @@ export const ProjectMessagesPage: React.FC = () => {
                                         <Download className="w-4 h-4" />
                                       </button>
                                     </div>
-                                    {att.size && (
+                                    {!!att.size && (
                                       <span className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-navy-950/70 text-white backdrop-blur-xs">
                                         {formatFileSize(att.size)}
                                       </span>
@@ -1434,7 +1435,7 @@ export const ProjectMessagesPage: React.FC = () => {
                                       <div className="flex items-center gap-1.5 truncate">
                                         <Film className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
                                         <span className="truncate">{att.name}</span>
-                                        {att.size && (
+                                        {!!att.size && (
                                           <span className="text-[10px] text-slate-400 font-mono">
                                             ({formatFileSize(att.size)})
                                           </span>

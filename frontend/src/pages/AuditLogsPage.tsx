@@ -67,9 +67,14 @@ export const AuditLogsPage: React.FC = () => {
                   </div>
 
                   {log.details && (
-                    <div className="p-2 rounded-lg bg-slate-50 border border-slate-200 text-slate-700 font-mono text-[11px] mt-1 break-all whitespace-pre-wrap">
-                      {JSON.stringify(log.details)}
-                    </div>
+                    <dl className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-[11px] mt-1 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
+                      {formatAuditDetails(log.details).map(([k, v]) => (
+                        <div key={k} className="flex gap-1.5 min-w-0">
+                          <dt className="text-slate-500 shrink-0">{k}:</dt>
+                          <dd className="text-slate-800 font-medium truncate" title={v}>{v}</dd>
+                        </div>
+                      ))}
+                    </dl>
                   )}
                 </div>
               </div>
@@ -80,3 +85,26 @@ export const AuditLogsPage: React.FC = () => {
     </div>
   );
 };
+
+const HIDDEN_DETAIL_KEYS = new Set(['password', 'token', 'secret', '__v']);
+
+/** Turn an audit details object into readable label/value pairs. */
+function formatAuditDetails(details: unknown): Array<[string, string]> {
+  if (!details || typeof details !== 'object') return [['Details', String(details)]];
+  return Object.entries(details as Record<string, unknown>)
+    .filter(([k, v]) => !HIDDEN_DETAIL_KEYS.has(k) && v !== undefined && v !== null && v !== '')
+    .slice(0, 12)
+    .map(([k, v]) => {
+      const label = k
+        .replace(/([a-z])([A-Z])/g, '$1 $2')
+        .replace(/_/g, ' ')
+        .replace(/^./, (c) => c.toUpperCase());
+      let value: string;
+      if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(v)) value = new Date(v).toLocaleString('en-IN');
+      else if (typeof v === 'boolean') value = v ? 'Yes' : 'No';
+      else if (Array.isArray(v)) value = `${v.length} item${v.length === 1 ? '' : 's'}`;
+      else if (typeof v === 'object') value = JSON.stringify(v);
+      else value = String(v);
+      return [label, value];
+    });
+}

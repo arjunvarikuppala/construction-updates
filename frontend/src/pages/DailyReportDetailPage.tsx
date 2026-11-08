@@ -27,7 +27,9 @@ import { LoadingSkeleton } from '../components/common/LoadingSkeleton.js';
 import { ReadReceiptBadge } from '../components/reports/ReadReceiptBadge.js';
 import { DailyReport } from '../types/index.js';
 import { formatDate } from '../utils/dates.js';
-import { exportDailyReportPdf } from '../utils/exportPdf.js';
+// Heavy export libraries (jsPDF / SheetJS) load only when an export is triggered
+const exportDailyReportPdf = (...args: Parameters<typeof import('../utils/exportPdf.js').exportDailyReportPdf>) =>
+  import('../utils/exportPdf.js').then((m) => m.exportDailyReportPdf(...args));
 import { formatRupees, formatINR } from '../utils/currency.js';
 import { expenseCategoryLabel, labourCategoryLabel, shiftLabel, WORK_STATUS_OPTIONS } from '../utils/reportOptions.js';
 import { useAuth } from '../context/AuthContext.js';

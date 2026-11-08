@@ -8,15 +8,15 @@ export default defineConfig({
     host: true, // Allow external devices / mobile on LAN to access
     proxy: {
       '/api': {
-        target: 'http://localhost:5000',
+        target: process.env.API_PROXY_TARGET || 'http://localhost:5000',
         changeOrigin: true,
       },
       '/uploads': {
-        target: 'http://localhost:5000',
+        target: process.env.API_PROXY_TARGET || 'http://localhost:5000',
         changeOrigin: true,
       },
       '/socket.io': {
-        target: 'http://localhost:5000',
+        target: process.env.API_PROXY_TARGET || 'http://localhost:5000',
         ws: true,
         changeOrigin: true,
       },

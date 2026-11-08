@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Sidebar } from './Sidebar.js';
@@ -53,7 +53,15 @@ export const AppLayout: React.FC = () => {
           }`}
         >
           <div className={`max-w-7xl mx-auto w-full ${isMessagesPage ? 'h-full flex flex-col flex-1 min-h-0' : ''}`}>
-            <Outlet />
+            <Suspense
+              fallback={
+                <div className="flex-1 flex items-center justify-center py-24" role="status" aria-label="Loading page">
+                  <div className="w-8 h-8 border-4 border-slate-200 border-t-amber-500 rounded-full animate-spin" />
+                </div>
+              }
+            >
+              <Outlet />
+            </Suspense>
           </div>
         </main>
 

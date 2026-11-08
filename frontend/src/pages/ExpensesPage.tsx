@@ -25,7 +25,9 @@ import { useAuth } from '../context/AuthContext.js';
 import { useToast } from '../context/ToastContext.js';
 import { Expense, Project, ExpenseCategory, ExpenseStatus } from '../types/index.js';
 import { formatCompactINR, formatINR } from '../utils/currency.js';
-import { downloadExpensesExcel } from '../utils/exportExcel.js';
+// Heavy export libraries (jsPDF / SheetJS) load only when an export is triggered
+const downloadExpensesExcel = (...args: Parameters<typeof import('../utils/exportExcel.js').downloadExpensesExcel>) =>
+  import('../utils/exportExcel.js').then((m) => m.downloadExpensesExcel(...args));
 import { api } from '../api/client.js';
 
 const CATEGORIES: Array<{ value: string; label: string }> = [

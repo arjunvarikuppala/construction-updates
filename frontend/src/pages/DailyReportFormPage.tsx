@@ -569,13 +569,13 @@ export const DailyReportFormPage: React.FC = () => {
       </SectionCard>
 
       {/* Actions — sticky above the mobile bottom nav */}
-      <div className="sticky bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] md:bottom-4 z-20">
+      <div className="sticky -bottom-7 md:bottom-4 z-20">
         <div className="flex gap-2.5 p-2.5 rounded-2xl bg-white/95 backdrop-blur border border-slate-200 shadow-lg">
           {!isSubmittedReport && (
             <Button
               type="button"
               variant="outline"
-              className="flex-1"
+              className="flex-1 whitespace-nowrap"
               size="lg"
               onClick={() => handleSubmit('DRAFT')}
               disabled={isSubmitting || uploadsBusy}
@@ -588,7 +588,7 @@ export const DailyReportFormPage: React.FC = () => {
             type="button"
             variant="amber"
             size="lg"
-            className="flex-[1.4] font-bold"
+            className="flex-[1.4] font-bold whitespace-nowrap"
             onClick={() => handleSubmit('SUBMITTED')}
             isLoading={isSubmitting}
             disabled={isSubmitting || uploadsBusy}

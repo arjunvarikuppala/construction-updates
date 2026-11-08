@@ -24,7 +24,9 @@ import { LoadingSkeleton } from '../components/common/LoadingSkeleton.js';
 import { OwnerDashboardData, Project } from '../types/index.js';
 import { formatCompactINR, formatINR } from '../utils/currency.js';
 import { formatDate } from '../utils/dates.js';
-import { downloadExpensesExcel } from '../utils/exportExcel.js';
+// Heavy export libraries (jsPDF / SheetJS) load only when an export is triggered
+const downloadExpensesExcel = (...args: Parameters<typeof import('../utils/exportExcel.js').downloadExpensesExcel>) =>
+  import('../utils/exportExcel.js').then((m) => m.downloadExpensesExcel(...args));
 import { useUnreadReports } from '../hooks/useUnreadReports.js';
 import { UnreadDot } from '../components/common/UnreadDot.js';
 import { api } from '../api/client.js';
@@ -546,11 +548,12 @@ export const OwnerDashboard: React.FC = () => {
                             {e.description}
                           </span>
                           <span className="text-[11px] text-slate-500 truncate block">
-                            {e.project?.code} • {e.vendor} • <strong className="text-navy-950">{formatINR(e.amount)}</strong>
+                            {e.project?.code} • {e.vendor}
                           </span>
                         </div>
                       </div>
-                      <div className="shrink-0 ml-2">
+                      <div className="shrink-0 ml-2 flex flex-col items-end gap-1">
+                        <strong className="text-navy-950 text-xs">{formatINR(e.amount)}</strong>
                         <Badge status={e.status} size="sm" />
                       </div>
                     </div>
