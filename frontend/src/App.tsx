@@ -19,7 +19,6 @@ import { AuditLogsPage } from './pages/AuditLogsPage.js';
 import { PaymentsPage } from './pages/PaymentsPage.js';
 import { ProjectMessagesPage } from './pages/ProjectMessagesPage.js';
 import { NotificationsPage } from './pages/NotificationsPage.js';
-import { AnalyticsPage } from './pages/AnalyticsPage.js';
 import { ErrorBoundary } from './components/common/ErrorBoundary.js';
 
 // Protected Route Guard
@@ -117,15 +116,6 @@ export const App: React.FC = () => {
           }
         />
 
-        {/* MD Analytics */}
-        <Route
-          path="analytics"
-          element={
-            <OwnerRoute>
-              <AnalyticsPage />
-            </OwnerRoute>
-          }
-        />
 
         {/* Audit Trail */}
         <Route

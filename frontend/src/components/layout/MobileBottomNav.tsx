@@ -9,7 +9,6 @@ import {
   DollarSign,
   CreditCard,
   MessageSquare,
-  BarChart3,
   X,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.js';
@@ -106,22 +105,6 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({ pendingApprova
                   </div>
                   <span className="text-xs font-bold">Payment Request</span>
                   <span className="text-[10px] text-emerald-800 mt-0.5 line-clamp-1">NEFT / RTGS / UPI</span>
-                </button>
-              )}
-
-              {isOwner && (
-                <button
-                  onClick={() => {
-                    setShowActionSheet(false);
-                    navigate('/analytics');
-                  }}
-                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-sky-50 hover:bg-sky-100 active:bg-sky-200 border border-sky-200 text-sky-950 text-center transition-colors min-h-[96px]"
-                >
-                  <div className="w-10 h-10 rounded-xl bg-sky-700 text-white flex items-center justify-center mb-1.5 shadow-xs font-bold">
-                    <BarChart3 className="w-5 h-5" />
-                  </div>
-                  <span className="text-xs font-bold">Site Analytics</span>
-                  <span className="text-[10px] text-sky-800 mt-0.5 line-clamp-1">Spend, labour &amp; progress</span>
                 </button>
               )}
 

@@ -339,8 +339,8 @@ export const OwnerDashboard: React.FC = () => {
               <AlertTriangle className="w-4 h-4 text-amber-600" />
               <CardTitle>Delays &amp; issues reported (last 7 days)</CardTitle>
             </div>
-            <Button size="sm" variant="ghost" onClick={() => navigate('/analytics')} rightIcon={<ArrowRight className="w-3.5 h-3.5" />}>
-              Analytics
+            <Button size="sm" variant="ghost" onClick={() => navigate('/reports')} rightIcon={<ArrowRight className="w-3.5 h-3.5" />}>
+              All reports
             </Button>
           </CardHeader>
           <ul className="divide-y divide-slate-100">
