@@ -20,7 +20,7 @@ export async function downloadExpensesExcel(filterParams: Record<string, string>
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `SiteTrack-Expenses-${Date.now()}.xlsx`;
+      a.download = `BKR-INFRA-Expenses-${Date.now()}.xlsx`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -32,7 +32,7 @@ export async function downloadExpensesExcel(filterParams: Record<string, string>
   }
 }
 
-export function exportClientExpensesExcel(expenses: Expense[], fileName = 'SiteTrack-Expenses') {
+export function exportClientExpensesExcel(expenses: Expense[], fileName = 'BKR-INFRA-Expenses') {
   const data = expenses.map((e) => ({
     'Project Code': e.project?.code || '',
     'Project Name': e.project?.name || '',

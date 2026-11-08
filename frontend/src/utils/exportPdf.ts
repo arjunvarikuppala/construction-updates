@@ -16,7 +16,7 @@ export function exportProjectExpensesPdf(project: Project, expenses: Expense[]) 
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(18);
   doc.setFont('helvetica', 'bold');
-  doc.text('SiteTrack Construction Management', 14, 16);
+  doc.text('BKR INFRA Construction Management', 14, 16);
 
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
@@ -116,14 +116,14 @@ export function exportProjectExpensesPdf(project: Project, expenses: Expense[]) 
     doc.setFontSize(8);
     doc.setTextColor(148, 163, 184);
     doc.text(
-      'Notice: Expense approval confirms site verification and does not constitute proof of payment. SiteTrack Construction PM.',
+      'Notice: Expense approval confirms site verification and does not constitute proof of payment. BKR INFRA Construction PM.',
       14,
       290
     );
     doc.text(`Page ${i} of ${pageCount}`, 190, 290, { align: 'right' });
   }
 
-  doc.save(`SiteTrack-${project.code}-Expenses.pdf`);
+  doc.save(`BKR-INFRA-${project.code}-Expenses.pdf`);
 }
 
 export function exportDailyReportPdf(report: DailyReport) {
@@ -136,7 +136,7 @@ export function exportDailyReportPdf(report: DailyReport) {
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(14);
   doc.setFont('helvetica', 'bold');
-  doc.text('SiteTrack — Daily Construction Progress Report', 14, 13);
+  doc.text('BKR INFRA — Daily Construction Progress Report', 14, 13);
 
   doc.setFontSize(12);
   doc.setTextColor(245, 166, 35); // Amber
@@ -315,7 +315,7 @@ export function exportDailyReportPdf(report: DailyReport) {
   textBlock('Issues & Delays:', report.issuesAndDelays);
   textBlock('Next Day Plan:', report.nextDayPlan);
   textBlock('Remarks:', report.remarks);
-  if (report.photos?.length) textBlock('Site Photos:', `${report.photos.length} photo(s)/video(s) attached — view them in SiteTrack.`);
+  if (report.photos?.length) textBlock('Site Photos:', `${report.photos.length} photo(s)/video(s) attached — view them in BKR INFRA.`);
 
-  doc.save(`SiteTrack-DailyReport-${formatDate(report.workDate, 'yyyy-MM-dd')}.pdf`);
+  doc.save(`BKR-INFRA-DailyReport-${formatDate(report.workDate, 'yyyy-MM-dd')}.pdf`);
 }

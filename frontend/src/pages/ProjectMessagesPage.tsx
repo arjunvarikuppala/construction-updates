@@ -921,7 +921,7 @@ export const ProjectMessagesPage: React.FC = () => {
           <div className="bg-amber-50 border-b border-amber-200 px-4 py-1.5 flex items-center justify-between text-[11px] text-amber-800 animate-in fade-in">
             <div className="flex items-center gap-1.5">
               <WifiOff className="w-3.5 h-3.5 text-amber-600 animate-pulse" />
-              <span>Real-time updates paused. Reconnecting to SiteTrack server...</span>
+              <span>Real-time updates paused. Reconnecting to BKR INFRA server...</span>
             </div>
             <button
               onClick={() => {
@@ -1032,7 +1032,7 @@ export const ProjectMessagesPage: React.FC = () => {
                   : 'bg-slate-50 border-slate-200 text-slate-500'
               }`}
               title={`${mdName} (Managing Director) - ${
-                presenceData?.linkedMD?.isOnline ? 'Active on SiteTrack' : 'Offline'
+                presenceData?.linkedMD?.isOnline ? 'Active on BKR INFRA' : 'Offline'
               }`}
             >
               <span
@@ -1062,7 +1062,7 @@ export const ProjectMessagesPage: React.FC = () => {
                           ? 'bg-emerald-50 border-emerald-200 text-emerald-950 shadow-2xs'
                           : 'bg-slate-50 border-slate-200 text-slate-500'
                       }`}
-                      title={`${ic.name} (Site In-Charge) - ${ic.isOnline ? 'Active on SiteTrack' : 'Offline'}`}
+                      title={`${ic.name} (Site In-Charge) - ${ic.isOnline ? 'Active on BKR INFRA' : 'Offline'}`}
                     >
                       <span
                         className={`w-2 h-2 rounded-full ${
@@ -1132,7 +1132,7 @@ export const ProjectMessagesPage: React.FC = () => {
                     No Site In-Charge Assigned to {activeProject.name}
                   </p>
                   <p className="text-[11px] text-slate-600">
-                    SiteTrack channels only show linked accounts (the MD and assigned Site In-Charges). Assign an engineer to enable direct two-way messaging.
+                    BKR INFRA channels only show linked accounts (the MD and assigned Site In-Charges). Assign an engineer to enable direct two-way messaging.
                   </p>
                 </div>
               </div>

@@ -281,7 +281,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
               </button>
             </div>
             <p className="text-[11px] text-slate-500 mt-1">
-              Enter the site address, landmark, area, or city. SiteTrack automatically resolves weather for this location.
+              Enter the site address, landmark, area, or city. BKR INFRA automatically resolves weather for this location.
             </p>
           </div>
 

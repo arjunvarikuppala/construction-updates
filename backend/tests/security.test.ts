@@ -334,6 +334,29 @@ describe('safe error responses', () => {
   });
 });
 
+describe('single-company registration', () => {
+  test('public sign-up is closed once an MD exists (default deployment)', async () => {
+    const prev = process.env.ALLOW_PUBLIC_REGISTRATION;
+    process.env.ALLOW_PUBLIC_REGISTRATION = 'false';
+    try {
+      const status = await api('GET', '/api/v1/auth/first-md-status');
+      assert.equal(status.body.hasMD, true);
+      assert.equal(status.body.registrationOpen, false);
+      for (const path of ['/api/v1/auth/register', '/api/v1/auth/register-md', '/api/v1/auth/register-first-md']) {
+        const r = await api('POST', path, {
+          body: { name: 'Outsider', email: `${uniq('outsider')}@example.test`, password: STRONG_PASSWORD },
+        });
+        assert.equal(r.status, 403, path);
+      }
+      // Existing users can still sign in
+      const ok = await api('POST', '/api/v1/auth/login', { body: { email: mdA.email, password: STRONG_PASSWORD } });
+      assert.equal(ok.status, 200);
+    } finally {
+      process.env.ALLOW_PUBLIC_REGISTRATION = prev;
+    }
+  });
+});
+
 describe('revoked assignment', () => {
   test('revoked in-charge loses project access', async () => {
     const ic = await assignNewInCharge(mdA.token, projectA._id, 'Suresh');

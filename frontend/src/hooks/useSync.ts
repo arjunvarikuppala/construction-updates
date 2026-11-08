@@ -11,7 +11,7 @@ export function useSync() {
     setIsSyncing(true);
     try {
       await queryClient.invalidateQueries();
-      success('Data synchronized with SiteTrack cloud');
+      success('Data synchronized with BKR INFRA cloud');
     } catch (err) {
       console.error('Sync failed:', err);
     } finally {

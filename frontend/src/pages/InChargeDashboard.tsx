@@ -129,7 +129,7 @@ export const InChargeDashboard: React.FC = () => {
           <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
             {error instanceof Error
               ? error.message
-              : 'Unable to connect to SiteTrack backend services. Please check network connection and try again.'}
+              : 'Unable to connect to BKR INFRA backend services. Please check network connection and try again.'}
           </p>
         </div>
         <div className="pt-2 flex justify-center gap-2">

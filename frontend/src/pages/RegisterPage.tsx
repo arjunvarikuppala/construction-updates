@@ -45,6 +45,16 @@ export const RegisterPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
+  // MD self-registration is only open before BKR INFRA's MD account exists
+  const [registrationOpen, setRegistrationOpen] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (inviteToken) return;
+    api
+      .get<{ registrationOpen?: boolean; hasMD?: boolean }>('/auth/first-md-status')
+      .then((r) => setRegistrationOpen(Boolean(r.registrationOpen ?? !r.hasMD)))
+      .catch(() => setRegistrationOpen(false));
+  }, [inviteToken]);
+
   // Validate invitation token if present in query params
   useEffect(() => {
     if (inviteToken) {
@@ -104,7 +114,7 @@ export const RegisterPage: React.FC = () => {
 
       if (res.success && res.token && res.user) {
         login(res.token, res.user);
-        success('Managing Director account created! Welcome to SiteTrack.');
+        success('Managing Director account created! Welcome to BKR INFRA.');
         navigate('/');
       }
     } catch (err: any) {
@@ -181,10 +191,10 @@ export const RegisterPage: React.FC = () => {
           <HardHat className="w-8 h-8" />
         </div>
         <h2 className="mt-4 text-2xl sm:text-3xl font-extrabold text-navy-950 tracking-tight">
-          SiteTrack
+          BKR INFRA
         </h2>
         <p className="mt-1 text-sm text-slate-500 font-medium">
-          Construction Management SaaS & Mobile PWA
+          Site Reports &amp; Payments
         </p>
       </div>
 
@@ -202,9 +212,6 @@ export const RegisterPage: React.FC = () => {
                   {invitationError}
                 </p>
                 <div className="pt-2 flex flex-col gap-2">
-                  <Button variant="outline" onClick={() => navigate('/register')} className="w-full">
-                    Register as Managing Director Instead
-                  </Button>
                   <Button variant="ghost" onClick={() => navigate('/login')} className="w-full text-xs">
                     Return to Sign In
                   </Button>
@@ -218,7 +225,7 @@ export const RegisterPage: React.FC = () => {
                     Site In-Charge Account Setup
                   </span>
                   <p className="text-xs text-slate-500 mt-1.5">
-                    You have been invited by your Managing Director to access SiteTrack.
+                    You have been invited by the BKR INFRA Managing Director.
                   </p>
                 </div>
 
@@ -320,8 +327,23 @@ export const RegisterPage: React.FC = () => {
                 </Button>
               </form>
             )
+          ) : registrationOpen === false ? (
+            /* Single-company deployment: sign-up closed once BKR INFRA's MD exists */
+            <div className="text-center py-6 space-y-4">
+              <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-800 mx-auto flex items-center justify-center">
+                <ShieldAlert className="w-6 h-6" />
+              </div>
+              <h3 className="text-base font-bold text-navy-950">Registration is closed</h3>
+              <p className="text-xs text-slate-500 leading-relaxed max-w-xs mx-auto">
+                Accounts are created by the BKR INFRA Managing Director. If you are a Site In-Charge, open the invitation
+                link you received.
+              </p>
+              <Button variant="outline" onClick={() => navigate('/login')} className="w-full">
+                Return to Sign In
+              </Button>
+            </div>
           ) : (
-            /* CASE 2: Managing Director / Owner Registration Form */
+            /* CASE 2: Managing Director / Owner Registration Form (first-time setup only) */
             <form className="space-y-4" onSubmit={handleRegisterMD}>
               <div className="text-center pb-2 border-b border-slate-100">
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-900">
@@ -442,7 +464,7 @@ export const RegisterPage: React.FC = () => {
 
         {/* Footer info */}
         <p className="mt-4 text-center text-xs text-slate-400">
-          SiteTrack Enterprise • MongoDB Atlas • PWA Ready
+          BKR INFRA • Internal site management
         </p>
       </div>
     </div>

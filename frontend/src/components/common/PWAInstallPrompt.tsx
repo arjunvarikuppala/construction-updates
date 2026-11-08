@@ -38,9 +38,9 @@ export const PWAInstallPrompt: React.FC = () => {
             <Download className="w-5 h-5" />
           </div>
           <div>
-            <h4 className="text-sm font-bold text-white">Install SiteTrack App</h4>
+            <h4 className="text-sm font-bold text-white">Install BKR INFRA App</h4>
             <p className="text-xs text-navy-200 mt-0.5">
-              Add SiteTrack to your home screen for rapid offline site reporting and instant sync.
+              Add BKR INFRA to your home screen for rapid offline site reporting and instant sync.
             </p>
           </div>
         </div>

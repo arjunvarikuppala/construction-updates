@@ -197,13 +197,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <HardHat className="w-5 h-5 text-navy-950" />
           </div>
           <div>
-            <span className="text-lg font-bold tracking-tight text-white flex items-center gap-1.5">
-              SiteTrack
-              <span className="text-[10px] font-semibold bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1.5 py-0.2 rounded">
-                PRO
-              </span>
-            </span>
-            <span className="text-[11px] block text-slate-400 font-medium -mt-0.5">Construction PM SaaS</span>
+            <span className="text-lg font-bold tracking-tight text-white block">BKR INFRA</span>
+            <span className="text-[11px] block text-slate-400 font-medium -mt-0.5">Site Reports &amp; Payments</span>
           </div>
         </div>
 
@@ -245,13 +240,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <HardHat className="w-4 h-4 text-navy-950" />
                 </div>
                 <div>
-                  <span className="text-base font-bold text-white flex items-center gap-1">
-                    SiteTrack
-                    <span className="text-[9px] font-semibold bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1 py-0.2 rounded">
-                      PRO
-                    </span>
-                  </span>
-                  <span className="text-[10px] block text-slate-400 font-medium -mt-0.5">Mobile Navigation</span>
+                  <span className="text-base font-bold text-white block">BKR INFRA</span>
+                  <span className="text-[10px] block text-slate-400 font-medium -mt-0.5">Site Reports &amp; Payments</span>
                 </div>
               </div>
 

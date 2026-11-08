@@ -1,6 +1,6 @@
 {
-  "name": "SiteTrack Construction Management",
-  "short_name": "SiteTrack",
+  "name": "BKR INFRA Site Reports",
+  "short_name": "BKR INFRA",
   "description": "Unified Construction Project, Daily Report, and Expense Management System",
   "start_url": "/",
   "display": "standalone",

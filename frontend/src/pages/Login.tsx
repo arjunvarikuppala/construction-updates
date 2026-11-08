@@ -17,6 +17,14 @@ export const Login: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  // Only offered before BKR INFRA's MD account exists (first-time setup)
+  const [firstSetup, setFirstSetup] = useState(false);
+  useEffect(() => {
+    api
+      .get<{ registrationOpen?: boolean; hasMD?: boolean }>('/auth/first-md-status')
+      .then((r) => setFirstSetup(Boolean(r.registrationOpen ?? !r.hasMD)))
+      .catch(() => setFirstSetup(false));
+  }, []);
 
   // Check for session expired or authentication message on mount
   useEffect(() => {
@@ -81,10 +89,10 @@ export const Login: React.FC = () => {
           <HardHat className="w-8 h-8" />
         </div>
         <h2 className="mt-4 text-2xl sm:text-3xl font-extrabold text-navy-950 tracking-tight">
-          SiteTrack
+          BKR INFRA
         </h2>
         <p className="mt-1 text-sm text-slate-500 font-medium">
-          Construction Management SaaS & Mobile PWA
+          Site Reports &amp; Payments
         </p>
       </div>
 
@@ -137,27 +145,29 @@ export const Login: React.FC = () => {
               isLoading={isLoading}
               rightIcon={<ArrowRight className="w-4 h-4" />}
             >
-              Sign In to SiteTrack
+              Sign in
             </Button>
           </form>
 
-          {/* Registration link below Sign In button */}
+          {/* No public sign-up: In-Charges join through the MD's invitation link */}
           <div className="mt-6 pt-5 border-t border-slate-100 text-center">
             <p className="text-xs text-slate-500">
-              Don&apos;t have an account?{' '}
-              <Link
-                to="/register"
-                className="font-bold text-amber-700 hover:text-amber-800 underline transition-colors"
-              >
-                Create an account
-              </Link>
+              New Site In-Charge? Ask the Managing Director to send you an invitation.
             </p>
+            {firstSetup && (
+              <p className="text-xs text-slate-500 mt-2">
+                First-time setup?{' '}
+                <Link to="/register" className="font-bold text-amber-700 hover:text-amber-800 underline transition-colors">
+                  Create the MD account
+                </Link>
+              </p>
+            )}
           </div>
         </div>
 
         {/* Footer info */}
         <p className="mt-4 text-center text-xs text-slate-400">
-          SiteTrack Enterprise • MongoDB Atlas • PWA Ready
+          BKR INFRA • Internal site management
         </p>
       </div>
     </div>

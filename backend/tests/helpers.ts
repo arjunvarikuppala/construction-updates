@@ -24,6 +24,8 @@ process.env.RAZORPAYX_KEY_ID = '';
 process.env.RAZORPAYX_KEY_SECRET = '';
 process.env.LOGIN_RATE_LIMIT_MAX = '5';
 process.env.REGISTER_RATE_LIMIT_MAX = '1000';
+// The suite creates several companies to prove isolation
+process.env.ALLOW_PUBLIC_REGISTRATION = 'true';
 process.env.CORS_ORIGIN = '';
 
 let server: http.Server | null = null;

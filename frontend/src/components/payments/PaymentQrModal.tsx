@@ -30,7 +30,7 @@ export const PaymentQrModal: React.FC<PaymentQrModalProps> = ({
 }) => {
   const { showToast } = useToast();
   const [amountInr, setAmountInr] = useState<number | ''>(1000);
-  const [description, setDescription] = useState('SiteTrack Advance Collection');
+  const [description, setDescription] = useState('BKR INFRA Advance Collection');
   const [isGenerating, setIsGenerating] = useState(false);
   const [qrData, setQrData] = useState<{
     qrId: string;

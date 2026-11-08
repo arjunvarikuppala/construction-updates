@@ -14,15 +14,35 @@ const JWT_EXPIRES_IN = '7d';
 export async function getFirstMDStatus(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
     const mdCount = await User.countDocuments({ role: { $in: ['MD', 'OWNER'] } });
-    res.json({ success: true, hasMD: mdCount > 0 });
+    res.json({ success: true, hasMD: mdCount > 0, registrationOpen: mdCount === 0 || publicRegistrationAllowed() });
   } catch (error: any) {
     res.status(500).json({ success: false, message: 'Failed to check MD status', error: error.message });
   }
 }
 
+/**
+ * Single-company deployment (BKR INFRA): only the very first MD can self-register.
+ * After that, sign-up is closed and In-Charges join through the MD's invitations.
+ * ALLOW_PUBLIC_REGISTRATION=true re-opens it (used by the multi-company test suite).
+ */
+function publicRegistrationAllowed(): boolean {
+  return process.env.ALLOW_PUBLIC_REGISTRATION === 'true';
+}
+
 export async function registerMD(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
     const { name, email, password, phone } = req.body;
+
+    if (!publicRegistrationAllowed()) {
+      const mdExists = await User.exists({ role: { $in: ['MD', 'OWNER'] } });
+      if (mdExists) {
+        res.status(403).json({
+          success: false,
+          message: 'Registration is closed. Please ask the BKR INFRA Managing Director for an invitation.',
+        });
+        return;
+      }
+    }
 
     if (typeof name !== 'string' || typeof email !== 'string' || !name.trim() || !email.trim() || !password) {
       res.status(400).json({ success: false, message: 'Name, email, and password are required' });

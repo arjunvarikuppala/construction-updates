@@ -38,13 +38,13 @@ export const TopHeader: React.FC<TopHeaderProps> = ({ onOpenMobileDrawer }) => {
           <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-navy-900 text-amber-500 flex items-center justify-center font-bold flex-shrink-0">
             <HardHat className="w-4 h-4" />
           </div>
-          <span className="font-bold text-navy-950 text-sm sm:text-base tracking-tight">SiteTrack</span>
+          <span className="font-bold text-navy-950 text-sm sm:text-base tracking-tight whitespace-nowrap">BKR INFRA</span>
         </div>
 
         <div className="hidden md:flex items-center gap-2 text-xs text-slate-500 whitespace-nowrap min-w-0">
-          <span className="font-semibold text-navy-900">Enterprise Workspace</span>
+          <span className="font-semibold text-navy-900">BKR INFRA</span>
           <span className="hidden xl:inline">/</span>
-          <span className="hidden xl:inline truncate">Real-time Construction Operations</span>
+          <span className="hidden xl:inline truncate">Site Reports &amp; Payments</span>
         </div>
       </div>
 
