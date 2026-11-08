@@ -9,6 +9,16 @@ import { App } from './App.js';
 import { ErrorBoundary } from './components/common/ErrorBoundary.js';
 import './index.css';
 
+// Pages reload once if a deploy removed their code files (see reloadOnStaleChunk in App.tsx).
+// The app loaded fine: allow one automatic reload again for the next deploy.
+window.setTimeout(() => {
+  try {
+    sessionStorage.removeItem('bkr-chunk-reload');
+  } catch {
+    /* ignore */
+  }
+}, 15000);
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {

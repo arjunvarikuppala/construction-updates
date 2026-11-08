@@ -6,23 +6,41 @@ import { Login } from './pages/Login.js';
 import { ErrorBoundary } from './components/common/ErrorBoundary.js';
 
 // Route-level code splitting: each page loads only when first visited
-const RegisterPage = lazy(() => import('./pages/RegisterPage.js').then((m) => ({ default: m.RegisterPage })));
-const OwnerDashboard = lazy(() => import('./pages/OwnerDashboard.js').then((m) => ({ default: m.OwnerDashboard })));
-const InChargeDashboard = lazy(() => import('./pages/InChargeDashboard.js').then((m) => ({ default: m.InChargeDashboard })));
-const ProjectsPage = lazy(() => import('./pages/ProjectsPage.js').then((m) => ({ default: m.ProjectsPage })));
-const ProjectDetailPage = lazy(() => import('./pages/ProjectDetailPage.js').then((m) => ({ default: m.ProjectDetailPage })));
-const DailyReportsPage = lazy(() => import('./pages/DailyReportsPage.js').then((m) => ({ default: m.DailyReportsPage })));
-const DailyReportFormPage = lazy(() => import('./pages/DailyReportFormPage.js').then((m) => ({ default: m.DailyReportFormPage })));
-const DailyReportDetailPage = lazy(() => import('./pages/DailyReportDetailPage.js').then((m) => ({ default: m.DailyReportDetailPage })));
-const ExpensesPage = lazy(() => import('./pages/ExpensesPage.js').then((m) => ({ default: m.ExpensesPage })));
-const ExpenseFormPage = lazy(() => import('./pages/ExpenseFormPage.js').then((m) => ({ default: m.ExpenseFormPage })));
-const ApprovalsPage = lazy(() => import('./pages/ApprovalsPage.js').then((m) => ({ default: m.ApprovalsPage })));
-const InChargeUsersPage = lazy(() => import('./pages/InChargeUsersPage.js').then((m) => ({ default: m.InChargeUsersPage })));
-const AuditLogsPage = lazy(() => import('./pages/AuditLogsPage.js').then((m) => ({ default: m.AuditLogsPage })));
-const PaymentsPage = lazy(() => import('./pages/PaymentsPage.js').then((m) => ({ default: m.PaymentsPage })));
-const ProjectMessagesPage = lazy(() => import('./pages/ProjectMessagesPage.js').then((m) => ({ default: m.ProjectMessagesPage })));
-const CompanySettingsPage = lazy(() => import('./pages/CompanySettingsPage.js').then((m) => ({ default: m.CompanySettingsPage })));
-const NotificationsPage = lazy(() => import('./pages/NotificationsPage.js').then((m) => ({ default: m.NotificationsPage })));
+// After a deploy, an open tab may ask for page files that no longer exist:
+// reload once to pick up the new version instead of showing a broken screen.
+const RELOAD_KEY = 'bkr-chunk-reload';
+function reloadOnStaleChunk<T>(loader: () => Promise<T>): () => Promise<T> {
+  return () =>
+    loader().catch((err) => {
+      let alreadyReloaded = false;
+      try {
+        alreadyReloaded = Boolean(sessionStorage.getItem(RELOAD_KEY));
+        if (!alreadyReloaded) sessionStorage.setItem(RELOAD_KEY, '1');
+      } catch {
+        /* storage unavailable: fall through to a single reload */
+      }
+      if (alreadyReloaded) throw err;
+      window.location.reload();
+      return new Promise<T>(() => {});
+    });
+}
+const RegisterPage = lazy(reloadOnStaleChunk(() => import('./pages/RegisterPage.js').then((m) => ({ default: m.RegisterPage }))));
+const OwnerDashboard = lazy(reloadOnStaleChunk(() => import('./pages/OwnerDashboard.js').then((m) => ({ default: m.OwnerDashboard }))));
+const InChargeDashboard = lazy(reloadOnStaleChunk(() => import('./pages/InChargeDashboard.js').then((m) => ({ default: m.InChargeDashboard }))));
+const ProjectsPage = lazy(reloadOnStaleChunk(() => import('./pages/ProjectsPage.js').then((m) => ({ default: m.ProjectsPage }))));
+const ProjectDetailPage = lazy(reloadOnStaleChunk(() => import('./pages/ProjectDetailPage.js').then((m) => ({ default: m.ProjectDetailPage }))));
+const DailyReportsPage = lazy(reloadOnStaleChunk(() => import('./pages/DailyReportsPage.js').then((m) => ({ default: m.DailyReportsPage }))));
+const DailyReportFormPage = lazy(reloadOnStaleChunk(() => import('./pages/DailyReportFormPage.js').then((m) => ({ default: m.DailyReportFormPage }))));
+const DailyReportDetailPage = lazy(reloadOnStaleChunk(() => import('./pages/DailyReportDetailPage.js').then((m) => ({ default: m.DailyReportDetailPage }))));
+const ExpensesPage = lazy(reloadOnStaleChunk(() => import('./pages/ExpensesPage.js').then((m) => ({ default: m.ExpensesPage }))));
+const ExpenseFormPage = lazy(reloadOnStaleChunk(() => import('./pages/ExpenseFormPage.js').then((m) => ({ default: m.ExpenseFormPage }))));
+const ApprovalsPage = lazy(reloadOnStaleChunk(() => import('./pages/ApprovalsPage.js').then((m) => ({ default: m.ApprovalsPage }))));
+const InChargeUsersPage = lazy(reloadOnStaleChunk(() => import('./pages/InChargeUsersPage.js').then((m) => ({ default: m.InChargeUsersPage }))));
+const AuditLogsPage = lazy(reloadOnStaleChunk(() => import('./pages/AuditLogsPage.js').then((m) => ({ default: m.AuditLogsPage }))));
+const PaymentsPage = lazy(reloadOnStaleChunk(() => import('./pages/PaymentsPage.js').then((m) => ({ default: m.PaymentsPage }))));
+const ProjectMessagesPage = lazy(reloadOnStaleChunk(() => import('./pages/ProjectMessagesPage.js').then((m) => ({ default: m.ProjectMessagesPage }))));
+const CompanySettingsPage = lazy(reloadOnStaleChunk(() => import('./pages/CompanySettingsPage.js').then((m) => ({ default: m.CompanySettingsPage }))));
+const NotificationsPage = lazy(reloadOnStaleChunk(() => import('./pages/NotificationsPage.js').then((m) => ({ default: m.NotificationsPage }))));
 
 // Protected Route Guard
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
