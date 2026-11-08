@@ -13,6 +13,8 @@ import {
   Send,
   ShieldAlert,
   HandCoins,
+  RefreshCw,
+  Zap,
 } from 'lucide-react';
 import { api } from '../../api/client.js';
 import { Modal } from '../common/Modal.js';
@@ -107,7 +109,8 @@ export const PaymentReviewModal: React.FC<PaymentReviewModalProps> = ({ payment:
   const canPay = isOwner && isPayable(payment);
   const canReject = isOwner && paid === 0 && ['SUBMITTED', 'UNDER_REVIEW', 'AWAITING_AUTHORIZATION', 'AUTHORIZED'].includes(payment.status);
   const canCancel = !isOwner && isCreator && paid === 0 && ['SUBMITTED', 'UNDER_REVIEW', 'AWAITING_AUTHORIZATION', 'AUTHORIZED'].includes(payment.status);
-  const canRazorpay = isOwner && payoutsEnabled && payment.status === 'AUTHORIZED' && paid === 0 && Boolean(payment.beneficiary);
+  const pendingPayout = payment.pendingPayout;
+  const canCheckPayout = isOwner && (Boolean(pendingPayout) || (payoutsEnabled && entries.some((s) => s.mode === 'RAZORPAYX' && !s.voided)));
 
   return (
     <>
@@ -156,14 +159,14 @@ export const PaymentReviewModal: React.FC<PaymentReviewModalProps> = ({ payment:
                 Reject
               </Button>
             )}
-            {canRazorpay && (
+            {canCheckPayout && (
               <Button
                 variant="outline"
-                isLoading={busy === 'rzp'}
-                onClick={() => run('rzp', () => api.post(`/payments/requests/${id}/initiate`, {}))}
-                leftIcon={<Send className="w-4 h-4" />}
+                isLoading={busy === 'check'}
+                onClick={() => run('check', () => api.post(`/payments/requests/${id}/reconcile`, {}))}
+                leftIcon={<RefreshCw className="w-4 h-4" />}
               >
-                Bank payout (RazorpayX)
+                Check RazorpayX status
               </Button>
             )}
             {canPay && (
@@ -197,12 +200,35 @@ export const PaymentReviewModal: React.FC<PaymentReviewModalProps> = ({ payment:
                 </span>
               </div>
             </div>
-            {payment.requiresHighValueAuth && paid === 0 && isOwner && (
+            {payment.requiresHighValueAuth && paid === 0 && isOwner && !payment.pendingPayout && (
               <p className="text-[11px] text-amber-300 flex items-center gap-1">
                 <ShieldAlert className="w-3.5 h-3.5" /> Above ₹1,00,000 — check the bill before paying.
               </p>
             )}
           </div>
+
+          {pendingPayout && (
+            <div className="p-3 rounded-xl border border-indigo-200 bg-indigo-50 text-xs text-indigo-950 flex items-start gap-2">
+              <Zap className="w-4 h-4 shrink-0 text-indigo-600 mt-0.5" />
+              <div>
+                <strong>{inr(pendingPayout.amountPaise)}</strong> by {pendingPayout.mode} is with RazorpayX
+                {pendingPayout.providerStatus ? ` (${pendingPayout.providerStatus})` : ''}, sent {formatDate(pendingPayout.initiatedAt, 'dd MMM, hh:mm a')}.
+                <div className="text-indigo-800 mt-0.5">
+                  {pendingPayout.providerStatus === 'queued'
+                    ? 'Queued: your RazorpayX balance is low — add funds and it goes out automatically.'
+                    : pendingPayout.providerStatus === 'pending'
+                    ? 'Waiting for approval in your RazorpayX dashboard.'
+                    : 'It updates here automatically when the bank confirms. Do not pay this again meanwhile.'}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {payment.failureReason && isPayable(payment) && (
+            <p className="p-3 rounded-xl border border-amber-200 bg-amber-50 text-xs text-amber-900">
+              <strong>Last payout attempt:</strong> {payment.failureReason}
+            </p>
+          )}
 
           {/* Details */}
           <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-xs">
@@ -217,7 +243,9 @@ export const PaymentReviewModal: React.FC<PaymentReviewModalProps> = ({ payment:
             <div>
               <dt className="text-slate-500">Pay to</dt>
               <dd className="font-semibold text-navy-950 break-all">
-                {payment.vpaSnapshot ? `UPI ${payment.vpaSnapshot}` : payment.accountNumberMaskedSnapshot ? `A/C ${payment.accountNumberMaskedSnapshot} · ${payment.ifscSnapshot}` : 'No UPI / bank saved'}
+                {[payment.vpaSnapshot && `UPI ${payment.vpaSnapshot}`, payment.accountNumberMaskedSnapshot && `A/C ${payment.accountNumberMaskedSnapshot} · ${payment.ifscSnapshot}`]
+                  .filter(Boolean)
+                  .join(' · ') || 'No UPI / bank saved'}
               </dd>
             </div>
             {payment.requestedPaymentDate && (
@@ -288,7 +316,11 @@ export const PaymentReviewModal: React.FC<PaymentReviewModalProps> = ({ payment:
             <h4 className="text-xs font-bold text-navy-950 uppercase tracking-wider">Payments made</h4>
             {entries.length === 0 ? (
               <p className="text-xs text-slate-500 p-3 rounded-xl border border-dashed border-slate-300">
-                {isOwner ? 'Nothing paid yet. Use "Approve & pay" after you pay from your UPI app or bank.' : 'Not paid yet. You will be notified when the MD pays.'}
+                {payment.pendingPayout
+                  ? 'The RazorpayX payout above will appear here once the bank confirms it.'
+                  : isOwner
+                  ? 'Nothing paid yet. Use "Approve & pay" to send it with RazorpayX or record a payment you made.'
+                  : 'Not paid yet. You will be notified when the MD pays.'}
               </p>
             ) : (
               <ul className="space-y-2">

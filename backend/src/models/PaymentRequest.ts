@@ -59,6 +59,20 @@ export interface IPaymentSettlement {
   voidReason?: string;
 }
 
+/** A RazorpayX payout that has been sent but is not final yet */
+export interface IPendingPayout {
+  payoutId?: string;
+  idempotencyKey: string;
+  referenceId: string;
+  amountPaise: number;
+  mode: 'UPI' | 'IMPS' | 'NEFT' | 'RTGS';
+  fundAccountId: string;
+  prevStatus: PaymentRequestStatus;
+  providerStatus?: string;
+  initiatedBy: mongoose.Types.ObjectId;
+  initiatedAt: Date;
+}
+
 export interface IPaymentRequest extends Document {
   paymentReference: string;
   idempotencyKey: string;
@@ -116,6 +130,8 @@ export interface IPaymentRequest extends Document {
   reversalReason?: string;
   reversedAt?: Date;
 
+  pendingPayout?: IPendingPayout | null;
+  payoutAttempts?: number;
   /** Sum of non-voided settlements, in paise */
   paidPaise: number;
   settlements: IPaymentSettlement[];
@@ -164,6 +180,22 @@ const PaymentSettlementSchema = new Schema<IPaymentSettlement>(
     voidReason: { type: String, trim: true, maxlength: 300 },
   },
   { _id: true }
+);
+
+const PendingPayoutSchema = new Schema<IPendingPayout>(
+  {
+    payoutId: { type: String, trim: true },
+    idempotencyKey: { type: String, required: true },
+    referenceId: { type: String, required: true },
+    amountPaise: { type: Number, required: true },
+    mode: { type: String, enum: ['UPI', 'IMPS', 'NEFT', 'RTGS'], required: true },
+    fundAccountId: { type: String, required: true },
+    prevStatus: { type: String, required: true },
+    providerStatus: { type: String },
+    initiatedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    initiatedAt: { type: Date, default: Date.now },
+  },
+  { _id: false }
 );
 
 const PaymentRequestSchema = new Schema<IPaymentRequest>(
@@ -405,6 +437,8 @@ const PaymentRequestSchema = new Schema<IPaymentRequest>(
       min: 0,
     },
     settlements: [PaymentSettlementSchema],
+    pendingPayout: { type: PendingPayoutSchema, default: null },
+    payoutAttempts: { type: Number, default: 0 },
     lastPaidAt: {
       type: Date,
     },
@@ -425,6 +459,8 @@ const PaymentRequestSchema = new Schema<IPaymentRequest>(
 PaymentRequestSchema.index({ project: 1, status: 1 });
 PaymentRequestSchema.index({ project: 1, createdAt: -1 });
 PaymentRequestSchema.index({ 'settlements.paidOn': 1 });
+PaymentRequestSchema.index({ 'pendingPayout.payoutId': 1 }, { sparse: true });
+PaymentRequestSchema.index({ 'settlements.settlementKey': 1 });
 PaymentRequestSchema.index({ company: 1, 'settlements.referenceKey': 1 });
 
 export const PaymentRequest = mongoose.model<IPaymentRequest>('PaymentRequest', PaymentRequestSchema);

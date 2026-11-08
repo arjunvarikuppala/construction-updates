@@ -8,6 +8,7 @@ import { Input, Textarea } from '../components/common/Input.js';
 import { useToast } from '../context/ToastContext.js';
 import { api, API_ORIGIN } from '../api/client.js';
 import { isValidGstin, useCompanySettings } from '../utils/gst.js';
+import { RazorpayXSetupCard } from '../components/payments/RazorpayXSetupCard.js';
 
 /** MD only: BKR INFRA's legal name, GSTIN and address, plus the monthly GST purchase register. */
 export const CompanySettingsPage: React.FC = () => {
@@ -77,7 +78,7 @@ export const CompanySettingsPage: React.FC = () => {
   return (
     <div className="space-y-5 max-w-3xl mx-auto pb-10">
       <div>
-        <h1 className="text-xl sm:text-2xl font-bold text-navy-950">Company &amp; GST</h1>
+        <h1 className="text-xl sm:text-2xl font-bold text-navy-950">Company, GST &amp; payouts</h1>
         <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
           BKR INFRA&apos;s GST details decide CGST + SGST vs IGST on bills and appear on reports and the GST register.
         </p>
@@ -134,6 +135,8 @@ export const CompanySettingsPage: React.FC = () => {
           </div>
         </CardContent>
       </Card>
+
+      <RazorpayXSetupCard />
     </div>
   );
 };

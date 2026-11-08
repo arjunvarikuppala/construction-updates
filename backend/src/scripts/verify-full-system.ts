@@ -159,39 +159,10 @@ async function runFullVerification() {
     }
     console.log(` ✅ Malicious/Invalid QR successfully rejected: "${parsedInvalid.errorMessage}"`);
 
-    // TEST 6: Dynamic Payment Collection QR Generation
-    console.log('\n--- 4. Dynamic Payment Collection QR Generation ---');
-    const qrResult = await razorpayXService.createPaymentQr({
-      amountPaise: 5000000, // ₹50,000
-      referenceId: `DEP-${Date.now().toString().slice(-6)}`,
-      purpose: 'Project Advance Deposit',
-      expiryMinutes: 15,
-    });
-    if (!qrResult.qrPayload.startsWith('upi://pay')) {
-      throw new Error('Failed to generate valid payment QR payload');
-    }
-    console.log(` ✅ Payment QR generated: ID="${qrResult.qrId}", Expiry="${qrResult.expiresAt.toISOString()}"`);
-
-    // TEST 7: RazorpayX Payout Dispatch with Idempotency
-    console.log('\n--- 5. RazorpayX Payout Dispatch ---');
-    const payoutResult = await razorpayXService.createPayout({
-      paymentReference: highValuePayment.paymentReference,
-      idempotencyKey: highValuePayment.idempotencyKey,
-      amountPaise: highValuePayment.amount,
-      mode: highValuePayment.paymentMethod,
-      purpose: highValuePayment.purpose,
-      beneficiary: ben,
-      projectId: project._id.toString(),
-    });
-
-    if (!payoutResult.success) {
-      throw new Error(`Payout dispatch failed: ${payoutResult.failureReason}`);
-    }
-    highValuePayment.status = payoutResult.status;
-    highValuePayment.providerUtr = payoutResult.utr;
-    highValuePayment.razorpayxPayoutId = payoutResult.payoutId;
-    await highValuePayment.save();
-    console.log(` ✅ RazorpayX Payout Dispatched: Status="${highValuePayment.status}", UTR="${highValuePayment.providerUtr}"`);
+    // Collection QR and RazorpayX payouts are covered against a fake RazorpayX API in
+    // tests/razorpayx.test.ts (npm test); this script no longer simulates money movement.
+    console.log('
+--- 4/5. RazorpayX payouts: see npm test (tests/razorpayx.test.ts) ---');
 
     // TEST 8: Two-Way Communication with Contextual Record Reference
     console.log('\n--- 6. Two-Way MD and Site In-Charge Communication ---');

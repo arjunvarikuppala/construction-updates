@@ -287,7 +287,7 @@ export async function voidSettlement(
 }
 
 /** Keeps the linked expense's payment status in step with the request. */
-async function syncLinkedExpense(payment: IPaymentRequest) {
+export async function syncLinkedExpense(payment: IPaymentRequest) {
   if (!payment.expense) return;
   if (payment.status === 'PAID') {
     await Expense.findByIdAndUpdate(payment.expense, { paymentStatus: 'PAID', paidAt: payment.lastPaidAt || new Date() });

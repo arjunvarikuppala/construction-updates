@@ -537,6 +537,17 @@ export type PaymentRequestStatus =
 export type SettlementMode = 'UPI' | 'BANK_TRANSFER' | 'CHEQUE' | 'CASH' | 'RAZORPAYX';
 /** Who receives the money */
 export type PayeeKind = 'INCHARGE' | 'VENDOR';
+/** RazorpayX payout rails */
+export type PayoutMode = 'UPI' | 'IMPS' | 'NEFT' | 'RTGS';
+
+export interface PayoutOptions {
+  enabled: boolean;
+  mode: 'off' | 'test' | 'live';
+  reason?: string;
+  modes: PayoutMode[];
+  limits: Record<PayoutMode, { min: number; max: number }>;
+  balancePaise: number;
+}
 
 export interface PaymentSettlement {
   _id: string;
@@ -615,6 +626,14 @@ export interface PaymentRequest {
   amount: number; // integer paise
   paidPaise?: number;
   settlements?: PaymentSettlement[];
+  /** RazorpayX payout sent but not final yet */
+  pendingPayout?: {
+    payoutId?: string;
+    amountPaise: number;
+    mode: PayoutMode;
+    providerStatus?: string;
+    initiatedAt: string;
+  } | null;
   lastPaidAt?: string;
   amountPaise?: number;
   paymentMethod: PaymentMethod;
@@ -678,6 +697,7 @@ export interface PaymentSummary {
   processingPaise: number;
   highValueThresholdPaise: number;
   payoutsEnabled?: boolean;
+  payoutsMode?: 'off' | 'test' | 'live';
 }
 
 export interface PaymentDashboardSummary {

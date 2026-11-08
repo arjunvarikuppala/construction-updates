@@ -26,6 +26,14 @@ import {
   PAYABLE_STATUSES,
 } from '../services/paymentSettlementService.js';
 import { istMonthString, istMonthWindow } from '../utils/istDates.js';
+import { PAYOUT_LIMITS } from '../services/payments/razorpayXService.js';
+import {
+  startPayout,
+  reconcilePayout,
+  applyPayoutUpdate,
+  availablePayoutModes,
+  PayoutResult,
+} from '../services/payments/payoutFlow.js';
 
 const HIGH_VALUE_THRESHOLD_PAISE = Number(process.env.PAYMENT_HIGH_VALUE_THRESHOLD_PAISE) || 10000000; // ₹1,00,000
 
@@ -35,25 +43,6 @@ const HIGH_VALUE_THRESHOLD_PAISE = Number(process.env.PAYMENT_HIGH_VALUE_THRESHO
  * - `mdOnly` additionally requires the MD/OWNER role.
  * Callers outside the company receive 404 so payment IDs are not disclosed.
  */
-/** RazorpayX confirmed the payout: count it as one settlement so balances stay right. */
-function recordProviderPaid(payment: any, utr: string | undefined) {
-  if ((payment.paidPaise || 0) >= payment.amount) return;
-  const amount = payment.amount - (payment.paidPaise || 0);
-  payment.settlements.push({
-    settlementKey: `rzpx-${payment.razorpayxPayoutId || payment.paymentReference}`,
-    amountPaise: amount,
-    mode: 'RAZORPAYX',
-    reference: utr,
-    referenceKey: utr ? `RAZORPAYX:${String(utr).toUpperCase()}` : undefined,
-    paidOn: new Date(),
-    recordedBy: payment.initiatedBy || payment.createdBy,
-    recordedAt: new Date(),
-  });
-  payment.paidPaise = payment.amount;
-  payment.lastPaidAt = new Date();
-  payment.providerName = 'RAZORPAYX';
-}
-
 async function loadAuthorizedPayment(
   req: AuthenticatedRequest,
   res: Response,
@@ -469,7 +458,8 @@ export async function listPaymentRequests(req: AuthenticatedRequest, res: Respon
         .reduce((sum, p) => sum + p.amount, 0),
       highValueThresholdPaise: HIGH_VALUE_THRESHOLD_PAISE,
       // RazorpayX bank payouts are only offered when they are really switched on
-      payoutsEnabled: !razorpayXService.isMockMode,
+      payoutsEnabled: razorpayXService.isEnabled,
+      payoutsMode: razorpayXService.status().mode,
     };
 
     res.json({
@@ -727,230 +717,6 @@ export async function rejectPaymentRequest(req: AuthenticatedRequest, res: Respo
   }
 }
 
-export async function initiatePaymentTransfer(req: AuthenticatedRequest, res: Response): Promise<void> {
-  try {
-    const payment = await loadAuthorizedPayment(req, res, {
-      mdOnly: true,
-      forbiddenMessage: 'Only Managing Directors can initiate bank payouts.',
-    });
-    if (!payment) return;
-
-    // Rejected / failed / reversed requests can never be dispatched
-    if (['REJECTED', 'FAILED', 'CANCELLED', 'REVERSED'].includes(payment.status as string)) {
-      res.status(400).json({ success: false, message: `Cannot initiate a payment with status '${payment.status}'.` });
-      return;
-    }
-
-    await payment.populate('beneficiary');
-
-    // Enforce High-Value Authorization Guard
-    if (payment.requiresHighValueAuth && payment.status !== 'AUTHORIZED') {
-      res.status(400).json({
-        success: false,
-        message:
-          'Security Block: This payment exceeds ₹1,00,000 and requires explicit independent authorization (status must be AUTHORIZED) before transfer can be initiated.',
-      });
-      return;
-    }
-
-    // Enforce Terminal / In-Flight Status Guards ("Never retry potentially completed transfer")
-    if (payment.status === 'PAID') {
-      res.status(400).json({ success: false, message: 'This payment has already been settled and paid.' });
-      return;
-    }
-
-    if (payment.status === 'PROCESSING') {
-      res.status(400).json({
-        success: false,
-        message:
-          'Payment is currently PROCESSING in the banking cycle. To prevent duplicate fund debit, transfers must not be re-initiated without first querying status reconciliation.',
-      });
-      return;
-    }
-
-    if ((payment.paidPaise || 0) > 0 || payment.status === 'PARTIALLY_PAID') {
-      res.status(400).json({
-        success: false,
-        message: 'Part of this request is already paid. Record the balance with "Pay" instead of a RazorpayX payout.',
-      });
-      return;
-    }
-
-    const beneficiary = payment.beneficiary as any;
-    if (!beneficiary) {
-      res.status(400).json({
-        success: false,
-        message: 'RazorpayX payouts need a saved vendor with bank or UPI details. Use "Pay" to record this payment instead.',
-      });
-      return;
-    }
-    if (payment.paymentMethod === 'UPI' && !beneficiary.vpa) {
-      res.status(400).json({ success: false, message: 'This payee has no UPI ID saved. Choose NEFT, or record the payment with "Pay".' });
-      return;
-    }
-    if ((payment.paymentMethod === 'NEFT' || payment.paymentMethod === 'RTGS') && (!beneficiary.accountNumberMasked || !beneficiary.ifsc)) {
-      res.status(400).json({ success: false, message: 'Bank account number and IFSC are needed for a NEFT/RTGS payout.' });
-      return;
-    }
-    if (payment.paymentMethod === 'RTGS' && payment.amount < 20000000) {
-      res.status(400).json({ success: false, message: 'RTGS needs at least ₹2,00,000. Use NEFT for smaller amounts.' });
-      return;
-    }
-    if (payment.paymentMethod === 'UPI' && payment.amount > 10000000) {
-      res.status(400).json({ success: false, message: 'UPI payouts are capped at ₹1,00,000. Use NEFT or RTGS.' });
-      return;
-    }
-
-    // Set to PROCESSING
-    payment.status = 'PROCESSING';
-    payment.initiatedBy = req.user!.userId as any;
-    payment.initiatedAt = new Date();
-    payment.auditTrail.push({
-      timestamp: new Date(),
-      action: 'PAYMENT_DISPATCHED_TO_PROVIDER',
-      performedBy: req.user!.userId as any,
-      note: `Dispatching ${payment.paymentMethod} transfer via RazorpayX Payouts API`,
-      ip: req.ip,
-    });
-    await payment.save();
-
-    // Call RazorpayX Service
-    const result = await razorpayXService.createPayout({
-      paymentReference: payment.paymentReference,
-      idempotencyKey: payment.idempotencyKey,
-      amountPaise: payment.amount,
-      mode: payment.paymentMethod,
-      purpose: payment.purpose,
-      beneficiary,
-      projectId: payment.project.toString(),
-    });
-
-    payment.status = result.status;
-    payment.razorpayxStatus = result.razorpayxStatus;
-    payment.providerStatus = result.razorpayxStatus;
-    if (result.payoutId) {
-      payment.razorpayxPayoutId = result.payoutId;
-      payment.providerTransactionId = result.payoutId;
-    }
-    if (result.utr) {
-      payment.providerUtr = result.utr;
-    }
-    if (result.fees !== undefined) payment.fees = result.fees;
-    if (result.tax !== undefined) payment.tax = result.tax;
-    if (result.failureReason) payment.failureReason = result.failureReason;
-
-    if (result.status === 'PAID') {
-      payment.reconciledAt = new Date();
-      recordProviderPaid(payment, result.utr);
-      if (payment.expense) {
-        await Expense.findByIdAndUpdate(payment.expense, {
-          paymentStatus: 'PAID',
-          paidAt: new Date(),
-        });
-      }
-    }
-
-    payment.auditTrail.push({
-      timestamp: new Date(),
-      action: `PAYMENT_${result.status}`,
-      performedBy: req.user!.userId as any,
-      note: `RazorpayX response: ${result.razorpayxStatus}. UTR: ${result.utr || 'N/A'}. ${result.failureReason || ''}`,
-      ip: req.ip,
-    });
-
-    await payment.save();
-
-    // Notify requester
-    await createNotification({
-      recipient: payment.createdBy,
-      sender: req.user!.userId,
-      project: payment.project,
-      type: result.status === 'PAID' ? 'PAYMENT_REQUEST_PAID' : 'PAYMENT_REQUEST_REVIEW',
-      title: result.status === 'PAID' ? 'Payment Completed & Settled' : `Payment Status: ${result.status}`,
-      message: result.status === 'PAID'
-        ? `Payment ${payment.paymentReference} settled successfully! UTR: ${result.utr}`
-        : `Payment ${payment.paymentReference} is now ${result.status}.`,
-      relatedEntity: 'PAYMENT_REQUEST',
-      relatedId: payment._id.toString(),
-    });
-
-    emitToUser(payment.createdBy.toString(), 'payment:updated', { paymentId: payment._id, status: payment.status });
-
-    res.json({
-      success: result.success,
-      message: result.status === 'PAID'
-        ? `Payout completed successfully. UTR: ${result.utr}`
-        : result.status === 'PROCESSING'
-        ? 'Payout submitted to RazorpayX and is processing in clearing cycle.'
-        : `Payout dispatch: ${result.failureReason || result.status}`,
-      payment,
-    });
-  } catch (err: any) {
-    res.status(500).json({ success: false, message: 'Transfer initiation failed', error: err.message });
-  }
-}
-
-export async function reconcilePayment(req: AuthenticatedRequest, res: Response): Promise<void> {
-  try {
-    const payment = await loadAuthorizedPayment(req, res, {
-      mdOnly: true,
-      forbiddenMessage: 'Only Managing Directors can reconcile payouts.',
-    });
-    if (!payment) return;
-
-    const payoutId = payment.razorpayxPayoutId || payment.providerTransactionId;
-    if (!payoutId) {
-      res.status(400).json({ success: false, message: 'Cannot reconcile: no provider payout ID exists yet.' });
-      return;
-    }
-
-    const result = await razorpayXService.getPayout(payoutId, payment.paymentReference);
-
-    payment.status = result.status;
-    payment.razorpayxStatus = result.razorpayxStatus;
-    payment.providerStatus = result.razorpayxStatus;
-    if (result.utr) payment.providerUtr = result.utr;
-    if (result.fees !== undefined) payment.fees = result.fees;
-    if (result.tax !== undefined) payment.tax = result.tax;
-    if (result.failureReason) payment.failureReason = result.failureReason;
-
-    if (result.status === 'PAID') {
-      payment.reconciledAt = new Date();
-      recordProviderPaid(payment, result.utr);
-      if (payment.expense) {
-        await Expense.findByIdAndUpdate(payment.expense, {
-          paymentStatus: 'PAID',
-          paidAt: new Date(),
-        });
-      }
-    } else if (result.status === 'REVERSED') {
-      payment.reversalReason = 'Reversed by clearing network';
-      payment.reversedAt = new Date();
-      if (payment.expense) {
-        await Expense.findByIdAndUpdate(payment.expense, { paymentStatus: 'UNPAID' });
-      }
-    }
-
-    payment.auditTrail.push({
-      timestamp: new Date(),
-      action: 'PAYMENT_RECONCILED',
-      performedBy: req.user!.userId as any,
-      note: `Reconciled status with RazorpayX: ${result.status}. UTR: ${result.utr || 'N/A'}`,
-      ip: req.ip,
-    });
-
-    await payment.save();
-
-    res.json({
-      success: true,
-      message: `Status reconciled: ${payment.status} (UTR: ${payment.providerUtr || 'N/A'})`,
-      payment,
-    });
-  } catch (err: any) {
-    res.status(500).json({ success: false, message: 'Reconciliation query failed', error: err.message });
-  }
-}
-
 export async function cancelPaymentRequest(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
     const { reason } = req.body;
@@ -1050,6 +816,10 @@ export async function generatePaymentQr(req: AuthenticatedRequest, res: Response
     }
 
     const ref = referenceId || `COL-${Date.now().toString().slice(-6)}`;
+    if (!process.env.MERCHANT_UPI_VPA) {
+      res.status(400).json({ success: false, message: 'Collection QR needs the company UPI ID (MERCHANT_UPI_VPA) set on the server.' });
+      return;
+    }
     const qrResult = await razorpayXService.createPaymentQr({
       amountPaise,
       referenceId: ref,
@@ -1079,119 +849,6 @@ export async function getPaymentQrStatus(req: AuthenticatedRequest, res: Respons
     res.json({ success: true, qr: qrStatus });
   } catch (err: any) {
     res.status(500).json({ success: false, message: 'Failed to get QR status', error: err.message });
-  }
-}
-
-export async function handlePaymentWebhook(req: any, res: Response): Promise<void> {
-  try {
-    const signature = (req.headers['x-razorpay-signature'] ||
-      req.headers['x-webhook-signature'] ||
-      req.headers['x-signature'] ||
-      '') as string;
-
-    const rawBodyBuffer = req.rawBody || Buffer.from(JSON.stringify(req.body));
-
-    // Signature is mandatory in every environment. Without a configured secret
-    // verification fails closed and the webhook is rejected.
-    const isValidSignature = razorpayXService.verifyWebhookSignature(rawBodyBuffer, signature);
-    if (!isValidSignature) {
-      res.status(401).json({ success: false, message: 'Invalid webhook signature.' });
-      return;
-    }
-
-    const event = req.body;
-    const eventId = String(event.event_id || event.id || '');
-    if (!eventId) {
-      res.status(400).json({ success: false, message: 'Webhook event id is required.' });
-      return;
-    }
-    const eventType = event.event || 'payout.processed';
-
-    // Duplicate event suppression
-    const existing = await WebhookEvent.findOne({ eventId });
-    if (existing && existing.processed) {
-      res.status(200).json({ success: true, message: 'Duplicate webhook suppressed.' });
-      return;
-    }
-
-    const webhookRecord = await WebhookEvent.create({
-      eventId,
-      provider: 'RAZORPAYX',
-      eventType,
-      payload: event,
-      signature,
-      processed: false,
-    });
-
-    const payoutEntity = event.payload?.payout?.entity || event.data?.payout;
-    if (payoutEntity) {
-      const payoutId = payoutEntity.id;
-      const paymentRef = payoutEntity.reference_id || payoutEntity.notes?.sitetrackRef;
-      const rzpStatus = (payoutEntity.status || '').toLowerCase();
-      const utr = payoutEntity.utr;
-
-      const lookups: any[] = [];
-      if (typeof paymentRef === 'string' && paymentRef) lookups.push({ paymentReference: paymentRef });
-      if (typeof payoutId === 'string' && payoutId) {
-        lookups.push({ razorpayxPayoutId: payoutId }, { providerTransactionId: payoutId });
-      }
-      const payment = lookups.length ? await PaymentRequest.findOne({ $or: lookups }) : null;
-
-      if (payment) {
-        if (rzpStatus === 'processed' || rzpStatus === 'paid' || rzpStatus === 'success') {
-          payment.status = 'PAID';
-          if (utr) payment.providerUtr = utr;
-          recordProviderPaid(payment, utr);
-          if (payoutEntity.fees !== undefined) payment.fees = payoutEntity.fees;
-          if (payoutEntity.tax !== undefined) payment.tax = payoutEntity.tax;
-          payment.reconciledAt = new Date();
-
-          if (payment.expense) {
-            await Expense.findByIdAndUpdate(payment.expense, {
-              paymentStatus: 'PAID',
-              paidAt: new Date(),
-            });
-          }
-        } else if (rzpStatus === 'reversed') {
-          payment.status = 'REVERSED';
-          payment.reversalReason = payoutEntity.failure_reason || 'Bank reversal processed';
-          payment.reversedAt = new Date();
-
-          if (payment.expense) {
-            await Expense.findByIdAndUpdate(payment.expense, { paymentStatus: 'UNPAID' });
-          }
-        } else if (rzpStatus === 'rejected' || rzpStatus === 'cancelled' || rzpStatus === 'failed') {
-          payment.status = 'FAILED';
-          payment.failureReason = payoutEntity.failure_reason || 'Rejected by bank network';
-
-          if (payment.expense) {
-            await Expense.findByIdAndUpdate(payment.expense, { paymentStatus: 'UNPAID' });
-          }
-        } else if (rzpStatus === 'processing' || rzpStatus === 'queued' || rzpStatus === 'initiated') {
-          payment.status = 'PROCESSING';
-        }
-
-        payment.razorpayxStatus = rzpStatus;
-        if (payoutId) payment.razorpayxPayoutId = payoutId;
-
-        payment.auditTrail.push({
-          timestamp: new Date(),
-          action: `RAZORPAYX_WEBHOOK_${eventType.toUpperCase()}`,
-          performedBy: payment.createdBy,
-          note: `Webhook received: ${eventType}. Mapped status: ${payment.status}. UTR: ${utr || 'N/A'}`,
-        });
-
-        await payment.save();
-      }
-    }
-
-    webhookRecord.processed = true;
-    webhookRecord.processedAt = new Date();
-    await webhookRecord.save();
-
-    res.status(200).json({ success: true, message: 'Webhook processed successfully' });
-  } catch (err: any) {
-    res.status(500).json({ success: false, message: 'Webhook error', error: err.message });
   }
 }
 
@@ -1504,5 +1161,209 @@ export async function exportPaymentsRegister(req: AuthenticatedRequest, res: Res
     res.end();
   } catch (err: any) {
     res.status(500).json({ success: false, message: 'Failed to export payments register' });
+  }
+}
+
+/**
+ * MD sends money through RazorpayX (UPI / IMPS / NEFT / RTGS), in full or part.
+ * Body: { amountRupees | amountPaise, mode }
+ */
+export async function initiatePaymentTransfer(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const payment = await loadAuthorizedPayment(req, res, {
+      mdOnly: true,
+      forbiddenMessage: 'Only the MD can send a RazorpayX payout.',
+    });
+    if (!payment) return;
+
+    const body = req.body || {};
+    const amountPaise =
+      body.amountPaise !== undefined && body.amountPaise !== ''
+        ? Number(body.amountPaise)
+        : body.amountRupees !== undefined && body.amountRupees !== ''
+        ? Math.round(Number(body.amountRupees) * 100)
+        : balancePaise(payment);
+    const mode = String(body.mode || payment.paymentMethod || '').toUpperCase();
+
+    const result = await startPayout(payment._id, { amountPaise, mode }, { userId: req.user!.userId, ip: req.ip });
+    await afterPayoutUpdate(result, req.user!.userId);
+    await logAudit('RAZORPAYX_PAYOUT', req.user!.userId, 'PAYMENT_REQUEST', payment._id, {
+      reference: payment.paymentReference,
+      amountPaise,
+      mode,
+      outcome: result.outcome,
+    });
+
+    res.status(result.outcome === 'failed' ? 400 : 200).json({
+      success: result.outcome !== 'failed',
+      outcome: result.outcome,
+      message: result.message,
+      payment: result.payment,
+    });
+  } catch (err: any) {
+    if (err instanceof SettlementError) {
+      res.status(err.status).json({ success: false, message: err.message });
+      return;
+    }
+    res.status(500).json({ success: false, message: 'Could not send the payout', error: err.message });
+  }
+}
+
+/** "Check status" of the RazorpayX payout on a request (also picks up reversals). */
+export async function reconcilePayment(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const payment = await loadAuthorizedPayment(req, res, {
+      mdOnly: true,
+      forbiddenMessage: 'Only the MD can check payout status.',
+    });
+    if (!payment) return;
+    const result = await reconcilePayout(payment, req.user!.userId);
+    await afterPayoutUpdate(result, req.user!.userId);
+    res.json({ success: true, outcome: result.outcome, message: result.message, payment: result.payment });
+  } catch (err: any) {
+    if (err instanceof SettlementError) {
+      res.status(err.status).json({ success: false, message: err.message });
+      return;
+    }
+    res.status(500).json({ success: false, message: 'Could not check the payout status', error: err.message });
+  }
+}
+
+/** Notifications after a payout changes state. */
+async function afterPayoutUpdate(result: PayoutResult, actorId: string) {
+  const p: any = result.payment;
+  if (result.outcome === 'paid' && result.paidNowPaise) {
+    await notifyPayee(p, actorId, result.paidNowPaise, p.status === 'PAID');
+  }
+  if (['paid', 'failed', 'reversed', 'pending'].includes(result.outcome)) {
+    await emitToProjectMDs(p.project, 'payment:updated', { paymentId: p._id, status: p.status });
+    emitToUser(String(p.createdBy), 'payment:updated', { paymentId: p._id, status: p.status });
+  }
+  if (result.outcome === 'failed' || result.outcome === 'reversed') {
+    await notifyProjectMDs({
+      sender: actorId,
+      project: p.project,
+      type: 'PAYMENT_REQUEST_REVIEW',
+      title: result.outcome === 'reversed' ? 'Payout returned by the bank' : 'RazorpayX payout failed',
+      message: `${p.paymentReference} to ${p.payeeNameSnapshot}: ${result.message}`,
+      relatedEntity: 'PAYMENT_REQUEST',
+      relatedId: String(p._id),
+    });
+  }
+}
+
+/** RazorpayX setup status for the MD (never exposes keys). */
+export async function getPayoutProviderStatus(req: AuthenticatedRequest, res: Response): Promise<void> {
+  if (!isMD(req.user!.role)) {
+    res.status(403).json({ success: false, message: 'Only the MD can view payout settings.' });
+    return;
+  }
+  const status = razorpayXService.status();
+  const acct = razorpayXService.accountNumber;
+  res.json({
+    success: true,
+    provider: {
+      ...status,
+      accountNumberHint: acct ? `•••• ${acct.slice(-4)}` : null,
+      webhookPath: '/api/v1/payments/webhook',
+      webhookEvents: ['payout.processed', 'payout.reversed', 'payout.failed', 'payout.rejected', 'payout.updated', 'fund_account.validation.completed', 'fund_account.validation.failed'],
+    },
+  });
+}
+
+/** Payout options for one request: which modes the payee supports. */
+export async function getPayoutOptions(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const payment = await loadAuthorizedPayment(req, res, { mdOnly: true });
+    if (!payment) return;
+    const status = razorpayXService.status();
+    res.json({
+      success: true,
+      enabled: status.enabled,
+      mode: status.mode,
+      reason: status.reason,
+      modes: status.enabled ? await availablePayoutModes(payment) : [],
+      limits: PAYOUT_LIMITS,
+      balancePaise: balancePaise(payment),
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: 'Could not load payout options', error: err.message });
+  }
+}
+
+/**
+ * RazorpayX webhook. Razorpay signs the exact raw body (X-Razorpay-Signature)
+ * and sends the event id in the X-Razorpay-Event-Id header. Duplicate events
+ * are ignored; every payout event goes through the same idempotent update.
+ */
+export async function handlePaymentWebhook(req: any, res: Response): Promise<void> {
+  try {
+    const signature = String(req.headers['x-razorpay-signature'] || '');
+    const rawBody: Buffer = req.rawBody || Buffer.from(JSON.stringify(req.body || {}));
+    if (!razorpayXService.verifyWebhookSignature(rawBody, signature)) {
+      res.status(401).json({ success: false, message: 'Invalid webhook signature.' });
+      return;
+    }
+
+    const event = req.body || {};
+    const eventType = String(event.event || '');
+    const eventId = String(
+      req.headers['x-razorpay-event-id'] ||
+        event.event_id ||
+        event.id ||
+        crypto.createHash('sha256').update(rawBody).digest('hex')
+    );
+    if (!eventType) {
+      res.status(400).json({ success: false, message: 'Webhook event type is missing.' });
+      return;
+    }
+
+    const existing = await WebhookEvent.findOne({ eventId });
+    if (existing?.processed) {
+      res.status(200).json({ success: true, message: 'Duplicate webhook ignored.' });
+      return;
+    }
+    const record =
+      existing ||
+      (await WebhookEvent.create({ eventId, provider: 'RAZORPAYX', eventType, payload: event, signature, processed: false }));
+
+    let note = 'ignored';
+    const payout = event.payload?.payout?.entity;
+    const validation = event.payload?.fund_account_validation?.entity || event.payload?.fund_account?.validation?.entity;
+
+    if (eventType.startsWith('payout.') && payout?.id) {
+      try {
+        const result = await applyPayoutUpdate(payout, { source: 'webhook' });
+        await afterPayoutUpdate(result, String((result.payment as any).initiatedBy || result.payment.createdBy));
+        note = `${result.outcome}: ${result.message}`;
+      } catch (err: any) {
+        // A payout we do not know (e.g. made from the RazorpayX dashboard) is not an error
+        note = err instanceof SettlementError ? err.message : `error: ${err.message}`;
+      }
+    } else if (eventType.startsWith('fund_account.validation') && validation?.id) {
+      const b = await Beneficiary.findOne({ pennyDropValidationId: validation.id });
+      if (b) {
+        const ok = validation.status === 'completed' && validation.results?.account_status === 'active';
+        b.verificationStatus = ok ? 'VERIFIED' : 'FAILED';
+        if (validation.results?.registered_name) b.verifiedName = validation.results.registered_name;
+        b.verificationDetails = {
+          accountExists: ok,
+          providerRef: validation.id,
+          verifiedAt: new Date(),
+          failureReason: ok ? undefined : validation.results?.account_status || validation.status,
+        };
+        await b.save();
+        note = `beneficiary ${b._id} ${b.verificationStatus}`;
+      }
+    }
+
+    record.processed = true;
+    record.processedAt = new Date();
+    record.error = note.startsWith('error') ? note : undefined;
+    await record.save();
+    res.status(200).json({ success: true, message: 'Webhook processed' });
+  } catch (err: any) {
+    // 5xx makes Razorpay retry later
+    res.status(500).json({ success: false, message: 'Webhook error' });
   }
 }

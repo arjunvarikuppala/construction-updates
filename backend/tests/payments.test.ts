@@ -356,10 +356,12 @@ describe('payment summary, register and isolation', () => {
     assert.equal(bad.status, 400);
   });
 
-  test('RazorpayX payout is refused for an in-charge request (no saved vendor)', async () => {
+  test('without RazorpayX keys a payout is refused, never simulated', async () => {
     const p = await inChargeRequest(500);
-    const r = await api('POST', `/api/v1/payments/requests/${p._id}/initiate`, { token: md.token, body: {} });
+    const r = await api('POST', `/api/v1/payments/requests/${p._id}/initiate`, { token: md.token, body: { mode: 'UPI' } });
     assert.equal(r.status, 400);
-    assert.match(r.body.message, /Pay/);
+    assert.match(r.body.message, /not switched on/);
+    const d = await api('GET', `/api/v1/payments/requests/${p._id}`, { token: md.token });
+    assert.equal(d.body.payment.paidPaise, 0);
   });
 });

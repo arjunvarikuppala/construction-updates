@@ -1,63 +1,98 @@
+/**
+ * RazorpayX Payouts client (https://razorpay.com/docs/api/x/).
+ *
+ * Money moves from BKR INFRA's RazorpayX account to a vendor's bank account /
+ * UPI ID or a Site In-Charge's UPI ID. Nothing is ever simulated: without keys
+ * payouts are simply "not set up". Test keys (rzp_test_…) talk to Razorpay's
+ * test mode; live keys (rzp_live_…) additionally need PAYMENTS_LIVE_ENABLED=true.
+ *
+ * Env:
+ *   RAZORPAYX_KEY_ID / RAZORPAYX_KEY_SECRET   API keys (Dashboard → Settings → API Keys)
+ *   RAZORPAYX_ACCOUNT_NUMBER                  your RazorpayX account number (Dashboard → My Account)
+ *   RAZORPAYX_WEBHOOK_SECRET                  secret set on the webhook (Dashboard → Settings → Webhooks)
+ *   PAYMENTS_LIVE_ENABLED=true                required to use live keys
+ *   RAZORPAYX_API_BASE                        override for tests only
+ */
 import crypto from 'crypto';
-import { IBeneficiary } from '../../models/Beneficiary.js';
-import { PaymentMethod, PaymentRequestStatus } from '../../models/PaymentRequest.js';
 
-export interface RazorpayXContactPayload {
-  name: string;
-  email?: string;
-  contact?: string;
-  type: 'vendor' | 'customer' | 'employee' | 'self';
-  reference_id: string;
-  notes?: Record<string, any>;
-}
+export type PayoutMode = 'UPI' | 'IMPS' | 'NEFT' | 'RTGS';
+export const PAYOUT_MODES: PayoutMode[] = ['UPI', 'IMPS', 'NEFT', 'RTGS'];
 
-export interface RazorpayXFundAccountPayload {
-  contact_id: string;
-  account_type: 'bank_account' | 'vpa';
-  bank_account?: {
-    name: string;
-    ifsc: string;
-    account_number: string;
-  };
-  vpa?: {
-    address: string;
-  };
-}
+/** Per-payout limits (paise) enforced by banks / NPCI */
+export const PAYOUT_LIMITS: Record<PayoutMode, { min: number; max: number }> = {
+  UPI: { min: 100, max: 10000000 }, // up to ₹1,00,000
+  IMPS: { min: 100, max: 50000000 }, // up to ₹5,00,000
+  NEFT: { min: 100, max: 1000000000 }, // no practical cap (₹1 crore here)
+  RTGS: { min: 20000000, max: 1000000000 }, // from ₹2,00,000
+};
 
-export interface RazorpayXPayoutPayload {
-  account_number: string; // Business Source Account Number
-  fund_account_id: string;
-  amount: number; // In Paise
-  currency: 'INR';
-  mode: 'NEFT' | 'RTGS' | 'UPI';
-  purpose: 'vendor_payment' | 'salary';
-  queue_if_low_balance?: boolean;
-  reference_id: string;
-  narration?: string; // Max 30 chars
-  notes?: Record<string, any>;
-}
+/** Our simplified view of a payout's state */
+export type PayoutState = 'processed' | 'pending' | 'failed' | 'reversed';
 
-export interface RazorpayXPayoutResult {
-  success: boolean;
-  payoutId: string;
-  fundAccountId?: string;
-  contactId?: string;
-  status: PaymentRequestStatus;
-  razorpayxStatus: string;
-  utr?: string;
+export interface PayoutEntity {
+  id: string;
+  status: string;
+  amount: number;
+  mode?: string;
+  utr?: string | null;
   fees?: number;
   tax?: number;
-  failureReason?: string;
-  rawResponse?: Record<string, any>;
+  reference_id?: string;
+  failure_reason?: string | null;
+  status_details?: { description?: string; reason?: string; source?: string } | null;
+  notes?: Record<string, any>;
+  fund_account_id?: string;
 }
 
-export interface RazorpayXValidationResult {
-  isValid: boolean;
-  accountExists: boolean;
-  registeredName?: string;
-  bankName?: string;
-  validationId?: string;
-  failureReason?: string;
+export interface ProviderStatus {
+  enabled: boolean;
+  mode: 'off' | 'test' | 'live';
+  webhookConfigured: boolean;
+  accountConfigured: boolean;
+  /** Why payouts are off (for the setup card) */
+  reason?: string;
+}
+
+export class RazorpayXError extends Error {
+  constructor(
+    message: string,
+    /** HTTP status from Razorpay; 0 = network error / timeout (outcome unknown) */
+    public httpStatus: number,
+    public code?: string
+  ) {
+    super(message);
+  }
+  /** True when Razorpay definitely did not create anything (a 4xx validation error) */
+  get isDefinite(): boolean {
+    return this.httpStatus >= 400 && this.httpStatus < 500;
+  }
+}
+
+/** Razorpay allows only letters, digits and spaces in narration (max 30) */
+export function cleanNarration(text: string): string {
+  return text.replace(/[^A-Za-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 30) || 'BKR INFRA payment';
+}
+
+/** Names on contacts / bank accounts: letters, digits, spaces and . ' - & only */
+function cleanName(text: string, max = 50): string {
+  const s = text.replace(/[^A-Za-z0-9 .'&-]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
+  return s.length >= 3 ? s : `${s} BKR`.trim();
+}
+
+export function mapPayoutState(status: string): PayoutState {
+  switch ((status || '').toLowerCase()) {
+    case 'processed':
+      return 'processed';
+    case 'reversed':
+      return 'reversed';
+    case 'failed':
+    case 'rejected':
+    case 'cancelled':
+      return 'failed';
+    default:
+      // queued (low balance), pending (approval), scheduled, processing
+      return 'pending';
+  }
 }
 
 export interface ParsedUpiData {
@@ -82,637 +117,255 @@ export interface DynamicPaymentQrResult {
 }
 
 export class RazorpayXService {
-  private keyId: string;
-  private keySecret: string;
-  private accountNumber: string;
-  private webhookSecret: string;
-  public readonly isLiveEnabled: boolean;
-  public readonly isMockMode: boolean;
+  private qrLedger = new Map<string, DynamicPaymentQrResult>();
 
-  // In-memory ledger for safe deterministic testing simulation
-  private mockLedger = new Map<string, any>();
-  private mockQrLedger = new Map<string, DynamicPaymentQrResult>();
-
-  constructor() {
-    this.keyId = process.env.RAZORPAYX_KEY_ID || '';
-    this.keySecret = process.env.RAZORPAYX_KEY_SECRET || '';
-    this.accountNumber = process.env.RAZORPAYX_ACCOUNT_NUMBER || '';
-    // No hardcoded fallback: without a configured secret, webhook verification fails closed.
-    this.webhookSecret = (process.env.RAZORPAYX_WEBHOOK_SECRET || process.env.PAYMENTS_WEBHOOK_SECRET || '').trim();
-    this.isLiveEnabled = process.env.PAYMENTS_LIVE_ENABLED === 'true';
-
-    // If live credentials are not set or explicit mock mode is set, use safe simulation
-    this.isMockMode =
-      !this.keyId ||
-      !this.keySecret ||
-      process.env.NODE_ENV === 'test' ||
-      this.keyId.includes('test_dummy') ||
-      !this.isLiveEnabled;
+  // Read lazily so the environment can be configured before first use
+  private get keyId() {
+    return (process.env.RAZORPAYX_KEY_ID || '').trim();
+  }
+  private get keySecret() {
+    return (process.env.RAZORPAYX_KEY_SECRET || '').trim();
+  }
+  get accountNumber() {
+    return (process.env.RAZORPAYX_ACCOUNT_NUMBER || '').replace(/\s+/g, '');
+  }
+  private get webhookSecret() {
+    return (process.env.RAZORPAYX_WEBHOOK_SECRET || process.env.PAYMENTS_WEBHOOK_SECRET || '').trim();
+  }
+  private get apiBase() {
+    return (process.env.RAZORPAYX_API_BASE || 'https://api.razorpay.com').replace(/\/$/, '');
   }
 
-  private getAuthHeader(): string {
-    const creds = Buffer.from(`${this.keyId}:${this.keySecret}`).toString('base64');
-    return `Basic ${creds}`;
+  status(): ProviderStatus {
+    const webhookConfigured = Boolean(this.webhookSecret);
+    const accountConfigured = Boolean(this.accountNumber);
+    if (!this.keyId || !this.keySecret) {
+      return { enabled: false, mode: 'off', webhookConfigured, accountConfigured, reason: 'RazorpayX API keys are not added on the server yet.' };
+    }
+    const mode = this.keyId.startsWith('rzp_live_') ? 'live' : 'test';
+    if (!accountConfigured) {
+      return { enabled: false, mode: 'off', webhookConfigured, accountConfigured, reason: 'RAZORPAYX_ACCOUNT_NUMBER is missing on the server.' };
+    }
+    const liveAllowed = process.env.PAYMENTS_LIVE_ENABLED === 'true' || process.env.RAZORPAYX_LIVE_TRANSFERS_ENABLED === 'true';
+    if (mode === 'live' && !liveAllowed) {
+      return {
+        enabled: false,
+        mode: 'off',
+        webhookConfigured,
+        accountConfigured,
+        reason: 'Live keys are added but PAYMENTS_LIVE_ENABLED is not "true" — real money is blocked until you turn it on.',
+      };
+    }
+    return { enabled: true, mode, webhookConfigured, accountConfigured };
   }
 
-  /**
-   * 1. Create or retrieve Contact on RazorpayX
-   */
-  public async getOrCreateContact(beneficiary: IBeneficiary): Promise<string> {
-    if (beneficiary.razorpayxContactId) {
-      return beneficiary.razorpayxContactId;
-    }
+  get isEnabled(): boolean {
+    return this.status().enabled;
+  }
 
-    if (this.isMockMode) {
-      const mockContactId = `cont_rzpx_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
-      beneficiary.razorpayxContactId = mockContactId;
-      await beneficiary.save();
-      return mockContactId;
-    }
-
+  private async call<T = any>(method: 'GET' | 'POST', path: string, body?: any, extraHeaders: Record<string, string> = {}): Promise<T> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 25000);
+    let res: Response;
     try {
-      const payload: RazorpayXContactPayload = {
-        name: beneficiary.name,
-        email: beneficiary.email || undefined,
-        contact: beneficiary.phone || undefined,
-        type: 'vendor',
-        reference_id: beneficiary._id.toString(),
-        notes: {
-          sitetrackPayeeType: beneficiary.payeeType,
-        },
-      };
-
-      const res = await fetch('https://api.razorpay.com/v1/contacts', {
-        method: 'POST',
+      res = await fetch(`${this.apiBase}${path}`, {
+        method,
         headers: {
-          Authorization: this.getAuthHeader(),
+          Authorization: `Basic ${Buffer.from(`${this.keyId}:${this.keySecret}`).toString('base64')}`,
           'Content-Type': 'application/json',
+          ...extraHeaders,
         },
-        body: JSON.stringify(payload),
+        body: body ? JSON.stringify(body) : undefined,
+        signal: controller.signal,
       });
-
-      const data: any = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error?.description || 'Failed to create RazorpayX Contact');
-      }
-
-      beneficiary.razorpayxContactId = data.id;
-      await beneficiary.save();
-      return data.id;
     } catch (err: any) {
-      throw new Error(`RazorpayX Contact Provisioning Error: ${err.message}`);
+      throw new RazorpayXError(
+        err?.name === 'AbortError' ? 'RazorpayX did not answer in time.' : `Could not reach RazorpayX: ${err?.message || 'network error'}`,
+        0
+      );
+    } finally {
+      clearTimeout(timer);
     }
-  }
-
-  /**
-   * 2. Create or retrieve Fund Account on RazorpayX (Supports Bank Account and UPI VPA)
-   */
-  public async getOrCreateFundAccount(
-    beneficiary: IBeneficiary,
-    method: 'NEFT' | 'RTGS' | 'UPI'
-  ): Promise<string> {
-    if (beneficiary.razorpayxFundAccountId) {
-      return beneficiary.razorpayxFundAccountId;
-    }
-
-    const contactId = await this.getOrCreateContact(beneficiary);
-
-    if (this.isMockMode) {
-      const mockFaId = `fa_rzpx_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
-      beneficiary.razorpayxFundAccountId = mockFaId;
-      await beneficiary.save();
-      return mockFaId;
-    }
-
+    const text = await res.text();
+    let data: any = {};
     try {
-      let payload: RazorpayXFundAccountPayload;
-
-      if (method === 'UPI' && beneficiary.vpa) {
-        payload = {
-          contact_id: contactId,
-          account_type: 'vpa',
-          vpa: {
-            address: beneficiary.vpa,
-          },
-        };
-      } else {
-        if (!beneficiary.accountNumber || !beneficiary.ifsc) {
-          throw new Error('Bank account number and IFSC are required for NEFT/RTGS fund account creation.');
-        }
-        payload = {
-          contact_id: contactId,
-          account_type: 'bank_account',
-          bank_account: {
-            name: beneficiary.name,
-            ifsc: beneficiary.ifsc,
-            account_number: beneficiary.accountNumber,
-          },
-        };
-      }
-
-      const res = await fetch('https://api.razorpay.com/v1/fund_accounts', {
-        method: 'POST',
-        headers: {
-          Authorization: this.getAuthHeader(),
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-
-      const data: any = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error?.description || 'Failed to create RazorpayX Fund Account');
-      }
-
-      beneficiary.razorpayxFundAccountId = data.id;
-      await beneficiary.save();
-      return data.id;
-    } catch (err: any) {
-      throw new Error(`RazorpayX Fund Account Error: ${err.message}`);
+      data = text ? JSON.parse(text) : {};
+    } catch {
+      /* non-JSON error page */
     }
+    if (!res.ok) {
+      const desc = data?.error?.description || `RazorpayX error (${res.status})`;
+      throw new RazorpayXError(res.status === 401 ? 'RazorpayX rejected the API keys — check them on the server.' : desc, res.status, data?.error?.code);
+    }
+    return data as T;
+  }
+
+  /** Create (or get the existing) RazorpayX contact. Razorpay de-duplicates identical contacts. */
+  async createContact(p: { name: string; type: 'vendor' | 'employee'; referenceId: string; phone?: string; email?: string }) {
+    const phone = (p.phone || '').replace(/\D/g, '');
+    const email = (p.email || '').trim();
+    const contact = await this.call<{ id: string }>('POST', '/v1/contacts', {
+      name: cleanName(p.name),
+      type: p.type,
+      reference_id: p.referenceId.slice(0, 40),
+      ...(phone.length >= 8 && phone.length <= 15 ? { contact: phone } : {}),
+      ...(/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? { email } : {}),
+      notes: { app: 'BKR INFRA' },
+    });
+    return contact.id;
+  }
+
+  async createVpaFundAccount(contactId: string, vpa: string) {
+    const fa = await this.call<{ id: string }>('POST', '/v1/fund_accounts', {
+      contact_id: contactId,
+      account_type: 'vpa',
+      vpa: { address: vpa.trim().toLowerCase() },
+    });
+    return fa.id;
+  }
+
+  async createBankFundAccount(contactId: string, b: { name: string; ifsc: string; accountNumber: string }) {
+    const fa = await this.call<{ id: string }>('POST', '/v1/fund_accounts', {
+      contact_id: contactId,
+      account_type: 'bank_account',
+      bank_account: { name: cleanName(b.name, 120), ifsc: b.ifsc.trim().toUpperCase(), account_number: b.accountNumber.replace(/\s+/g, '') },
+    });
+    return fa.id;
   }
 
   /**
-   * 3. Penny Drop Beneficiary Bank Account Validation
+   * Send money. The idempotency key MUST stay the same when retrying the same
+   * payout: Razorpay then returns the original payout instead of paying twice.
    */
-  public async validateBeneficiary(beneficiary: IBeneficiary): Promise<RazorpayXValidationResult> {
-    if (beneficiary.vpa && !beneficiary.accountNumber) {
-      // UPI VPA Validation
-      const isValidVpa = /^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/.test(beneficiary.vpa);
-      if (!isValidVpa) {
-        return {
-          isValid: false,
-          accountExists: false,
-          failureReason: 'Invalid UPI ID format (e.g., vendor@okhdfcbank)',
-        };
-      }
-
-      await this.getOrCreateContact(beneficiary);
-      await this.getOrCreateFundAccount(beneficiary, 'UPI');
-
-      return {
-        isValid: true,
-        accountExists: true,
-        registeredName: beneficiary.name.toUpperCase(),
-        validationId: `vpa_val_${Date.now()}`,
-      };
-    }
-
-    const cleanAccount = (beneficiary.accountNumber || '').replace(/\s+/g, '');
-    const cleanIFSC = (beneficiary.ifsc || '').trim().toUpperCase();
-
-    // Check account format
-    if (!/^\d{8,22}$/.test(cleanAccount)) {
-      return {
-        isValid: false,
-        accountExists: false,
-        failureReason: 'Account number must contain between 8 and 22 numeric digits.',
-      };
-    }
-
-    // Check IFSC format
-    if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(cleanIFSC)) {
-      return {
-        isValid: false,
-        accountExists: false,
-        failureReason: 'Invalid IFSC format.',
-      };
-    }
-
-    if (this.isMockMode) {
-      if (cleanAccount.startsWith('00000000') || cleanAccount.startsWith('99999999')) {
-        return {
-          isValid: false,
-          accountExists: false,
-          failureReason: 'Bank network reported: Account does not exist or is inactive (NPCI Error Code: B1)',
-        };
-      }
-
-      await this.getOrCreateContact(beneficiary);
-      await this.getOrCreateFundAccount(beneficiary, 'NEFT');
-
-      const validationId = `fav_rzpx_${Date.now()}`;
-      return {
-        isValid: true,
-        accountExists: true,
-        registeredName: beneficiary.name.toUpperCase(),
-        bankName: beneficiary.bankName,
-        validationId,
-      };
-    }
-
-    // Live / Official Sandbox call
-    try {
-      const fundAccountId = await this.getOrCreateFundAccount(beneficiary, 'NEFT');
-
-      const res = await fetch('https://api.razorpay.com/v1/fund_accounts/validations', {
-        method: 'POST',
-        headers: {
-          Authorization: this.getAuthHeader(),
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          account_number: this.accountNumber,
-          fund_account: { id: fundAccountId },
-          amount: 100, // ₹1 = 100 paise penny drop
-          currency: 'INR',
-          notes: { purpose: 'SiteTrack Contractor Verification' },
-        }),
-      });
-
-      const data: any = await res.json();
-      if (!res.ok) {
-        return {
-          isValid: false,
-          accountExists: false,
-          failureReason: data.error?.description || 'RazorpayX Penny Drop validation failed',
-        };
-      }
-
-      const isCompleted = data.status === 'completed';
-      const isAccountValid = isCompleted && data.results?.account_status === 'active';
-
-      return {
-        isValid: isAccountValid,
-        accountExists: isAccountValid,
-        registeredName: data.results?.registered_name || beneficiary.name,
-        validationId: data.id,
-        failureReason: isAccountValid ? undefined : (data.results?.account_status || 'Account verification incomplete'),
-      };
-    } catch (err: any) {
-      return {
-        isValid: false,
-        accountExists: false,
-        failureReason: err.message,
-      };
-    }
-  }
-
-  /**
-   * 4. Create Payout via RazorpayX (Supports NEFT, RTGS, and UPI)
-   */
-  public async createPayout(params: {
-    paymentReference: string;
-    idempotencyKey: string;
+  async createPayout(p: {
+    fundAccountId: string;
     amountPaise: number;
-    mode: 'NEFT' | 'RTGS' | 'UPI';
-    purpose: string;
-    narration?: string;
-    beneficiary: IBeneficiary;
-    projectId?: string;
-  }): Promise<RazorpayXPayoutResult> {
-    const { paymentReference, idempotencyKey, amountPaise, mode, purpose, beneficiary } = params;
-
-    // Validate RBI rules for RTGS (Minimum ₹2,00,000 = 20,000,000 paise)
-    if (mode === 'RTGS' && amountPaise < 20000000) {
-      return {
-        success: false,
-        payoutId: '',
-        status: 'FAILED',
-        razorpayxStatus: 'rejected',
-        failureReason: 'RBI Regulation: RTGS requires a minimum transaction amount of ₹2,00,000. Please select NEFT or UPI.',
-      };
-    }
-
-    // Validate NPCI rules for UPI (Maximum ₹1,00,000 = 10,000,000 paise)
-    if (mode === 'UPI' && amountPaise > 10000000) {
-      return {
-        success: false,
-        payoutId: '',
-        status: 'FAILED',
-        razorpayxStatus: 'rejected',
-        failureReason: 'UPI Limit: Standard UPI transfers are restricted to ₹1,00,000 maximum per NPCI guidelines. Please select NEFT or RTGS for higher amounts.',
-      };
-    }
-
-    // Safe simulation mode
-    if (this.isMockMode) {
-      const payoutId = `pout_rzpx_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
-      const utr = `RZPX${mode}${Date.now().toString().slice(-8)}${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
-
-      const mockRecord = {
-        payoutId,
-        paymentReference,
-        idempotencyKey,
-        amountPaise,
-        mode,
-        status: 'PAID' as PaymentRequestStatus,
-        razorpayxStatus: 'processed',
-        utr,
-        fees: mode === 'RTGS' ? 1500 : mode === 'UPI' ? 0 : 300,
-        tax: mode === 'RTGS' ? 270 : 54,
-        beneficiaryName: beneficiary.name,
-      };
-
-      this.mockLedger.set(payoutId, mockRecord);
-      this.mockLedger.set(paymentReference, mockRecord);
-
-      return {
-        success: true,
-        payoutId,
-        status: 'PAID',
-        razorpayxStatus: 'processed',
-        utr,
-        fees: mockRecord.fees,
-        tax: mockRecord.tax,
-        rawResponse: mockRecord,
-      };
-    }
-
-    // Official RazorpayX API call
-    try {
-      const fundAccountId = await this.getOrCreateFundAccount(beneficiary, mode);
-
-      const payload: RazorpayXPayoutPayload = {
+    mode: PayoutMode;
+    purpose: 'vendor bill' | 'payout';
+    referenceId: string;
+    narration: string;
+    idempotencyKey: string;
+    notes: Record<string, string>;
+  }): Promise<PayoutEntity> {
+    return this.call<PayoutEntity>(
+      'POST',
+      '/v1/payouts',
+      {
         account_number: this.accountNumber,
-        fund_account_id: fundAccountId,
-        amount: amountPaise,
+        fund_account_id: p.fundAccountId,
+        amount: p.amountPaise,
         currency: 'INR',
-        mode: mode,
-        purpose: 'vendor_payment',
+        mode: p.mode,
+        purpose: p.purpose,
         queue_if_low_balance: true,
-        reference_id: paymentReference,
-        narration: (params.narration || purpose).slice(0, 30),
-        notes: {
-          sitetrackRef: paymentReference,
-          projectId: params.projectId,
-          beneficiaryType: beneficiary.payeeType,
-        },
-      };
-
-      const res = await fetch('https://api.razorpay.com/v1/payouts', {
-        method: 'POST',
-        headers: {
-          Authorization: this.getAuthHeader(),
-          'Content-Type': 'application/json',
-          'X-Payout-Idempotency': idempotencyKey,
-        },
-        body: JSON.stringify(payload),
-      });
-
-      const data: any = await res.json();
-      if (!res.ok) {
-        return {
-          success: false,
-          payoutId: '',
-          status: 'FAILED',
-          razorpayxStatus: 'failed',
-          failureReason: data.error?.description || 'RazorpayX transfer execution rejected',
-          rawResponse: data,
-        };
-      }
-
-      const mappedStatus = this.mapRazorpayXStatus(data.status);
-      return {
-        success: true,
-        payoutId: data.id,
-        fundAccountId: data.fund_account_id,
-        status: mappedStatus,
-        razorpayxStatus: data.status,
-        utr: data.utr || undefined,
-        fees: data.fees || 0,
-        tax: data.tax || 0,
-        rawResponse: data,
-      };
-    } catch (err: any) {
-      return {
-        success: false,
-        payoutId: '',
-        status: 'UNKNOWN',
-        razorpayxStatus: 'error',
-        failureReason: `Network Timeout or Gateway Error: ${err.message}. Status must be reconciled before retry.`,
-      };
-    }
+        reference_id: p.referenceId.slice(0, 40),
+        narration: cleanNarration(p.narration),
+        notes: p.notes,
+      },
+      { 'X-Payout-Idempotency': p.idempotencyKey }
+    );
   }
 
-  /**
-   * 5. Status Inquiry & Reconciliation
-   */
-  public async getPayout(payoutId: string, paymentReference?: string): Promise<RazorpayXPayoutResult> {
-    if (this.isMockMode) {
-      const record =
-        this.mockLedger.get(payoutId) ||
-        (paymentReference ? this.mockLedger.get(paymentReference) : null);
-
-      const utr = record?.utr || `RZPXNEFT${Date.now().toString().slice(-8)}${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
-      return {
-        success: true,
-        payoutId,
-        status: 'PAID',
-        razorpayxStatus: 'processed',
-        utr,
-        fees: record?.fees || 300,
-        tax: record?.tax || 54,
-        rawResponse: {
-          id: payoutId,
-          status: 'processed',
-          utr,
-        },
-      };
-    }
-
-    try {
-      const res = await fetch(`https://api.razorpay.com/v1/payouts/${payoutId}`, {
-        headers: {
-          Authorization: this.getAuthHeader(),
-        },
-      });
-
-      const data: any = await res.json();
-      if (!res.ok) {
-        return {
-          success: false,
-          payoutId,
-          status: 'UNKNOWN',
-          razorpayxStatus: 'error',
-          failureReason: data.error?.description || 'Failed to fetch payout status from RazorpayX',
-        };
-      }
-
-      const mappedStatus = this.mapRazorpayXStatus(data.status);
-      return {
-        success: mappedStatus !== 'FAILED',
-        payoutId: data.id,
-        status: mappedStatus,
-        razorpayxStatus: data.status,
-        utr: data.utr || undefined,
-        fees: data.fees || 0,
-        tax: data.tax || 0,
-        rawResponse: data,
-      };
-    } catch (err: any) {
-      return {
-        success: false,
-        payoutId,
-        status: 'UNKNOWN',
-        razorpayxStatus: 'error',
-        failureReason: `Reconciliation query error: ${err.message}`,
-      };
-    }
+  async getPayout(payoutId: string): Promise<PayoutEntity> {
+    return this.call<PayoutEntity>('GET', `/v1/payouts/${encodeURIComponent(payoutId)}`);
   }
 
-  /**
-   * 6. Webhook Signature Verification using exact raw body
-   */
-  public verifyWebhookSignature(rawBody: string | Buffer, signature: string): boolean {
+  /** ₹1 penny-drop bank account check. Waits briefly for the result. */
+  async validateBankAccount(fundAccountId: string): Promise<{ id: string; status: string; accountStatus?: string; registeredName?: string }> {
+    let v = await this.call<any>('POST', '/v1/fund_accounts/validations', {
+      account_number: this.accountNumber,
+      fund_account: { id: fundAccountId },
+      amount: 100,
+      currency: 'INR',
+      notes: { app: 'BKR INFRA' },
+    });
+    for (let i = 0; i < 4 && v.status !== 'completed' && v.status !== 'failed'; i++) {
+      await new Promise((r) => setTimeout(r, process.env.NODE_ENV === 'test' ? 10 : 1500));
+      v = await this.call<any>('GET', `/v1/fund_accounts/validations/${encodeURIComponent(v.id)}`);
+    }
+    return { id: v.id, status: v.status, accountStatus: v.results?.account_status, registeredName: v.results?.registered_name };
+  }
+
+  verifyWebhookSignature(rawBody: string | Buffer, signature: string): boolean {
     if (!signature || !this.webhookSecret) return false;
     try {
-      const bodyBuffer = Buffer.isBuffer(rawBody) ? rawBody : Buffer.from(rawBody, 'utf8');
-      const expectedSignature = crypto
-        .createHmac('sha256', this.webhookSecret)
-        .update(bodyBuffer)
-        .digest('hex');
-
-      return crypto.timingSafeEqual(Buffer.from(signature, 'utf8'), Buffer.from(expectedSignature, 'utf8'));
+      const expected = crypto.createHmac('sha256', this.webhookSecret).update(rawBody).digest('hex');
+      const a = Buffer.from(signature, 'utf8');
+      const b = Buffer.from(expected, 'utf8');
+      return a.length === b.length && crypto.timingSafeEqual(a, b);
     } catch {
       return false;
     }
   }
 
-  public generateWebhookSignature(rawBody: string | Buffer): string {
-    const bodyBuffer = Buffer.isBuffer(rawBody) ? rawBody : Buffer.from(rawBody, 'utf8');
-    return crypto
-      .createHmac('sha256', this.webhookSecret)
-      .update(bodyBuffer)
-      .digest('hex');
+  generateWebhookSignature(rawBody: string | Buffer): string {
+    return crypto.createHmac('sha256', this.webhookSecret).update(rawBody).digest('hex');
   }
 
-  /**
-   * 7. Feature 3.1: Untrusted UPI QR Parser
-   * Parses standard UPI URI format: upi://pay?pa=...&pn=...&am=...&cu=INR&tn=...
-   */
-  public parseUpiQrString(rawInput: string): ParsedUpiData {
+  /** Parses a scanned upi://pay?... QR. Treated as untrusted input. */
+  parseUpiQrString(rawInput: string): ParsedUpiData {
     if (!rawInput || typeof rawInput !== 'string') {
       return { isValid: false, rawUri: '', errorMessage: 'Empty or invalid QR code string' };
     }
-
     const trimmed = rawInput.trim();
     if (!trimmed.toLowerCase().startsWith('upi://pay')) {
-      return {
-        isValid: false,
-        rawUri: trimmed,
-        errorMessage: 'The scanned QR code is not a valid standard UPI payment QR (must start with upi://pay).',
-      };
+      return { isValid: false, rawUri: trimmed, errorMessage: 'This is not a UPI payment QR code.' };
     }
-
     try {
-      const url = new URL(trimmed);
-      const params = url.searchParams;
-
-      const pa = params.get('pa')?.trim() || ''; // Payee VPA / UPI ID
-      const pn = params.get('pn')?.trim() || ''; // Payee Name
-      const am = params.get('am')?.trim() || ''; // Amount
-      const cu = params.get('cu')?.trim() || 'INR'; // Currency
-      const tn = params.get('tn')?.trim() || ''; // Note
+      const params = new URL(trimmed).searchParams;
+      const pa = params.get('pa')?.trim() || '';
+      const pn = params.get('pn')?.trim() || '';
+      const am = params.get('am')?.trim() || '';
+      const cu = params.get('cu')?.trim() || 'INR';
+      const tn = params.get('tn')?.trim() || '';
       const urlRef = params.get('url')?.trim() || '';
-
-      // Validate VPA format: e.g. someone@bank or 9876543210@upi
-      const vpaRegex = /^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/;
-      if (!pa || !vpaRegex.test(pa)) {
-        return {
-          isValid: false,
-          rawUri: trimmed,
-          errorMessage: `Invalid or missing UPI VPA in QR code: "${pa}". Expected format: username@bank`,
-        };
+      if (!pa || !/^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z][a-zA-Z0-9.-]{1,64}$/.test(pa)) {
+        return { isValid: false, rawUri: trimmed, errorMessage: `The QR code has no valid UPI ID ("${pa.slice(0, 60)}").` };
       }
-
-      let parsedAmount: number | undefined;
-      if (am) {
-        const num = parseFloat(am);
-        if (!isNaN(num) && num > 0) {
-          parsedAmount = num;
-        }
-      }
-
+      const num = parseFloat(am);
       return {
         isValid: true,
         vpa: pa.toLowerCase(),
-        payeeName: decodeURIComponent(pn) || undefined,
-        amountRupees: parsedAmount,
+        payeeName: pn.slice(0, 100) || undefined,
+        amountRupees: !isNaN(num) && num > 0 ? num : undefined,
         currency: cu.toUpperCase(),
-        transactionNote: decodeURIComponent(tn) || undefined,
+        transactionNote: tn.slice(0, 200) || undefined,
         referenceUrl: urlRef || undefined,
         rawUri: trimmed,
       };
     } catch (err: any) {
-      return {
-        isValid: false,
-        rawUri: trimmed,
-        errorMessage: `Failed to parse UPI QR content: ${err.message}`,
-      };
+      return { isValid: false, rawUri: trimmed, errorMessage: `Could not read the UPI QR: ${err.message}` };
     }
   }
 
   /**
-   * 8. Feature 3.2: Create Dynamic Payment-Collection QR
+   * Static UPI collection QR for the company's own UPI ID (MERCHANT_UPI_VPA).
+   * Refuses to make one without a real company UPI ID configured.
    */
-  public async createPaymentQr(params: {
-    amountPaise: number;
-    referenceId: string;
-    purpose: string;
-    expiryMinutes?: number;
-  }): Promise<DynamicPaymentQrResult> {
+  async createPaymentQr(params: { amountPaise: number; referenceId: string; purpose: string; expiryMinutes?: number }): Promise<DynamicPaymentQrResult> {
+    const merchantVpa = (process.env.MERCHANT_UPI_VPA || '').trim();
+    if (!merchantVpa) throw new Error('Set MERCHANT_UPI_VPA (the company UPI ID) on the server to create collection QR codes.');
     const { amountPaise, referenceId, purpose, expiryMinutes = 15 } = params;
-    const qrId = `qr_rzpx_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
-    const expiresAt = new Date(Date.now() + expiryMinutes * 60 * 1000);
-    const amountINR = (amountPaise / 100).toFixed(2);
-
-    // Standard NPCI / UPI merchant URI payload
-    const merchantVpa = process.env.MERCHANT_UPI_VPA || 'sitetrack.corporate@icici';
-    const merchantName = encodeURIComponent(process.env.MERCHANT_BUSINESS_NAME || 'SiteTrack Infra Pvt Ltd');
-    const note = encodeURIComponent(`SiteTrack Ref ${referenceId} - ${purpose.slice(0, 20)}`);
-    const qrPayload = `upi://pay?pa=${merchantVpa}&pn=${merchantName}&am=${amountINR}&cu=INR&tn=${note}&tr=${referenceId}`;
-
-    const qrRecord: DynamicPaymentQrResult = {
+    const qrId = `qr_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
+    const merchantName = encodeURIComponent(process.env.MERCHANT_BUSINESS_NAME || 'BKR INFRA');
+    const note = encodeURIComponent(cleanNarration(`${referenceId} ${purpose}`));
+    const record: DynamicPaymentQrResult = {
       qrId,
-      qrPayload,
+      qrPayload: `upi://pay?pa=${merchantVpa}&pn=${merchantName}&am=${(amountPaise / 100).toFixed(2)}&cu=INR&tn=${note}&tr=${encodeURIComponent(referenceId)}`,
       amountPaise,
       referenceId,
-      expiresAt,
+      expiresAt: new Date(Date.now() + expiryMinutes * 60 * 1000),
       status: 'PENDING',
     };
-
-    this.mockQrLedger.set(qrId, qrRecord);
-    this.mockQrLedger.set(referenceId, qrRecord);
-
-    return qrRecord;
-  }
-
-  public async getPaymentQrStatus(qrId: string): Promise<DynamicPaymentQrResult | null> {
-    const record = this.mockQrLedger.get(qrId);
-    if (!record) return null;
-
-    if (record.status === 'PENDING' && new Date() > record.expiresAt) {
-      record.status = 'EXPIRED';
-    }
-
+    this.qrLedger.set(qrId, record);
     return record;
   }
 
-  /**
-   * 9. Map RazorpayX Statuses to SiteTrack internal lifecycle
-   */
-  public mapRazorpayXStatus(rzpStatus: string): PaymentRequestStatus {
-    const status = (rzpStatus || '').toLowerCase();
-    switch (status) {
-      case 'processed':
-      case 'paid':
-        return 'PAID';
-      case 'processing':
-      case 'initiated':
-      case 'pending':
-      case 'queued':
-        return 'PROCESSING';
-      case 'reversed':
-        return 'REVERSED';
-      case 'rejected':
-        return 'REJECTED';
-      case 'cancelled':
-      case 'failed':
-        return 'FAILED';
-      default:
-        return 'UNKNOWN';
-    }
+  async getPaymentQrStatus(qrId: string): Promise<DynamicPaymentQrResult | null> {
+    const record = this.qrLedger.get(qrId);
+    if (!record) return null;
+    if (record.status === 'PENDING' && new Date() > record.expiresAt) record.status = 'EXPIRED';
+    return record;
   }
 }
 

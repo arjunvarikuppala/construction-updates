@@ -30,12 +30,11 @@ import { PaymentReviewModal } from '../components/payments/PaymentReviewModal.js
 import { PayModal } from '../components/payments/PayModal.js';
 import { UPIQRScannerModal } from '../components/payments/UPIQRScannerModal.js';
 import { BeneficiaryModal } from '../components/payments/BeneficiaryModal.js';
-import { PaymentQrModal } from '../components/payments/PaymentQrModal.js';
 
 type View = 'TO_PAY' | 'PART' | 'PAID' | 'CLOSED' | 'ALL';
 
 const VIEWS: { id: View; label: string; match: (p: PaymentRequest) => boolean }[] = [
-  { id: 'TO_PAY', label: 'To pay', match: (p) => isPayable(p) && p.status !== 'PARTIALLY_PAID' },
+  { id: 'TO_PAY', label: 'To pay', match: (p) => (isPayable(p) && p.status !== 'PARTIALLY_PAID') || p.status === 'PROCESSING' },
   { id: 'PART', label: 'Part paid', match: (p) => p.status === 'PARTIALLY_PAID' },
   { id: 'PAID', label: 'Paid', match: (p) => p.status === 'PAID' },
   { id: 'CLOSED', label: 'Rejected / cancelled', match: (p) => ['REJECTED', 'CANCELLED', 'FAILED', 'REVERSED'].includes(p.status) },
@@ -63,7 +62,6 @@ export const PaymentsPage: React.FC = () => {
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
   const [isBeneficiaryModalOpen, setIsBeneficiaryModalOpen] = useState(false);
   const [isQrScannerOpen, setIsQrScannerOpen] = useState(false);
-  const [isCollectionQrOpen, setIsCollectionQrOpen] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState<PaymentRequest | null>(null);
   const [quickPay, setQuickPay] = useState<PaymentRequest | null>(null);
   const [scannedInitialVpa, setScannedInitialVpa] = useState('');
@@ -209,7 +207,9 @@ export const PaymentsPage: React.FC = () => {
           </div>
           <p className="text-xs text-slate-500 mt-1">
             {isOwner
-              ? 'Site In-Charges request money; you approve by paying from your UPI app, bank, cheque or cash and record it here.'
+              ? payoutsEnabled
+                ? 'Site In-Charges request money; you approve by paying — send it straight from RazorpayX, or record a payment made from your UPI app, bank, cheque or cash.'
+                : 'Site In-Charges request money; you approve by paying from your UPI app, bank, cheque or cash and record it here.'
               : 'Ask the MD to pay you or a vendor. You are notified as soon as it is paid.'}
           </p>
         </div>
@@ -217,11 +217,6 @@ export const PaymentsPage: React.FC = () => {
           <Button size="sm" variant="outline" onClick={() => setIsQrScannerOpen(true)} leftIcon={<QrCode className="w-4 h-4 text-amber-600" />}>
             Scan vendor UPI QR
           </Button>
-          {isOwner && payoutsEnabled && (
-            <Button size="sm" variant="outline" onClick={() => setIsCollectionQrOpen(true)} leftIcon={<QrCode className="w-4 h-4" />}>
-              Collection QR
-            </Button>
-          )}
           <Button size="sm" onClick={() => setIsRequestModalOpen(true)} leftIcon={<Plus className="w-4 h-4" />}>
             {isOwner ? 'New payment' : 'Request payment'}
           </Button>
@@ -521,7 +516,6 @@ export const PaymentsPage: React.FC = () => {
         initialVpa={scannedInitialVpa}
         initialName={scannedInitialName}
       />
-      {payoutsEnabled && <PaymentQrModal isOpen={isCollectionQrOpen} onClose={() => setIsCollectionQrOpen(false)} />}
     </div>
   );
 };

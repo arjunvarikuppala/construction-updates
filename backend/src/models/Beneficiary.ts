@@ -18,6 +18,10 @@ export interface IBeneficiary extends Document {
   verifiedName?: string;
   razorpayxContactId?: string;
   razorpayxFundAccountId?: string;
+  /** RazorpayX fund accounts are type-specific: one for the UPI ID, one for the bank account */
+  razorpayxVpaFundAccountId?: string;
+  razorpayxVpaFor?: string;
+  razorpayxBankFundAccountId?: string;
   pennyDropValidationId?: string;
   verificationDetails?: {
     accountExists?: boolean;
@@ -105,6 +109,9 @@ const BeneficiarySchema = new Schema<IBeneficiary>(
       type: String,
       trim: true,
     },
+    razorpayxVpaFundAccountId: { type: String, trim: true },
+    razorpayxVpaFor: { type: String, trim: true },
+    razorpayxBankFundAccountId: { type: String, trim: true },
     razorpayxFundAccountId: {
       type: String,
       trim: true,

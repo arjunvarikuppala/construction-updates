@@ -74,7 +74,7 @@ export const STATUS_META: Record<string, { label: string; tone: string }> = {
   AWAITING_AUTHORIZATION: { label: 'Waiting for payment', tone: 'bg-amber-100 text-amber-800' },
   AUTHORIZED: { label: 'Approved – to pay', tone: 'bg-sky-100 text-sky-800' },
   PARTIALLY_PAID: { label: 'Part paid', tone: 'bg-violet-100 text-violet-800' },
-  PROCESSING: { label: 'Bank processing', tone: 'bg-indigo-100 text-indigo-800' },
+  PROCESSING: { label: 'Sending via RazorpayX', tone: 'bg-indigo-100 text-indigo-800' },
   PAID: { label: 'Paid', tone: 'bg-emerald-100 text-emerald-800' },
   REJECTED: { label: 'Rejected', tone: 'bg-rose-100 text-rose-800' },
   FAILED: { label: 'Failed', tone: 'bg-rose-100 text-rose-800' },

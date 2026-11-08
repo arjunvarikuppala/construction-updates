@@ -18,6 +18,8 @@ import {
   confirmPaymentReceived,
   getPaymentSummary,
   exportPaymentsRegister,
+  getPayoutProviderStatus,
+  getPayoutOptions,
 } from '../controllers/paymentController.js';
 import {
   createBeneficiary,
@@ -44,6 +46,7 @@ router.post('/beneficiaries/:id/validate', validateBeneficiaryAccount);
 // Summary & register
 router.get('/summary', getPaymentSummary);
 router.get('/register', exportPaymentsRegister);
+router.get('/provider-status', getPayoutProviderStatus);
 
 // Payment Requests
 router.post('/requests', createPaymentRequest);
@@ -52,6 +55,7 @@ router.get('/requests/:id', getPaymentRequestById);
 router.put('/requests/:id/review', reviewPaymentRequest);
 router.post('/requests/:id/authorize', authorizePaymentRequest);
 router.post('/requests/:id/reject', rejectPaymentRequest);
+router.get('/requests/:id/payout-options', getPayoutOptions);
 router.post('/requests/:id/initiate', initiatePaymentTransfer);
 router.post('/requests/:id/reconcile', reconcilePayment);
 router.post('/requests/:id/cancel', cancelPaymentRequest);

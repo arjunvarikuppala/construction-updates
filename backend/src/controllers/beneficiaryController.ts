@@ -248,7 +248,61 @@ export async function validateBeneficiaryAccount(req: AuthenticatedRequest, res:
       return;
     }
 
-    const result = await razorpayXService.validateBeneficiary(beneficiary);
+    const provider = razorpayXService.status();
+    if (!provider.enabled) {
+      res.status(400).json({ success: false, message: `Bank account check needs RazorpayX. ${provider.reason || ''}`.trim() });
+      return;
+    }
+    if (!beneficiary.accountNumber || !beneficiary.ifsc) {
+      res.status(400).json({ success: false, message: 'Only bank accounts can be verified. UPI IDs are checked when you pay.' });
+      return;
+    }
+
+    // ₹1 penny drop: RazorpayX sends ₹1 and reads back the account holder's name
+    let result: { isValid: boolean; accountExists: boolean; registeredName?: string; bankName?: string; validationId?: string; failureReason?: string; pending?: boolean };
+    try {
+      if (!beneficiary.razorpayxContactId) {
+        beneficiary.razorpayxContactId = await razorpayXService.createContact({
+          name: beneficiary.name,
+          type: 'vendor',
+          referenceId: `vendor-${String(beneficiary._id)}`,
+          phone: beneficiary.phone,
+          email: beneficiary.email,
+        });
+      }
+      if (!beneficiary.razorpayxBankFundAccountId) {
+        beneficiary.razorpayxBankFundAccountId = await razorpayXService.createBankFundAccount(beneficiary.razorpayxContactId, {
+          name: beneficiary.name,
+          ifsc: beneficiary.ifsc,
+          accountNumber: beneficiary.accountNumber,
+        });
+      }
+      const v = await razorpayXService.validateBankAccount(beneficiary.razorpayxBankFundAccountId);
+      const done = v.status === 'completed' || v.status === 'failed';
+      const ok = v.status === 'completed' && v.accountStatus === 'active';
+      result = {
+        isValid: ok,
+        accountExists: ok,
+        registeredName: v.registeredName,
+        validationId: v.id,
+        pending: !done,
+        failureReason: ok ? undefined : done ? `Bank says the account is ${v.accountStatus || 'invalid'}` : undefined,
+      };
+    } catch (err: any) {
+      res.status(400).json({ success: false, message: `RazorpayX could not check the account: ${err.message}` });
+      return;
+    }
+
+    if (result.pending) {
+      beneficiary.pennyDropValidationId = result.validationId;
+      await beneficiary.save();
+      res.json({
+        success: true,
+        message: 'The bank is still checking the account. The result will appear here shortly.',
+        verification: { status: beneficiary.verificationStatus },
+      });
+      return;
+    }
 
     beneficiary.verificationStatus = result.isValid ? 'VERIFIED' : 'FAILED';
     if (result.registeredName) beneficiary.verifiedName = result.registeredName;
