@@ -35,7 +35,8 @@ export const labourCategoryLabel = (c?: string) =>
 /** Common trades with their default category so most rows need one tap. */
 export const LABOUR_PRESETS: Array<{ role: string; category: LabourCategory }> = [
   { role: 'Mason', category: 'SKILLED' },
-  { role: 'Helper / Unskilled', category: 'UNSKILLED' },
+  { role: 'Helper (Male)', category: 'UNSKILLED' },
+  { role: 'Helper (Female)', category: 'UNSKILLED' },
   { role: 'Bar Bender', category: 'SKILLED' },
   { role: 'Carpenter / Shuttering', category: 'SKILLED' },
   { role: 'Plumber', category: 'SKILLED' },
