@@ -208,18 +208,19 @@ export function exportDailyReportPdf(report: DailyReport) {
   textBlock('Work Summary & Details:', report.workSummary || 'No summary provided.');
 
   table(
-    ['Work Item / Activity', 'Location', 'Qty', 'Unit', 'Status', 'Budget (INR)'],
+    ['Work Item / Activity', 'Location', 'Qty', 'Unit', 'Rate (INR)', 'Status', 'Amount (INR)'],
     (report.workItems || []).map((item) => [
       item.description,
       item.location || '—',
       item.quantity.toString(),
       item.unit,
+      item.rate ? `${formatRupees(item.rate)} / ${item.unit}` : '—',
       item.status ? `${item.status.replace('_', ' ')}${item.status === 'IN_PROGRESS' && item.progressPercent !== undefined ? ` ${item.progressPercent}%` : ''}` : '—',
       formatRupees(item.budget || 0),
     ]),
     [20, 43, 74],
     [255, 255, 255],
-    [['Total Work Budget (Estimated)', '', '', '', '', formatRupees(totalBudget)]]
+    [['Total Work Budget (Estimated)', '', '', '', '', '', formatRupees(totalBudget)]]
   );
 
   table(

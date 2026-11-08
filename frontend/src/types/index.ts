@@ -176,6 +176,7 @@ export interface WorkItem {
   description: string;
   quantity: number;
   unit: string;
+  rate?: number; // ₹ per unit
   budget?: number;
   location?: string;
   status?: WorkItemStatus;

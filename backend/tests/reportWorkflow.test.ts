@@ -250,4 +250,31 @@ describe('daily report workflow', () => {
     });
     assert.equal(badExpense.status, 400);
   });
+
+  test('work item amount is quantity × rate per unit, computed on the server', async () => {
+    const r = await api('POST', '/api/v1/daily-reports', {
+      token: ic.token,
+      body: {
+        project: project._id,
+        titleOfWork: 'Excavation with JCB',
+        workDate: new Date(Date.now() - 86400000).toISOString(),
+        workSummary: 'Foundation excavation',
+        status: 'DRAFT',
+        workItems: [
+          // client sends a tampered amount; server must use 6 hours × ₹1,250
+          { description: 'JCB excavation', quantity: 6, unit: 'hours', rate: 1250, budget: 999999 },
+          { description: 'Steel unloading', quantity: 2.5, unit: 'Tons', rate: 800 },
+          { description: 'Site cleaning', quantity: 1, unit: 'nos', budget: 1500 }, // lump sum, no rate
+        ],
+      },
+    });
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    const items = r.body.report.workItems;
+    assert.equal(items[0].rate, 1250);
+    assert.equal(items[0].budget, 7500);
+    assert.equal(items[1].budget, 2000);
+    assert.equal(items[2].rate, undefined);
+    assert.equal(items[2].budget, 1500);
+    assert.equal(r.body.report.totalWorkBudget, 11000);
+  });
 });

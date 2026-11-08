@@ -285,6 +285,7 @@ export const DailyReportDetailPage: React.FC = () => {
                   <th className="py-3 px-4">Location</th>
                   <th className="py-3 px-4 text-right">Quantity</th>
                   <th className="py-3 px-4 text-left">Unit</th>
+                  <th className="py-3 px-4 text-right">Rate (₹)</th>
                   <th className="py-3 px-4">Status</th>
                   <th className="py-3 px-4 text-right">Work Budget (₹)</th>
                 </tr>
@@ -299,6 +300,9 @@ export const DailyReportDetailPage: React.FC = () => {
                     <td className="py-3 px-4 text-slate-600">{item.location || '—'}</td>
                     <td className="py-3 px-4 text-right font-bold text-navy-900">{item.quantity}</td>
                     <td className="py-3 px-4 text-slate-600 font-medium">{item.unit}</td>
+                    <td className="py-3 px-4 text-right text-slate-700 whitespace-nowrap">
+                      {item.rate ? `${formatRupees(item.rate)} / ${item.unit}` : '—'}
+                    </td>
                     <td className="py-3 px-4">
                       {item.status ? (
                         <span className={`inline-block px-2 py-0.5 rounded-md border text-[11px] font-semibold whitespace-nowrap ${statusChip[item.status] || ''}`}>
@@ -317,7 +321,7 @@ export const DailyReportDetailPage: React.FC = () => {
               </tbody>
               <tfoot>
                 <tr className="border-t-2 border-slate-200 bg-slate-50/80 font-bold">
-                  <td className="py-3 px-4 text-slate-700" colSpan={5}>
+                  <td className="py-3 px-4 text-slate-700" colSpan={6}>
                     <div className="flex flex-col">
                       <span className="text-xs uppercase tracking-wider text-slate-600">Total Work Budget (Estimated)</span>
                       <span className="text-[11px] text-slate-400 font-normal">Planned task allocations; separate from actual paid expenses</span>

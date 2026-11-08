@@ -108,11 +108,15 @@ export function sanitizeReportInput(
         if (!description) return null;
         const status = WORK_STATUSES.includes(item?.status) ? item.status : undefined;
         const progress = item?.progressPercent;
+        const quantity = nonNegativeNumber(item?.quantity);
+        const rate = nonNegativeNumber(item?.rate);
         return {
           description,
-          quantity: nonNegativeNumber(item?.quantity),
+          quantity,
           unit: cleanText(item?.unit, 30) || 'units',
-          budget: nonNegativeNumber(item?.budget ?? item?.budgetINR),
+          rate: rate > 0 ? rate : undefined,
+          // With a rate, the amount is always quantity × rate (never trusted from the client)
+          budget: rate > 0 ? Math.round(quantity * rate * 100) / 100 : nonNegativeNumber(item?.budget ?? item?.budgetINR),
           location: cleanText(item?.location, 150),
           status,
           progressPercent:

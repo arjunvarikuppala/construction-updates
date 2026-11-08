@@ -100,6 +100,7 @@ const DailyReportSchema = new Schema<IDailyReport>(
         description: { type: String, required: true, trim: true, maxlength: 300 },
         quantity: { type: Number, required: true, min: 0 },
         unit: { type: String, required: true, trim: true, maxlength: 30 },
+        rate: { type: Number, min: 0 }, // ₹ per unit (per hour, per ton, ...)
         budget: { type: Number, default: 0, min: 0 },
         location: { type: String, trim: true, maxlength: 150 },
         status: { type: String, enum: ['NOT_STARTED', 'IN_PROGRESS', 'COMPLETED'] },

@@ -36,7 +36,15 @@ export const WorkItemsInput: React.FC<WorkItemsInputProps> = ({ items, onChange,
     onChange([...items.slice(0, index + 1), copy, ...items.slice(index + 1)]);
   };
   const updateItem = (index: number, patch: Partial<WorkItem>) => {
-    onChange(items.map((it, i) => (i === index ? { ...it, ...patch } : it)));
+    onChange(
+      items.map((it, i) => {
+        if (i !== index) return it;
+        const next = { ...it, ...patch };
+        // Rate per unit drives the amount: quantity × rate
+        if (next.rate && next.rate > 0) next.budget = Math.round((Number(next.quantity) || 0) * next.rate * 100) / 100;
+        return next;
+      })
+    );
   };
 
   const totalWorkBudget = items.reduce((sum, item) => sum + (Number(item.budget) || 0), 0);
@@ -100,7 +108,7 @@ export const WorkItemsInput: React.FC<WorkItemsInputProps> = ({ items, onChange,
                 </button>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-6 gap-2">
                 <Input
                   type="number"
                   inputMode="decimal"
@@ -108,7 +116,7 @@ export const WorkItemsInput: React.FC<WorkItemsInputProps> = ({ items, onChange,
                   placeholder="Quantity"
                   min="0"
                   step="any"
-                  value={item.quantity === 0 && !item.description ? '' : item.quantity ?? ''}
+                  value={item.quantity ? item.quantity : ''}
                   onChange={(e) => updateItem(index, { quantity: Math.max(0, parseFloat(e.target.value) || 0) })}
                 />
                 <Select
@@ -117,7 +125,26 @@ export const WorkItemsInput: React.FC<WorkItemsInputProps> = ({ items, onChange,
                   onChange={(e) => updateItem(index, { unit: e.target.value })}
                   options={(UNIT_OPTIONS.includes(item.unit) ? UNIT_OPTIONS : [item.unit, ...UNIT_OPTIONS]).map((u) => ({ value: u, label: u }))}
                 />
-                <div className="col-span-2">
+                <div className="col-span-2 sm:col-span-2">
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="any"
+                    aria-label={`Rate in rupees per ${item.unit}`}
+                    placeholder="Rate"
+                    className="!pr-16 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    leftIcon={<span className="text-xs font-bold text-slate-500">₹</span>}
+                    rightIcon={<span className="text-[11px] text-slate-500 whitespace-nowrap">/ {item.unit}</span>}
+                    value={!item.rate ? '' : item.rate}
+                    onChange={(e) => {
+                      const parsed = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                      const rate = isNaN(parsed) || parsed < 0 ? 0 : parsed;
+                      updateItem(index, rate > 0 ? { rate } : { rate: undefined });
+                    }}
+                  />
+                </div>
+                <div className="col-span-2 sm:col-span-6">
                   <Input
                     aria-label="Location (floor / block / section)"
                     placeholder="Location: e.g. Block B, 3rd floor"
@@ -127,6 +154,13 @@ export const WorkItemsInput: React.FC<WorkItemsInputProps> = ({ items, onChange,
                   />
                 </div>
               </div>
+
+              {!!item.rate && item.rate > 0 && (
+                <p className="text-xs text-slate-600">
+                  {item.quantity || 0} {item.unit} × {formatRupees(item.rate)} / {item.unit} ={' '}
+                  <span className="font-bold text-emerald-700">{formatRupees(item.budget || 0)}</span>
+                </p>
+              )}
 
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mr-1">Status</span>
@@ -170,8 +204,11 @@ export const WorkItemsInput: React.FC<WorkItemsInputProps> = ({ items, onChange,
               </div>
 
               <details className="group">
-                <summary className="cursor-pointer text-xs font-semibold text-navy-800 select-none py-1">Budget &amp; remarks (optional)</summary>
+                <summary className="cursor-pointer text-xs font-semibold text-navy-800 select-none py-1">
+                  {item.rate ? 'Remarks (optional)' : 'Lump-sum amount & remarks (optional)'}
+                </summary>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
+                  {!item.rate && (
                   <Input
                     type="number"
                     inputMode="decimal"
@@ -186,6 +223,7 @@ export const WorkItemsInput: React.FC<WorkItemsInputProps> = ({ items, onChange,
                       updateItem(index, { budget: isNaN(parsed) || parsed < 0 ? 0 : parsed });
                     }}
                   />
+                  )}
                   <Input
                     placeholder="Remarks for this item"
                     aria-label="Work item remarks"
@@ -204,7 +242,7 @@ export const WorkItemsInput: React.FC<WorkItemsInputProps> = ({ items, onChange,
             </Button>
             {totalWorkBudget > 0 && (
               <span className="text-xs font-semibold text-slate-600">
-                Allocated budget: <span className="text-emerald-700">{formatRupees(totalWorkBudget)}</span>
+                Total amount: <span className="text-emerald-700">{formatRupees(totalWorkBudget)}</span>
               </span>
             )}
           </div>
