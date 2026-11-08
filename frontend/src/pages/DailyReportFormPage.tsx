@@ -482,37 +482,6 @@ export const DailyReportFormPage: React.FC = () => {
           <WorkItemsInput items={form.workItems} onChange={(v) => set('workItems', v)} defaultLocation={form.workLocation} />
           {err('workItems') && <p className="mt-1 text-xs text-rose-600 font-semibold">{err('workItems')}</p>}
         </div>
-        <div id="field-overallProgressPercent" className="grid grid-cols-[1fr_auto] items-end gap-3">
-          <label className="block">
-            <span className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">Overall site progress</span>
-            <input
-              type="range"
-              min={0}
-              max={100}
-              step={1}
-              value={form.overallProgressPercent === '' ? 0 : Number(form.overallProgressPercent)}
-              onChange={(e) => set('overallProgressPercent', e.target.value)}
-              className="w-full accent-amber-500 h-11"
-              aria-label="Overall site completion percent"
-            />
-          </label>
-          <div className="flex items-center gap-1 pb-1">
-            <input
-              type="number"
-              inputMode="numeric"
-              min={0}
-              max={100}
-              placeholder="—"
-              aria-label="Overall site completion percent value"
-              value={form.overallProgressPercent}
-              onChange={(e) => set('overallProgressPercent', e.target.value)}
-              className="w-16 min-h-[44px] rounded-xl border border-slate-300 px-2 text-center text-sm font-bold"
-            />
-            <span className="text-sm text-slate-600">%</span>
-          </div>
-          {err('overallProgressPercent') && <p className="col-span-2 text-xs text-rose-600 font-semibold">{err('overallProgressPercent')}</p>}
-          <p className="col-span-2 text-[11px] text-slate-500 -mt-1">Your estimate of total project completion. Used for the MD’s progress charts; leave blank if unsure.</p>
-        </div>
       </SectionCard>
 
       {/* 3. Labour */}
