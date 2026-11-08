@@ -1,5 +1,6 @@
 import mongoose, { Schema, Document } from 'mongoose';
 import { ExpenseCategory, ExpenseStatus } from '../types/index.js';
+import type { GstDetails } from '../services/gstService.js';
 
 export interface IExpense extends Document {
   project: mongoose.Types.ObjectId;
@@ -10,6 +11,8 @@ export interface IExpense extends Document {
   amount: number; // Stored as integer PAISE (e.g., ₹5,000 = 500000 paise)
   vendor: string;
   receiptUrl?: string;
+  /** Present only for GST bills; amount = taxable + GST (all in paise) */
+  gst?: GstDetails;
   status: ExpenseStatus;
   reviewedBy?: mongoose.Types.ObjectId;
   reviewedAt?: Date;
@@ -24,6 +27,21 @@ export interface IExpense extends Document {
   createdAt: Date;
   updatedAt: Date;
 }
+
+const GstSchema = new Schema(
+  {
+    vendorGstin: { type: String, required: true, uppercase: true, trim: true, maxlength: 15 },
+    invoiceNumber: { type: String, required: true, trim: true, maxlength: 40 },
+    invoiceDate: { type: Date, required: true },
+    taxablePaise: { type: Number, required: true, min: 0 },
+    ratePercent: { type: Number, required: true, enum: [0, 5, 12, 18, 28] },
+    cgstPaise: { type: Number, default: 0, min: 0 },
+    sgstPaise: { type: Number, default: 0, min: 0 },
+    igstPaise: { type: Number, default: 0, min: 0 },
+    interState: { type: Boolean, default: false },
+  },
+  { _id: false }
+);
 
 const ExpenseSchema = new Schema<IExpense>(
   {
@@ -80,6 +98,7 @@ const ExpenseSchema = new Schema<IExpense>(
       trim: true,
       maxlength: 200,
     },
+    gst: { type: GstSchema, default: undefined },
     receiptUrl: {
       type: String,
       trim: true,
@@ -136,6 +155,7 @@ const ExpenseSchema = new Schema<IExpense>(
 );
 
 ExpenseSchema.index({ project: 1, status: 1 });
+ExpenseSchema.index({ 'gst.invoiceDate': 1 });
 ExpenseSchema.index({ project: 1, date: -1 });
 
 export const Expense = mongoose.model<IExpense>('Expense', ExpenseSchema);

@@ -1,4 +1,5 @@
 import React from 'react';
+import { GstSummary } from './GstSummary.js';
 import { useNavigate } from 'react-router-dom';
 import { ExternalLink, CheckCircle2, XCircle, RefreshCw, Eye, ArrowRight } from 'lucide-react';
 import { Expense } from '../../types/index.js';
@@ -57,6 +58,8 @@ export const ExpenseCard: React.FC<ExpenseCardProps> = ({
         )}
         <span className="truncate font-medium">{expense.project?.name || expense.vendor}</span>
       </div>
+
+      <GstSummary expense={expense} compact />
 
       {/* Row 4: Category and Bill Receipt action in a light-grey panel */}
       <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-100 flex items-center justify-between gap-2">

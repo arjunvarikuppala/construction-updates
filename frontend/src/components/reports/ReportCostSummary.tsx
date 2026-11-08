@@ -8,9 +8,11 @@ export interface ReportCostTotals {
   materials: number;
   machinery: number;
   expenses: number;
+  /** GST paid on GST bills (already inside `expenses`); claimable as input tax credit */
+  gst?: number;
 }
 
-const LINES: Array<{ key: keyof ReportCostTotals; label: string }> = [
+const LINES: Array<{ key: Exclude<keyof ReportCostTotals, 'gst'>; label: string }> = [
   { key: 'work', label: 'Work items' },
   { key: 'labour', label: 'Labour (daily wages)' },
   { key: 'materials', label: 'Materials' },
@@ -49,6 +51,18 @@ export const ReportCostSummary: React.FC<{ totals: ReportCostTotals; className?:
         <span className="text-sm font-bold uppercase tracking-wider">Grand total</span>
         <span className="text-xl font-black text-amber-400 tabular-nums">{formatRupees(grand)}</span>
       </div>
+      {!!totals.gst && totals.gst > 0 && (
+        <dl className="px-4 sm:px-5 py-2.5 bg-emerald-50 text-xs divide-y divide-emerald-100">
+          <div className="flex items-center justify-between gap-3 py-1">
+            <dt className="text-emerald-900">Includes GST on bills (input tax credit — claimable)</dt>
+            <dd className="font-bold text-emerald-800 tabular-nums">{formatRupees(totals.gst)}</dd>
+          </div>
+          <div className="flex items-center justify-between gap-3 py-1">
+            <dt className="text-emerald-900">Cost to BKR INFRA after GST credit</dt>
+            <dd className="font-bold text-navy-950 tabular-nums">{formatRupees(Math.round((grand - totals.gst) * 100) / 100)}</dd>
+          </div>
+        </dl>
+      )}
     </section>
   );
 };

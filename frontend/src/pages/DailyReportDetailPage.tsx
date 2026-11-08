@@ -32,6 +32,7 @@ const exportDailyReportPdf = (...args: Parameters<typeof import('../utils/export
   import('../utils/exportPdf.js').then((m) => m.exportDailyReportPdf(...args));
 import { formatRupees, formatINR } from '../utils/currency.js';
 import { ReportCostSummary } from '../components/reports/ReportCostSummary.js';
+import { GstSummary } from '../components/expenses/GstSummary.js';
 import {
   expenseCategoryLabel,
   labourCategoryLabel,
@@ -453,6 +454,7 @@ export const DailyReportDetailPage: React.FC = () => {
           materials: materialTotal,
           machinery: machineryTotal,
           expenses: expenseTotal / 100, // stored in paise
+          gst: expenses.reduce((s, e) => s + (e.gst ? e.gst.cgstPaise + e.gst.sgstPaise + e.gst.igstPaise : 0), 0) / 100,
         }}
       />
 
@@ -480,6 +482,7 @@ export const DailyReportDetailPage: React.FC = () => {
                 )}
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-navy-950 break-words">{e.description}</p>
+                  {e.gst && <div className="my-1"><GstSummary expense={e} compact /></div>}
                   <p className="text-slate-500">
                     {expenseCategoryLabel(e.category)}
                     {e.vendor && e.vendor !== 'Not specified' ? ` · ${e.vendor}` : ''}

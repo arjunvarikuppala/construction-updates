@@ -14,6 +14,7 @@ import {
   RefreshCw,
   HardHat,
   X,
+  Settings,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.js';
 import { useSync } from '../../hooks/useSync.js';
@@ -90,6 +91,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { to: '/payments', label: 'Payments & Transfers', icon: CreditCard },
     { to: '/messages', label: 'Project Messages', icon: MessageSquare },
     { to: '/team', label: 'In-Charge Accounts', icon: Users },
+    { to: '/settings', label: 'Company & GST', icon: Settings },
     { to: '/audit-logs', label: 'Activity Audit Log', icon: History },
   ];
 

@@ -28,6 +28,7 @@ import {
 import { api, ApiError } from '../api/client.js';
 import { SHIFT_OPTIONS, materialCost, machineCost } from '../utils/reportOptions.js';
 import { ReportCostSummary, ReportCostTotals } from '../components/reports/ReportCostSummary.js';
+import { gstFromSaved, gstDraftToPayload, gstDraftProblems, gstDraftTaxRupees } from '../utils/gst.js';
 import { newRequestId } from '../utils/upload.js';
 import { paiseToRupees } from '../utils/currency.js';
 
@@ -97,6 +98,7 @@ function fromReport(r: DailyReport): FormState {
       vendor: e.vendor === 'Not specified' ? '' : e.vendor,
       receiptUrl: e.receiptUrl,
       status: e.status,
+      gst: gstFromSaved(e.gst),
     })),
     issuesAndDelays: r.issuesAndDelays || '',
     nextDayPlan: r.nextDayPlan || '',
@@ -242,6 +244,10 @@ export const DailyReportFormPage: React.FC = () => {
         if ((e.description.trim() || e.amount) && (!e.description.trim() || !(amt >= 1))) {
           errs.expenses = `Expense ${i + 1}: add a description and an amount of at least ₹1`;
         }
+        if (e.gst?.isGstBill && (!e.status || e.status === 'DRAFT')) {
+          const problems = gstDraftProblems(e.gst, !!e.receiptUrl);
+          if (problems.length) errs.expenses = `Expense ${i + 1} (GST bill): ${problems[0]}`;
+        }
       });
     }
     return errs;
@@ -283,7 +289,15 @@ export const DailyReportFormPage: React.FC = () => {
         machinery: form.machinery.filter((m) => m.name.trim()),
         expenses: form.expenses
           .filter((e) => e.description.trim() || e.amount)
-          .map((e) => ({ _id: e._id, category: e.category, description: e.description.trim(), amount: e.amount, vendor: e.vendor.trim(), receiptUrl: e.receiptUrl })),
+          .map((e) => ({
+            _id: e._id,
+            category: e.category,
+            description: e.description.trim(),
+            amount: e.amount,
+            vendor: e.vendor.trim(),
+            receiptUrl: e.receiptUrl,
+            gst: gstDraftToPayload(e.gst),
+          })),
         equipmentDetails: form.machinery
           .filter((m) => m.name.trim())
           .map((m) => `${m.quantity}× ${m.name}${m.hoursUsed ? ` (${m.hoursUsed} hrs)` : ''}`)
@@ -355,6 +369,7 @@ export const DailyReportFormPage: React.FC = () => {
     materials: form.materials.reduce((sum, m) => sum + materialCost(m), 0),
     machinery: form.machinery.reduce((sum, m) => sum + machineCost(m), 0),
     expenses: form.expenses.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0),
+    gst: form.expenses.reduce((sum, e) => sum + (e.gst?.isGstBill ? gstDraftTaxRupees(e.gst) : 0), 0),
   };
 
   return (

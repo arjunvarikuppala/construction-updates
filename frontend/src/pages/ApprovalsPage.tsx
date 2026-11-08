@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { GstSummary } from '../components/expenses/GstSummary.js';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   FileCheck2,
@@ -156,6 +157,8 @@ export const ApprovalsPage: React.FC = () => {
                     <h3 className="text-base font-bold text-navy-950">{expense.vendor}</h3>
                     <p className="text-xs text-slate-600 mt-0.5">{expense.description}</p>
                   </div>
+
+                  <GstSummary expense={expense} />
 
                   {expense.receiptUrl && (
                     <div className="pt-1">

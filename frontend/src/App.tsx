@@ -21,6 +21,7 @@ const InChargeUsersPage = lazy(() => import('./pages/InChargeUsersPage.js').then
 const AuditLogsPage = lazy(() => import('./pages/AuditLogsPage.js').then((m) => ({ default: m.AuditLogsPage })));
 const PaymentsPage = lazy(() => import('./pages/PaymentsPage.js').then((m) => ({ default: m.PaymentsPage })));
 const ProjectMessagesPage = lazy(() => import('./pages/ProjectMessagesPage.js').then((m) => ({ default: m.ProjectMessagesPage })));
+const CompanySettingsPage = lazy(() => import('./pages/CompanySettingsPage.js').then((m) => ({ default: m.CompanySettingsPage })));
 const NotificationsPage = lazy(() => import('./pages/NotificationsPage.js').then((m) => ({ default: m.NotificationsPage })));
 
 // Protected Route Guard
@@ -125,6 +126,16 @@ export const App: React.FC = () => {
           }
         />
 
+
+        {/* Company & GST (MD only) */}
+        <Route
+          path="settings"
+          element={
+            <OwnerRoute>
+              <CompanySettingsPage />
+            </OwnerRoute>
+          }
+        />
 
         {/* Audit Trail */}
         <Route

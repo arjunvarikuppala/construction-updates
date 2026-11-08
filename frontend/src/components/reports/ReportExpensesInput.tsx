@@ -7,6 +7,8 @@ import { ReceiptThumb } from '../common/SecureMedia.js';
 import { EXPENSE_CATEGORY_OPTIONS } from '../../utils/reportOptions.js';
 import { uploadFileWithProgress } from '../../utils/upload.js';
 import { formatRupees } from '../../utils/currency.js';
+import { GstBillFields } from '../expenses/GstBillFields.js';
+import { gstDraftTotalRupees, useCompanySettings } from '../../utils/gst.js';
 
 interface Props {
   expenses: ReportExpenseDraft[];
@@ -28,6 +30,8 @@ const isLocked = (e: ReportExpenseDraft) => !!e._id && !!e.status && e.status !=
 export const ReportExpensesInput: React.FC<Props> = ({ expenses, onChange, onBusyChange }) => {
   const [uploading, setUploading] = useState<Record<number, number>>({});
   const [errors, setErrors] = useState<Record<number, string>>({});
+  const { data: company } = useCompanySettings();
+  const companyGstin = company?.gstin || undefined;
 
   const update = (i: number, patch: Partial<ReportExpenseDraft>) =>
     onChange((prev) => prev.map((e, idx) => (idx === i ? { ...e, ...patch } : e)));
@@ -91,10 +95,12 @@ export const ReportExpensesInput: React.FC<Props> = ({ expenses, onChange, onBus
                     inputMode="decimal"
                     min="1"
                     step="0.01"
-                    aria-label="Amount in rupees"
+                    aria-label={e.gst?.isGstBill ? 'Bill total in rupees (calculated from GST)' : 'Amount in rupees'}
                     placeholder="Amount"
                     leftIcon={<span className="text-xs font-bold text-slate-500">₹</span>}
                     value={e.amount}
+                    readOnly={!!e.gst?.isGstBill}
+                    className={e.gst?.isGstBill ? 'bg-slate-100 font-semibold' : ''}
                     onChange={(ev) => update(i, { amount: ev.target.value })}
                   />
                 </div>
@@ -115,6 +121,15 @@ export const ReportExpensesInput: React.FC<Props> = ({ expenses, onChange, onBus
               </div>
               <Input aria-label="Expense description" placeholder="What was it for? e.g. 50 bags cement" maxLength={1000} value={e.description} onChange={(ev) => update(i, { description: ev.target.value })} />
               <Input aria-label="Vendor or payee" placeholder="Vendor / paid to (optional)" maxLength={200} value={e.vendor} onChange={(ev) => update(i, { vendor: ev.target.value })} />
+              <GstBillFields
+                value={e.gst}
+                companyGstin={companyGstin}
+                disabled={locked}
+                onChange={(gst) => {
+                  const total = gst?.isGstBill ? gstDraftTotalRupees(gst, companyGstin) : undefined;
+                  update(i, { gst, ...(total !== undefined ? { amount: total > 0 ? String(total) : '' } : {}) });
+                }}
+              />
 
               <div className="flex flex-wrap items-center gap-2">
                 {e.receiptUrl && <ReceiptThumb url={e.receiptUrl} className="w-12 h-12" label="bill" />}

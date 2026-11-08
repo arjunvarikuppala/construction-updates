@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import { sanitizeGstBill, getCompanyGstinForProject } from '../services/gstService.js';
 import mongoose from 'mongoose';
 import { Expense } from '../models/Expense.js';
 import { Project } from '../models/Project.js';
@@ -149,7 +150,14 @@ export async function createExpense(req: AuthenticatedRequest, res: Response): P
 
     const projectDoc = accessCheck.project!;
 
-    const amountInPaise = req.body.isPaise === true ? numericAmount : rupeesToPaise(numericAmount);
+    // GST bill: the total is taxable value + GST, computed here (never trusted from the client)
+    const gstResult = sanitizeGstBill(req.body.gst, await getCompanyGstinForProject(projectDoc._id), 'GST bill');
+    if (gstResult.errors.length) {
+      res.status(400).json({ success: false, message: gstResult.errors[0], errors: gstResult.errors });
+      return;
+    }
+
+    const amountInPaise = gstResult.totalPaise ?? (req.body.isPaise === true ? numericAmount : rupeesToPaise(numericAmount));
     if (!Number.isInteger(amountInPaise) || amountInPaise < 100) {
       res.status(400).json({ success: false, message: 'Amount must be greater than zero' });
       return;
@@ -187,6 +195,7 @@ export async function createExpense(req: AuthenticatedRequest, res: Response): P
       amount: amountInPaise,
       vendor: vendor.trim(),
       receiptUrl: receiptUrl?.trim(),
+      gst: gstResult.gst,
       status: status === 'DRAFT' ? 'DRAFT' : 'PENDING',
       resubmissionCount: 0,
     });
@@ -343,6 +352,15 @@ export async function resubmitExpense(req: AuthenticatedRequest, res: Response):
     }
     if (vendor) expense.vendor = vendor.trim();
     if (receiptUrl) expense.receiptUrl = receiptUrl.trim();
+    if (req.body.gst !== undefined) {
+      const gstResult = sanitizeGstBill(req.body.gst, await getCompanyGstinForProject(expense.project), 'GST bill');
+      if (gstResult.errors.length) {
+        res.status(400).json({ success: false, message: gstResult.errors[0], errors: gstResult.errors });
+        return;
+      }
+      expense.gst = gstResult.gst;
+      if (gstResult.totalPaise !== undefined) expense.amount = gstResult.totalPaise;
+    }
 
     expense.previousNotes = `Resubmitted. Prior rejection reason: ${expense.rejectionReason}. Resubmission note: ${notes || 'Updated details'}`;
     expense.status = 'PENDING';

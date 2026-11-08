@@ -16,7 +16,9 @@ import { Button } from '../components/common/Button.js';
 import { Input, Textarea, Select } from '../components/common/Input.js';
 import { useAuth } from '../context/AuthContext.js';
 import { useToast } from '../context/ToastContext.js';
-import { Project, ExpenseCategory } from '../types/index.js';
+import { Project, ExpenseCategory, GstBillDraft } from '../types/index.js';
+import { GstBillFields } from '../components/expenses/GstBillFields.js';
+import { gstDraftTotalRupees, gstDraftProblems, gstDraftToPayload, useCompanySettings } from '../utils/gst.js';
 import { api } from '../api/client.js';
 
 import { SecureImage } from '../components/common/SecureMedia.js';
@@ -45,6 +47,18 @@ export const ExpenseFormPage: React.FC = () => {
   const [receiptUrl, setReceiptUrl] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [gst, setGst] = useState<GstBillDraft | undefined>(undefined);
+  const { data: company } = useCompanySettings();
+  const companyGstin = company?.gstin || undefined;
+  const isGstBill = !!gst?.isGstBill;
+
+  // For a GST bill the amount is taxable value + GST (the server recomputes it)
+  useEffect(() => {
+    if (gst?.isGstBill) {
+      const total = gstDraftTotalRupees(gst, companyGstin);
+      setAmountRupees(total > 0 ? String(total) : '');
+    }
+  }, [gst, companyGstin]);
 
   // Fetch projects
   const { data: projectsData } = useQuery({
@@ -103,6 +117,13 @@ export const ExpenseFormPage: React.FC = () => {
       toastError('Description is required');
       return;
     }
+    if (gst?.isGstBill && status === 'PENDING') {
+      const problems = gstDraftProblems(gst, !!receiptUrl);
+      if (problems.length) {
+        toastError(`GST bill: ${problems[0]}`);
+        return;
+      }
+    }
 
     setIsSubmitting(true);
     try {
@@ -114,6 +135,7 @@ export const ExpenseFormPage: React.FC = () => {
         vendor: vendor.trim(),
         description: description.trim(),
         receiptUrl: receiptUrl.trim() || undefined,
+        gst: gstDraftToPayload(gst),
         status,
       };
 
@@ -184,11 +206,14 @@ export const ExpenseFormPage: React.FC = () => {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Input
-                label="Amount (in ₹ Rupees)"
+                label={isGstBill ? 'Bill total incl. GST (₹)' : 'Amount (in ₹ Rupees)'}
                 type="number"
                 step="0.01"
                 placeholder="E.g., 85000"
                 value={amountRupees}
+                readOnly={isGstBill}
+                className={isGstBill ? 'bg-slate-100 font-semibold' : ''}
+                helperText={isGstBill ? 'Calculated from the taxable value and GST rate below' : undefined}
                 onChange={(e) => setAmountRupees(e.target.value)}
                 required
               />
@@ -201,6 +226,8 @@ export const ExpenseFormPage: React.FC = () => {
                 required
               />
             </div>
+
+            <GstBillFields value={gst} onChange={setGst} companyGstin={companyGstin} />
 
             <Input
               label="Vendor / Payee / Subcontractor Name"

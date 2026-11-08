@@ -214,6 +214,29 @@ export interface MachineryItem {
 export type ReportShift = 'DAY' | 'NIGHT' | 'GENERAL' | 'DOUBLE';
 
 /** An expense row inside the daily report form (amount entered in rupees). */
+/** GST bill details as entered in a form (rupees as strings). */
+export interface GstBillDraft {
+  isGstBill: boolean;
+  vendorGstin: string;
+  invoiceNumber: string;
+  invoiceDate: string; // yyyy-mm-dd
+  taxable: string; // ₹, before GST
+  ratePercent: number;
+}
+
+/** GST details stored on an expense (paise). */
+export interface ExpenseGst {
+  vendorGstin: string;
+  invoiceNumber: string;
+  invoiceDate: string;
+  taxablePaise: number;
+  ratePercent: number;
+  cgstPaise: number;
+  sgstPaise: number;
+  igstPaise: number;
+  interState: boolean;
+}
+
 export interface ReportExpenseDraft {
   _id?: string;
   category: ExpenseCategory;
@@ -222,6 +245,7 @@ export interface ReportExpenseDraft {
   vendor: string;
   receiptUrl?: string;
   status?: ExpenseStatus;
+  gst?: GstBillDraft;
 }
 
 export interface SitePhoto {
@@ -339,6 +363,7 @@ export interface Expense {
   amount: number; // in paise
   vendor: string;
   receiptUrl?: string;
+  gst?: ExpenseGst | null;
   status: ExpenseStatus;
   reviewedBy?: {
     _id: string;

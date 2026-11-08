@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import { getCompanyGstinForProject } from '../services/gstService.js';
 import mongoose from 'mongoose';
 import { DailyReport, IDailyReport } from '../models/DailyReport.js';
 import { Project } from '../models/Project.js';
@@ -550,7 +551,10 @@ export async function createDailyReport(req: AuthenticatedRequest, res: Response
     }
 
     const { data, errors } = sanitizeReportInput(req.body, { partial: false });
-    const { expenses, errors: expenseErrors } = sanitizeReportExpenses(req.body.expenses);
+    const { expenses, errors: expenseErrors } = sanitizeReportExpenses(
+      req.body.expenses,
+      await getCompanyGstinForProject(req.body.project)
+    );
     const allErrors = [...errors, ...expenseErrors];
     if (allErrors.length) {
       res.status(400).json({ success: false, message: allErrors[0], errors: allErrors });
@@ -665,7 +669,10 @@ export async function updateDailyReport(req: AuthenticatedRequest, res: Response
     }
 
     const { data, errors } = sanitizeReportInput(req.body, { partial: true });
-    const expenseInput = req.body.expenses !== undefined ? sanitizeReportExpenses(req.body.expenses) : null;
+    const expenseInput =
+      req.body.expenses !== undefined
+        ? sanitizeReportExpenses(req.body.expenses, await getCompanyGstinForProject(report.project))
+        : null;
     const allErrors = [...errors, ...(expenseInput?.errors || [])];
     if (allErrors.length) {
       res.status(400).json({ success: false, message: allErrors[0], errors: allErrors });

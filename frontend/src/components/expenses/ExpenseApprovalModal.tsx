@@ -1,4 +1,5 @@
 import React from 'react';
+import { GstSummary } from './GstSummary.js';
 import { CheckCircle2, AlertTriangle, ExternalLink, Receipt } from 'lucide-react';
 import { Modal } from '../common/Modal.js';
 import { Button } from '../common/Button.js';
@@ -63,6 +64,8 @@ export const ExpenseApprovalModal: React.FC<ExpenseApprovalModalProps> = ({
             </div>
           </div>
         </div>
+
+        <GstSummary expense={expense} />
 
         {/* Details Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-slate-50 p-4 rounded-xl border border-slate-200">

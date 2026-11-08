@@ -3,6 +3,7 @@ import autoTable from 'jspdf-autotable';
 import { Expense, Project, DailyReport, WorkItem } from '../types/index.js';
 import { formatINR, formatRupees, paiseToRupees } from './currency.js';
 import { formatDate } from './dates.js';
+import { api } from '../api/client.js';
 import { materialCost, machineCost } from './reportOptions.js';
 
 export function exportProjectExpensesPdf(project: Project, expenses: Expense[]) {
@@ -126,7 +127,13 @@ export function exportProjectExpensesPdf(project: Project, expenses: Expense[]) 
   doc.save(`BKR-INFRA-${project.code}-Expenses.pdf`);
 }
 
-export function exportDailyReportPdf(report: DailyReport) {
+export async function exportDailyReportPdf(report: DailyReport) {
+  // BKR INFRA legal name / GSTIN for the header (optional)
+  const company = await api
+    .get<{ settings: { legalName: string; gstin: string } }>('/company-settings')
+    .then((r) => r.settings)
+    .catch(() => null);
+
   const doc = new jsPDF();
 
   // Header Banner
@@ -136,7 +143,13 @@ export function exportDailyReportPdf(report: DailyReport) {
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(14);
   doc.setFont('helvetica', 'bold');
-  doc.text('BKR INFRA — Daily Construction Progress Report', 14, 13);
+  doc.text(`${company?.legalName || 'BKR INFRA'} — Daily Construction Progress Report`, 14, 13);
+  if (company?.gstin) {
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`GSTIN: ${company.gstin}`, 196, 13, { align: 'right' });
+    doc.setFont('helvetica', 'bold');
+  }
 
   doc.setFontSize(12);
   doc.setTextColor(245, 166, 35); // Amber
@@ -304,12 +317,21 @@ export function exportDailyReportPdf(report: DailyReport) {
     ['Expenses & bills', expenseRupees],
   ];
   const grandTotal = Math.round(sections.reduce((s, [, v]) => s + v, 0) * 100) / 100;
+  const gstPaid = expenses.reduce((s, e) => s + (e.gst ? e.gst.cgstPaise + e.gst.sgstPaise + e.gst.igstPaise : 0), 0) / 100;
   table(
     ['Cost summary', 'Amount (INR)'],
     sections.map(([label, v]) => [label, v > 0 ? formatRupees(v) : '—']),
     [20, 43, 74],
     [255, 255, 255],
-    [['GRAND TOTAL', formatRupees(grandTotal)]]
+    [
+      ['GRAND TOTAL', formatRupees(grandTotal)],
+      ...(gstPaid > 0
+        ? [
+            ['  of which GST on bills (input tax credit)', formatRupees(gstPaid)],
+            ['  Cost after GST credit', formatRupees(Math.round((grandTotal - gstPaid) * 100) / 100)],
+          ]
+        : []),
+    ]
   );
 
   textBlock('Issues & Delays:', report.issuesAndDelays);

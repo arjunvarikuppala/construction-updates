@@ -8,6 +8,7 @@ import { AuthenticatedRequest } from '../types/index.js';
 import { verifyUserProjectAccess } from '../middleware/auth.js';
 import { getAccessibleProjectIds } from '../services/tenantService.js';
 import { paiseToRupees, formatIndianCurrency } from '../utils/currency.js';
+import { CompanySettings } from '../models/CompanySettings.js';
 
 export async function exportExpensesExcel(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
@@ -48,7 +49,7 @@ export async function exportExpensesExcel(req: AuthenticatedRequest, res: Respon
       .sort({ date: -1 });
 
     const workbook = new ExcelJS.Workbook();
-    workbook.creator = 'SiteTrack Construction Management';
+    workbook.creator = 'BKR INFRA';
     workbook.created = new Date();
 
     const sheet = workbook.addWorksheet('Expenses Register');
@@ -138,12 +139,101 @@ export async function exportExpensesExcel(req: AuthenticatedRequest, res: Respon
     );
     res.setHeader(
       'Content-Disposition',
-      `attachment; filename="SiteTrack-Expenses-${Date.now()}.xlsx"`
+      `attachment; filename="BKR-INFRA-Expenses-${Date.now()}.xlsx"`
     );
 
     await workbook.xlsx.write(res);
     res.end();
   } catch (error: any) {
     res.status(500).json({ success: false, message: 'Failed to export Excel report', error: error.message });
+  }
+}
+
+/**
+ * GET /api/v1/export/gst-register?month=YYYY-MM  (MD only)
+ * Monthly GST purchase register for the CA: every GST bill (by invoice date) across
+ * the MD's projects, with taxable value and CGST / SGST / IGST. Rejected bills are excluded.
+ */
+export async function exportGstRegister(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const month = String(req.query.month || '');
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+      res.status(400).json({ success: false, message: 'Choose a month in YYYY-MM format.' });
+      return;
+    }
+    const [y, m] = month.split('-').map(Number);
+    // Invoice dates are calendar dates; use an IST-safe window around the month
+    const from = new Date(Date.UTC(y, m - 1, 1) - 330 * 60000);
+    const to = new Date(Date.UTC(y, m, 1) - 330 * 60000);
+
+    const expenses = await Expense.find({
+      project: { $in: await getAccessibleProjectIds(req.user!) },
+      'gst.invoiceDate': { $gte: from, $lt: to },
+      status: { $in: ['PENDING', 'APPROVED'] },
+    })
+      .populate('project', 'name code')
+      .sort({ 'gst.invoiceDate': 1 });
+
+    const company = await CompanySettings.findOne({ owner: req.user!.userId });
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'BKR INFRA';
+    workbook.created = new Date();
+    const sheet = workbook.addWorksheet(`GST ${month}`);
+
+    sheet.addRow([`${company?.legalName || 'BKR INFRA'} — GST purchase register`]).font = { bold: true, size: 13 };
+    sheet.addRow([`GSTIN: ${company?.gstin || 'not set (add it in Company & GST settings)'}`, '', `Month: ${month}`]);
+    sheet.addRow([]);
+
+    const header = sheet.addRow([
+      'Invoice date', 'Invoice no.', 'Vendor', 'Vendor GSTIN', 'Project', 'Description',
+      'Taxable value (₹)', 'GST %', 'CGST (₹)', 'SGST (₹)', 'IGST (₹)', 'Invoice total (₹)', 'Status', 'Bill attached',
+    ]);
+    header.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    header.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF142B4A' } };
+    [14, 16, 26, 18, 22, 32, 16, 8, 12, 12, 12, 16, 12, 12].forEach((w, i) => (sheet.getColumn(i + 1).width = w));
+
+    const totals = { taxable: 0, cgst: 0, sgst: 0, igst: 0, total: 0 };
+    expenses.forEach((e: any) => {
+      const g = e.gst;
+      totals.taxable += g.taxablePaise;
+      totals.cgst += g.cgstPaise;
+      totals.sgst += g.sgstPaise;
+      totals.igst += g.igstPaise;
+      totals.total += e.amount;
+      sheet.addRow([
+        new Date(g.invoiceDate).toISOString().slice(0, 10),
+        g.invoiceNumber,
+        e.vendor,
+        g.vendorGstin,
+        e.project ? `${e.project.code} – ${e.project.name}` : '',
+        e.description,
+        paiseToRupees(g.taxablePaise),
+        g.ratePercent,
+        paiseToRupees(g.cgstPaise),
+        paiseToRupees(g.sgstPaise),
+        paiseToRupees(g.igstPaise),
+        paiseToRupees(e.amount),
+        e.status === 'APPROVED' ? 'Approved' : 'Pending approval',
+        e.receiptUrl ? 'Yes' : 'NO',
+      ]);
+    });
+
+    sheet.addRow([]);
+    const totalRow = sheet.addRow([
+      'TOTAL', `${expenses.length} invoice(s)`, '', '', '', '',
+      paiseToRupees(totals.taxable), '', paiseToRupees(totals.cgst), paiseToRupees(totals.sgst),
+      paiseToRupees(totals.igst), paiseToRupees(totals.total),
+    ]);
+    totalRow.font = { bold: true };
+    sheet.addRow(['Input tax credit (CGST + SGST + IGST)', '', '', '', '', '', '', '', '', '', paiseToRupees(totals.cgst + totals.sgst + totals.igst)]).font = { bold: true, color: { argb: 'FF15803D' } };
+    [7, 9, 10, 11, 12].forEach((c) => (sheet.getColumn(c).numFmt = '#,##0.00'));
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="BKR-INFRA-GST-Register-${month}.xlsx"`);
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Failed to export GST register' });
   }
 }

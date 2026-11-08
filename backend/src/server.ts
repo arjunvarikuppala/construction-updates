@@ -21,6 +21,7 @@ import auditRoutes from './routes/auditRoutes.js';
 import paymentRoutes from './routes/paymentRoutes.js';
 import communicationRoutes from './routes/communicationRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
+import companySettingsRoutes from './routes/companySettingsRoutes.js';
 import { fileApiRouter, serveSignedUpload } from './routes/fileRoutes.js';
 import { initSocketService } from './services/socketService.js';
 import { seedInitialData } from './scripts/seed.js';
@@ -146,6 +147,7 @@ app.use('/api/v1/audit-logs', auditRoutes);
 app.use('/api/v1/payments', paymentRoutes);
 app.use('/api/v1/projects/:projectId/messages', communicationRoutes);
 app.use('/api/v1/notifications', notificationRoutes);
+app.use('/api/v1/company-settings', companySettingsRoutes);
 app.use('/api/v1/files', fileApiRouter);
 
 // Unknown API routes

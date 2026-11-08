@@ -2,6 +2,7 @@
  * Daily report input validation and linked-expense handling.
  */
 import mongoose from 'mongoose';
+import { sanitizeGstBill, GstDetails } from './gstService.js';
 import { Expense, IExpense } from '../models/Expense.js';
 import { IDailyReport } from '../models/DailyReport.js';
 import { ExpenseCategory } from '../types/index.js';
@@ -240,10 +241,17 @@ export interface ReportExpenseInput {
   amountPaise: number;
   vendor: string;
   receiptUrl?: string;
+  gst?: GstDetails;
 }
 
-/** Validate the `expenses` array of a report payload. Amounts accepted as rupees or integer paise. */
-export function sanitizeReportExpenses(raw: unknown): { expenses: ReportExpenseInput[]; errors: string[] } {
+/**
+ * Validate the `expenses` array of a report payload. Amounts accepted as rupees or integer paise.
+ * GST bills: the amount is taxable value + GST, computed from the `gst` block.
+ */
+export function sanitizeReportExpenses(
+  raw: unknown,
+  companyGstin?: string | null
+): { expenses: ReportExpenseInput[]; errors: string[] } {
   const errors: string[] = [];
   const expenses: ReportExpenseInput[] = [];
   arr(raw).forEach((e: any, idx: number) => {
@@ -260,6 +268,10 @@ export function sanitizeReportExpenses(raw: unknown): { expenses: ReportExpenseI
       amountPaise = Number.isFinite(r) ? Math.round(r * 100) : null;
     }
 
+    const gstResult = sanitizeGstBill(e?.gst, companyGstin, `Expense ${n}`);
+    errors.push(...gstResult.errors);
+    if (gstResult.totalPaise !== undefined) amountPaise = gstResult.totalPaise;
+
     if (!description && !amountPaise) return; // fully empty row: ignore
     if (!category) errors.push(`Expense ${n}: choose a category`);
     if (!description) errors.push(`Expense ${n}: description is required`);
@@ -275,6 +287,7 @@ export function sanitizeReportExpenses(raw: unknown): { expenses: ReportExpenseI
         amountPaise,
         vendor: cleanText(e?.vendor, 200) || 'Not specified',
         receiptUrl: e?.receiptUrl || undefined,
+        gst: gstResult.gst,
       });
     }
   });
@@ -308,6 +321,7 @@ export async function syncReportExpenses(
         current.amount = input.amountPaise;
         current.vendor = input.vendor;
         current.receiptUrl = input.receiptUrl;
+        current.gst = input.gst;
         current.date = report.workDate;
         await current.save();
       }
@@ -322,6 +336,7 @@ export async function syncReportExpenses(
       amount: input.amountPaise,
       vendor: input.vendor,
       receiptUrl: input.receiptUrl,
+      gst: input.gst,
       status: isDraft ? 'DRAFT' : 'PENDING',
       resubmissionCount: 0,
       dailyReport: report._id,
