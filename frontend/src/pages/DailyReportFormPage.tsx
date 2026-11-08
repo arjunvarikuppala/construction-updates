@@ -470,7 +470,6 @@ export const DailyReportFormPage: React.FC = () => {
         <div id="field-workSummary">
           <Textarea
             label="Detailed description"
-            placeholder="What was done, where, and how much. e.g. Reinforcement for slab S2 checked by engineer; 42 m³ M25 concrete poured 7am–3pm; curing started."
             rows={4}
             maxLength={2000}
             value={form.workSummary}
