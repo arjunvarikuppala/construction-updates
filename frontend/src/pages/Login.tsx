@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { HardHat, Lock, Mail, ArrowRight, Eye, EyeOff } from 'lucide-react';
+import { Lock, Mail, ArrowRight, Eye, EyeOff, ClipboardList, ShieldCheck, IndianRupee } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.js';
 import { useToast } from '../context/ToastContext.js';
 import { Button } from '../components/common/Button.js';
@@ -82,22 +82,63 @@ export const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-      {/* Brand Header */}
-      <div className="sm:mx-auto sm:w-full sm:max-w-md text-center px-4">
-        <div className="w-14 h-14 rounded-2xl bg-navy-900 text-amber-500 mx-auto flex items-center justify-center shadow-lg border border-navy-800">
-          <HardHat className="w-8 h-8" />
-        </div>
-        <h2 className="mt-4 text-2xl sm:text-3xl font-extrabold text-navy-950 tracking-tight">
-          BKR INFRA
-        </h2>
-        <p className="mt-1 text-sm text-slate-500 font-medium">
-          Site Reports &amp; Payments
-        </p>
-      </div>
+    <div className="min-h-screen flex bg-background">
+      {/* Brand panel (desktop) */}
+      <aside className="hidden lg:flex lg:w-[46%] xl:w-1/2 relative flex-col justify-between bg-white border-r border-slate-200 px-12 xl:px-16 py-12 overflow-hidden">
+        {/* Soft brand-colour wash */}
+        <div aria-hidden className="pointer-events-none absolute -top-40 -right-40 w-[28rem] h-[28rem] rounded-full bg-[#2A3384]/[0.06]" />
+        <div aria-hidden className="pointer-events-none absolute -bottom-48 -left-32 w-[30rem] h-[30rem] rounded-full bg-[#D9262E]/[0.05]" />
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md px-4">
-        <div className="bg-white py-8 px-6 shadow-card rounded-2xl border border-slate-200/90 sm:px-10">
+        <div className="relative">
+          <img src="/brand/bkr-logo-transparent.png" alt="BKR Infra Developers" className="w-56 xl:w-64 h-auto" draggable={false} />
+        </div>
+
+        <div className="relative max-w-md">
+          <p className="text-xs font-bold tracking-[0.18em] uppercase text-[#D9262E]">Site Reports &amp; Payments</p>
+          <h1 className="mt-3 text-3xl xl:text-4xl font-extrabold text-navy-950 leading-tight tracking-tight">
+            Every site, every report, every payment — in one place.
+          </h1>
+          <ul className="mt-8 space-y-4">
+            {[
+              { icon: ClipboardList, title: 'Daily site reports', text: 'Work, labour, materials and machinery, straight from the site.' },
+              { icon: ShieldCheck, title: 'Expense approvals', text: 'Bills and GST receipts reviewed by the Managing Director.' },
+              { icon: IndianRupee, title: 'Payments on record', text: 'Every payout tracked against the project it belongs to.' },
+            ].map(({ icon: Icon, title, text }) => (
+              <li key={title} className="flex gap-3.5">
+                <span className="w-10 h-10 rounded-xl bg-[#2A3384]/[0.08] text-[#2A3384] flex items-center justify-center flex-shrink-0">
+                  <Icon className="w-5 h-5" />
+                </span>
+                <span>
+                  <span className="block text-sm font-semibold text-navy-950">{title}</span>
+                  <span className="block text-sm text-slate-500">{text}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="relative flex items-center gap-3 text-xs text-slate-400">
+          <span className="h-0.5 w-8 bg-[#D9262E] rounded-full" />
+          <span>© {new Date().getFullYear()} BKR Infra Developers</span>
+        </div>
+      </aside>
+
+      {/* Sign-in panel */}
+      <main className="flex-1 flex flex-col justify-center px-4 py-10 sm:px-6 lg:px-12">
+        <div className="w-full max-w-md mx-auto">
+          {/* Logo for phones / tablets */}
+          <div className="lg:hidden text-center mb-8">
+            <img src="/brand/bkr-logo-transparent.png" alt="BKR Infra Developers" className="w-32 sm:w-36 h-auto mx-auto" draggable={false} />
+            <p className="mt-3 text-xs font-bold tracking-[0.18em] uppercase text-slate-500">Site Reports &amp; Payments</p>
+          </div>
+
+          <div className="mb-6 hidden lg:block">
+            <h2 className="text-2xl font-bold text-navy-950 tracking-tight">Sign in</h2>
+            <p className="mt-1 text-sm text-slate-500">Use the email and password registered for you.</p>
+          </div>
+
+        <div className="bg-white py-8 px-6 shadow-card rounded-2xl border border-slate-200/90 sm:px-8">
+          <h2 className="lg:hidden text-lg font-bold text-navy-950 mb-4">Sign in to your account</h2>
           <form className="space-y-4" onSubmit={handleLogin}>
             {errorMessage && (
               <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 font-medium">
@@ -166,10 +207,11 @@ export const Login: React.FC = () => {
         </div>
 
         {/* Footer info */}
-        <p className="mt-4 text-center text-xs text-slate-400">
-          BKR INFRA • Internal site management
+        <p className="mt-6 text-center text-xs text-slate-400">
+          Authorised BKR Infra staff only
         </p>
-      </div>
+        </div>
+      </main>
     </div>
   );
 };

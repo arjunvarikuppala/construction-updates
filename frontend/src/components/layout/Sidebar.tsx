@@ -12,10 +12,10 @@ import {
   MessageSquare,
   LogOut,
   RefreshCw,
-  HardHat,
   X,
   Settings,
 } from 'lucide-react';
+import { BrandLogo } from '../common/BrandLogo.js';
 import { useAuth } from '../../context/AuthContext.js';
 import { useSync } from '../../hooks/useSync.js';
 import { useUnreadReports } from '../../hooks/useUnreadReports.js';
@@ -195,9 +195,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <aside className="hidden md:flex flex-col w-64 bg-navy-950 text-slate-300 border-r border-navy-900 select-none flex-shrink-0">
         {/* Brand Header */}
         <div className="h-16 flex items-center px-6 border-b border-navy-900 gap-3 flex-shrink-0">
-          <div className="w-9 h-9 rounded-xl bg-amber-500 text-navy-950 flex items-center justify-center font-black shadow-sm flex-shrink-0">
-            <HardHat className="w-5 h-5 text-navy-950" />
-          </div>
+          <BrandLogo className="w-10 h-10" />
           <div>
             <span className="text-lg font-bold tracking-tight text-white block">BKR INFRA</span>
             <span className="text-[11px] block text-slate-400 font-medium -mt-0.5">Site Reports &amp; Payments</span>
@@ -238,9 +236,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {/* Drawer Header */}
             <div className="h-16 flex items-center justify-between px-5 border-b border-navy-900 flex-shrink-0">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-amber-500 text-navy-950 flex items-center justify-center font-black shadow-sm">
-                  <HardHat className="w-4 h-4 text-navy-950" />
-                </div>
+                <BrandLogo className="w-9 h-9" />
                 <div>
                   <span className="text-base font-bold text-white block">BKR INFRA</span>
                   <span className="text-[10px] block text-slate-400 font-medium -mt-0.5">Site Reports &amp; Payments</span>

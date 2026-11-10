@@ -1,10 +1,12 @@
 // Bump the version whenever caching rules change: old caches are deleted on activate.
-const CACHE_NAME = 'bkr-infra-static-v3';
+const CACHE_NAME = 'bkr-infra-static-v5';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/manifest.webmanifest',
-  '/icons/icon.svg',
+  '/icons/favicon-64.png',
+  '/brand/bkr-logo.png',
+  '/brand/bkr-logo-transparent.png',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
 ];

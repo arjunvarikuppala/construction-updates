@@ -1,5 +1,5 @@
 {
-  "name": "BKR INFRA Site Reports",
+  "name": "BKR Infra Developers",
   "short_name": "BKR INFRA",
   "description": "Unified Construction Project, Daily Report, and Expense Management System",
   "start_url": "/",
@@ -19,14 +19,12 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
-    },
-    {
-      "src": "/icons/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml"
     }
   ],
-  "categories": ["business", "productivity"],
+  "categories": [
+    "business",
+    "productivity"
+  ],
   "shortcuts": [
     {
       "name": "New Daily Report",

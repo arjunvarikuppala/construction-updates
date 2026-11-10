@@ -1,5 +1,6 @@
 import React from 'react';
-import { HardHat, RefreshCw, LogOut, Menu } from 'lucide-react';
+import { RefreshCw, LogOut, Menu } from 'lucide-react';
+import { BrandLogo } from '../common/BrandLogo.js';
 import { useAuth } from '../../context/AuthContext.js';
 import { useSync } from '../../hooks/useSync.js';
 import { useUnreadReports } from '../../hooks/useUnreadReports.js';
@@ -35,9 +36,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({ onOpenMobileDrawer }) => {
         </button>
 
         <div className="md:hidden flex items-center gap-1.5 sm:gap-2 shrink-0">
-          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-navy-900 text-amber-500 flex items-center justify-center font-bold flex-shrink-0">
-            <HardHat className="w-4 h-4" />
-          </div>
+          <BrandLogo variant="plain" className="w-8 h-8 sm:w-9 sm:h-9" />
           <span className="font-bold text-navy-950 text-sm sm:text-base tracking-tight whitespace-nowrap">BKR INFRA</span>
         </div>
 
