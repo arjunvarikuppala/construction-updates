@@ -722,7 +722,7 @@ export type MessageContextType = 'GENERAL' | 'DAILY_REPORT' | 'EXPENSE' | 'PAYME
 export interface MessageAttachment {
   url: string;
   name: string;
-  type: 'image' | 'video' | 'pdf' | 'document' | 'other' | string;
+  type: 'image' | 'video' | 'audio' | 'pdf' | 'document' | 'other' | string;
   mimeType?: string;
   size?: number;
   storageKey?: string;
@@ -763,6 +763,15 @@ export interface ProjectMessage {
         };
     readAt: string;
   }>;
+  reactions?: Array<{
+    emoji: string;
+    user: string | { _id?: string; id?: string; name?: string; role?: string };
+    createdAt?: string;
+  }>;
+  editedAt?: string | null;
+  deletedAt?: string | null;
+  pinnedAt?: string | null;
+  pinnedBy?: string | { _id?: string; name?: string; role?: string } | null;
   createdAt: string;
   updatedAt: string;
 }

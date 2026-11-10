@@ -32,6 +32,16 @@ export interface IProjectMessage extends Document {
     user: mongoose.Types.ObjectId;
     readAt: Date;
   }>;
+  reactions: Array<{
+    emoji: string;
+    user: mongoose.Types.ObjectId;
+    createdAt: Date;
+  }>;
+  editedAt?: Date;
+  deletedAt?: Date;
+  deletedBy?: mongoose.Types.ObjectId;
+  pinnedAt?: Date;
+  pinnedBy?: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -110,6 +120,19 @@ const ProjectMessageSchema = new Schema<IProjectMessage>(
         _id: false,
       },
     ],
+    reactions: [
+      {
+        emoji: { type: String, required: true, maxlength: 16 },
+        user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+        createdAt: { type: Date, default: Date.now },
+        _id: false,
+      },
+    ],
+    editedAt: { type: Date },
+    deletedAt: { type: Date },
+    deletedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+    pinnedAt: { type: Date, index: true },
+    pinnedBy: { type: Schema.Types.ObjectId, ref: 'User' },
   },
   {
     timestamps: true,
@@ -117,6 +140,8 @@ const ProjectMessageSchema = new Schema<IProjectMessage>(
 );
 
 ProjectMessageSchema.pre('validate', function (next) {
+  // A message "deleted for everyone" keeps its slot in the thread but carries no content
+  if (this.deletedAt) return next();
   const hasContent = Boolean(this.content && this.content.trim().length > 0);
   const hasAttachments = Array.isArray(this.attachments) && this.attachments.length > 0;
   if (!hasContent && !hasAttachments) {

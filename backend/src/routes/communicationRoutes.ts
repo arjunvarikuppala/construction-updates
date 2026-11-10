@@ -8,6 +8,12 @@ import {
   uploadProjectMessageMedia,
   serveProjectMessageMedia,
   listShareableProjectFiles,
+  editProjectMessage,
+  deleteProjectMessage,
+  reactToProjectMessage,
+  pinProjectMessage,
+  listPinnedMessages,
+  searchProjectMessages,
 } from '../controllers/communicationController.js';
 import { authenticate } from '../middleware/auth.js';
 import { upload } from '../middleware/upload.js';
@@ -33,5 +39,13 @@ router.post(
   uploadProjectMessageMedia
 );
 router.get('/media/:filename', serveProjectMessageMedia);
+
+// Advanced chat: pins, search, edit, delete-for-everyone, reactions
+router.get('/pinned', listPinnedMessages);
+router.get('/search', searchProjectMessages);
+router.patch('/:messageId', editProjectMessage);
+router.delete('/:messageId', deleteProjectMessage);
+router.post('/:messageId/reactions', reactToProjectMessage);
+router.put('/:messageId/pin', pinProjectMessage);
 
 export default router;

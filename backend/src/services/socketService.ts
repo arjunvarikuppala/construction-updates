@@ -179,6 +179,18 @@ export function initSocketService(httpServer: HttpServer, allowedOrigins?: strin
       socket.join('role:MD');
     }
 
+    // Join/leave both await an access check, so a quick leave → join (channel
+    // switch, React remount) could finish out of order and drop the socket from
+    // the room. Each request gets a sequence number; only the latest one wins.
+    let roomSeq = 0;
+    const latestRoomOp = new Map<string, number>();
+    const markRoomOp = (projectId: string) => {
+      roomSeq += 1;
+      latestRoomOp.set(String(projectId), roomSeq);
+      return roomSeq;
+    };
+    const isLatestRoomOp = (projectId: string, seq: number) => latestRoomOp.get(String(projectId)) === seq;
+
     // Helper for joining a project channel
     const handleJoinProject = async (projectId: string, callback?: (res: any) => void) => {
       try {
@@ -187,7 +199,13 @@ export function initSocketService(httpServer: HttpServer, allowedOrigins?: strin
           return;
         }
 
+        const seq = markRoomOp(projectId);
         const access = await verifyUserProjectAccess(projectId, user.userId, user.role);
+        if (!isLatestRoomOp(projectId, seq)) {
+          // A later leave for this channel arrived while we were checking access
+          if (callback) callback({ success: false, message: 'Superseded by a later leave.' });
+          return;
+        }
         if (!access.allowed) {
           if (callback) callback({ success: false, message: 'Forbidden. You are not assigned to this project.' });
           return;
@@ -225,11 +243,14 @@ export function initSocketService(httpServer: HttpServer, allowedOrigins?: strin
     // Helper for leaving a project channel
     const handleLeaveProject = async (projectId: string) => {
       const passedId = String(projectId);
+      const seq = markRoomOp(passedId);
       socket.leave(`project:${passedId}`);
       presence?.activeProjects.delete(passedId);
 
       try {
         const access = await verifyUserProjectAccess(projectId, user.userId, user.role);
+        // A newer join for this channel already re-added the socket — keep it
+        if (!isLatestRoomOp(passedId, seq)) return;
         if (access.project) {
           const canonicalId = access.project._id.toString();
           socket.leave(`project:${canonicalId}`);
@@ -269,6 +290,22 @@ export function initSocketService(httpServer: HttpServer, allowedOrigins?: strin
         });
       }
     });
+
+    // Typing indicator: relayed only into rooms this socket joined (access-checked on join),
+    // and never back to the typist's own devices.
+    const relayTyping = (data: { projectId?: string } | undefined, isTyping: boolean) => {
+      const projectId = data?.projectId ? String(data.projectId) : '';
+      if (!projectId || !socket.rooms.has(`project:${projectId}`)) return;
+      socket.to(`project:${projectId}`).except(`user:${user.userId}`).emit('typing:update', {
+        projectId,
+        userId: user.userId,
+        name: user.name,
+        role: user.role,
+        isTyping,
+      });
+    };
+    socket.on('typing:start', (data) => relayTyping(data, true));
+    socket.on('typing:stop', (data) => relayTyping(data, false));
 
     socket.on('disconnect', () => {
       if (presence) {

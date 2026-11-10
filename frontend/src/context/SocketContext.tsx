@@ -113,6 +113,24 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     });
 
+    // Edits, deletes, reactions and pins replace the message in place
+    socketInstance.on('message:updated', (payload: any) => {
+      const message = payload?.message;
+      if (!message?._id || !message.project) return;
+      const projId =
+        typeof message.project === 'object' ? String(message.project._id || message.project.id) : String(message.project);
+      queryClient.setQueriesData({ queryKey: ['project-messages', projId] }, (old: any) => {
+        if (!old || !Array.isArray(old.messages)) return old;
+        return {
+          ...old,
+          messages: old.messages.map((m: any) => (String(m._id || m.id) === String(message._id) ? message : m)),
+        };
+      });
+      if (payload.change === 'pinned' || payload.change === 'unpinned' || payload.change === 'deleted' || payload.change === 'edited') {
+        queryClient.invalidateQueries({ queryKey: ['project-pinned', projId] });
+      }
+    });
+
     // Real-time message seen updates (blue checkmarks)
     socketInstance.on('messages:seen', (data) => {
       if (data?.projectId) {

@@ -28,6 +28,9 @@ import {
   WifiOff,
   CornerUpLeft,
   FolderOpen,
+  Mic,
+  Pin,
+  Ban,
 } from 'lucide-react';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.js';
@@ -54,7 +57,26 @@ import {
   uploadWithProgress,
   formatFileSize,
   fileTypeLabel,
+  isAudioAttachment,
 } from '../components/chat/ChatParts.js';
+import {
+  DayDivider,
+  dayKey,
+  ReactionChips,
+  MessageActions,
+  PinnedBar,
+  ChatSearchPanel,
+  TypingIndicator,
+  useTypingEmitter,
+  useTypingUsers,
+  VoiceRecorder,
+  VoiceNotePlayer,
+  EditComposerBar,
+  JumpToLatest,
+  isVoiceRecordingSupported,
+  canStillModify,
+  idOf,
+} from '../components/chat/AdvancedChat.js';
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
 const ALLOWED_DOC_TYPES = ['application/pdf'];
@@ -138,6 +160,16 @@ export const ProjectMessagesPage: React.FC = () => {
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const clientMessageIdRef = useRef<string | null>(null);
 
+  // Advanced chat state
+  const [editTarget, setEditTarget] = useState<ProjectMessage | null>(null);
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [sendingVoice, setSendingVoice] = useState(false);
+  const [showJump, setShowJump] = useState(false);
+  const [newBelow, setNewBelow] = useState(0);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
   // Fetch Projects list
   const { data: projectsData, isLoading: isLoadingProjects } = useQuery({
     queryKey: ['projects'],
@@ -207,6 +239,10 @@ export const ProjectMessagesPage: React.FC = () => {
       }
 
       setReplyTarget(null);
+      setEditTarget(null);
+      setSearchOpen(false);
+      setRecording(false);
+      setContent('');
       clientMessageIdRef.current = null;
       setMobileView('chat');
       navigate(`/messages/${targetProjectId}`);
@@ -258,6 +294,8 @@ export const ProjectMessagesPage: React.FC = () => {
 
   const participants = presenceData?.participants || [];
   const currentUserId = user?.id || (user as any)?._id;
+  const typingNames = useTypingUsers(socket, activeProjectId, String(currentUserId || ''));
+  const typingEmitter = useTypingEmitter(socket, activeProjectId);
 
   const otherParticipants = participants.filter((p) => p.userId !== currentUserId);
   const otherOnlineParticipants = otherParticipants.filter((p) => p.isOnline);
@@ -316,6 +354,22 @@ export const ProjectMessagesPage: React.FC = () => {
     const threshold = 120;
     const isBottom = el.scrollHeight - el.scrollTop - el.clientHeight <= threshold;
     isNearBottomRef.current = isBottom;
+    setShowJump(!isBottom);
+    if (isBottom) setNewBelow(0);
+  }, []);
+
+  // The feed also changes size when bars above/below it appear (edit, reply, typing)
+  useEffect(() => {
+    const el = messagesContainerRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => handleScroll());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [handleScroll, activeProjectId]);
+
+  const scrollToLatest = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    setNewBelow(0);
   }, []);
 
   // 2. Incoming or updated messages: smooth scroll ONLY if user is near bottom or sent own message
@@ -331,6 +385,9 @@ export const ProjectMessagesPage: React.FC = () => {
 
       if (isMine || isNearBottomRef.current) {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      } else {
+        const added = messages.length - prevMessagesCountRef.current;
+        setNewBelow((n) => n + added);
       }
     }
     prevMessagesCountRef.current = messages.length;
@@ -389,6 +446,127 @@ export const ProjectMessagesPage: React.FC = () => {
       showToast(err.message || 'Failed to deliver message', 'error');
     },
   });
+
+  // Replace one message in the cache (edit / delete / reaction / pin results)
+  const applyUpdatedMessage = useCallback(
+    (updated: any) => {
+      if (!updated?._id) return;
+      queryClient.setQueriesData<any>({ queryKey: ['project-messages', activeProjectId] }, (old: any) => {
+        if (!old || !Array.isArray(old.messages)) return old;
+        return { ...old, messages: old.messages.map((m: any) => (idOf(m) === String(updated._id) ? updated : m)) };
+      });
+    },
+    [queryClient, activeProjectId]
+  );
+
+  const editMutation = useMutation({
+    mutationFn: ({ id, content: text }: { id: string; content: string }) =>
+      api.patch<{ data: ProjectMessage }>(`/projects/${activeProjectId}/messages/${id}`, { content: text }),
+    onSuccess: (res) => {
+      applyUpdatedMessage(res.data);
+      setEditTarget(null);
+      setContent('');
+      queryClient.invalidateQueries({ queryKey: ['project-pinned', activeProjectId] });
+    },
+    onError: (err: any) => showToast(err.message || 'Could not edit the message', 'error'),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.delete<{ data: ProjectMessage }>(`/projects/${activeProjectId}/messages/${id}`),
+    onSuccess: (res) => {
+      applyUpdatedMessage(res.data);
+      queryClient.invalidateQueries({ queryKey: ['project-pinned', activeProjectId] });
+    },
+    onError: (err: any) => showToast(err.message || 'Could not delete the message', 'error'),
+  });
+
+  const reactMutation = useMutation({
+    mutationFn: ({ id, emoji }: { id: string; emoji: string }) =>
+      api.post<{ data: ProjectMessage }>(`/projects/${activeProjectId}/messages/${id}/reactions`, { emoji }),
+    onSuccess: (res) => applyUpdatedMessage(res.data),
+    onError: (err: any) => showToast(err.message || 'Could not add reaction', 'error'),
+  });
+
+  const pinMutation = useMutation({
+    mutationFn: ({ id, pinned }: { id: string; pinned: boolean }) =>
+      api.put<{ data: ProjectMessage }>(`/projects/${activeProjectId}/messages/${id}/pin`, { pinned }),
+    onSuccess: (res, vars) => {
+      applyUpdatedMessage(res.data);
+      queryClient.invalidateQueries({ queryKey: ['project-pinned', activeProjectId] });
+      showToast(vars.pinned ? 'Message pinned for everyone in this channel' : 'Message unpinned', 'success');
+    },
+    onError: (err: any) => showToast(err.message || 'Could not update pin', 'error'),
+  });
+
+  const startEdit = (m: ProjectMessage) => {
+    setReplyTarget(null);
+    setEditTarget(m);
+    setContent(m.content || '');
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  };
+
+  const cancelEdit = () => {
+    setEditTarget(null);
+    setContent('');
+  };
+
+  const startReply = (m: ProjectMessage) => {
+    setEditTarget(null);
+    setReplyTarget(m);
+    textareaRef.current?.focus();
+  };
+
+  const confirmDelete = (m: ProjectMessage) => {
+    if (window.confirm('Delete this message for everyone? This cannot be undone.')) {
+      deleteMutation.mutate(idOf(m));
+    }
+  };
+
+  const copyText = async (m: ProjectMessage) => {
+    try {
+      await navigator.clipboard.writeText(m.content || '');
+      showToast('Message copied', 'success');
+    } catch {
+      showToast('Copy is not available in this browser', 'error');
+    }
+  };
+
+  // Voice note: upload the clip, then post it as its own message
+  const sendVoiceNote = async (file: File, durationSeconds: number) => {
+    setRecording(false);
+    if (!activeProjectId) return;
+    const channelId = activeProjectId;
+    setSendingVoice(true);
+    try {
+      const form = new FormData();
+      form.append('files', file);
+      const up = await uploadWithProgress<{ success: boolean; message?: string; attachments: MessageAttachment[] }>(
+        `/projects/${channelId}/messages/upload`,
+        form,
+        () => undefined
+      );
+      const att = up.attachments?.[0];
+      if (!up.success || !att) throw new Error(up.message || 'Upload failed');
+      const res: any = await api.post(`/projects/${channelId}/messages`, {
+        attachments: [{ ...att, duration: durationSeconds }],
+        replyToMessageId: replyTarget ? idOf(replyTarget) : undefined,
+        clientMessageId: `v${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`,
+      });
+      setReplyTarget(null);
+      if (res?.data?._id) {
+        queryClient.setQueriesData<any>({ queryKey: ['project-messages', channelId] }, (old: any) => {
+          if (!old || !Array.isArray(old.messages)) return old;
+          if (old.messages.some((m: any) => idOf(m) === String(res.data._id))) return old;
+          return { ...old, messages: [...old.messages, res.data] };
+        });
+      }
+      requestAnimationFrame(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }));
+    } catch (err: any) {
+      showToast(`Voice note not sent: ${err.message || 'network error'}`, 'error');
+    } finally {
+      setSendingVoice(false);
+    }
+  };
 
   // Upload files to backend
   const uploadFiles = async (filesToUpload: File[]) => {
@@ -613,6 +791,17 @@ export const ProjectMessagesPage: React.FC = () => {
   // Send message
   const handleSend = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    typingEmitter.stop();
+
+    if (editTarget) {
+      const text = content.trim();
+      if (!text && (editTarget.attachments?.length || 0) === 0) {
+        showToast('Message text cannot be empty', 'info');
+        return;
+      }
+      editMutation.mutate({ id: idOf(editTarget), content: text });
+      return;
+    }
 
     const isUploadingAny = stagedAttachments.some((a) => a.uploading);
     if (isUploadingAny) {
@@ -655,6 +844,15 @@ export const ProjectMessagesPage: React.FC = () => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
+    } else if (e.key === 'Escape' && editTarget) {
+      cancelEdit();
+    } else if (e.key === 'ArrowUp' && !content && !editTarget) {
+      // Quick-edit your last message, like desktop chat apps
+      const last = [...outgoingMessages].reverse().find((m) => canStillModify(m) && m.content);
+      if (last) {
+        e.preventDefault();
+        startEdit(last);
+      }
     }
   };
 
@@ -759,9 +957,10 @@ export const ProjectMessagesPage: React.FC = () => {
   const lastSeenAt = lastSeenReaders[0]?.readAt;
 
   const isAnyStagedUploading = stagedAttachments.some((a) => a.uploading);
-  const canSend =
-    (content.trim().length > 0 || stagedAttachments.some((a) => a.uploadedUrl)) &&
-    !isAnyStagedUploading;
+  const canSend = editTarget
+    ? content.trim().length > 0 || (editTarget.attachments?.length || 0) > 0
+    : (content.trim().length > 0 || stagedAttachments.some((a) => a.uploadedUrl)) && !isAnyStagedUploading;
+  const showMic = !editTarget && !content.trim() && stagedAttachments.length === 0 && isVoiceRecordingSupported();
 
   // Determine error status
   const errorStatus = (messagesError as any)?.status;
@@ -1022,8 +1221,21 @@ export const ProjectMessagesPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Right Header: Strictly Linked Accounts Chips (MD and their linked In-Charges) */}
-          <div className="hidden sm:flex items-center gap-2">
+          {/* Right Header: search + linked accounts chips (MD and their linked In-Charges) */}
+          <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => setSearchOpen((v) => !v)}
+            className={`p-2 min-w-[40px] min-h-[40px] flex items-center justify-center rounded-xl cursor-pointer transition-colors ${
+              searchOpen ? 'bg-amber-100 text-amber-800' : 'text-slate-500 hover:text-navy-950 hover:bg-slate-100'
+            }`}
+            aria-label="Search messages"
+            aria-pressed={searchOpen}
+            title="Search messages, photos, documents and voice notes"
+          >
+            <Search className="w-[18px] h-[18px]" />
+          </button>
+          <div className="hidden 2xl:flex items-center gap-2">
             {/* Linked MD */}
             <div
               className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold border transition-all ${
@@ -1112,13 +1324,30 @@ export const ProjectMessagesPage: React.FC = () => {
               </button>
             )}
           </div>
+          </div>
         </div>
 
+        {searchOpen && activeProjectId && (
+          <ChatSearchPanel
+            projectId={activeProjectId}
+            onClose={() => setSearchOpen(false)}
+            onJump={(id) => jumpToMessage(id)}
+          />
+        )}
+        {activeProjectId && (
+          <PinnedBar
+            projectId={activeProjectId}
+            onJump={(id) => jumpToMessage(id)}
+            onUnpin={(id) => pinMutation.mutate({ id, pinned: false })}
+          />
+        )}
+
         {/* Messages Feed */}
+        <div className="relative flex-1 min-h-0 flex flex-col">
         <div
           ref={messagesContainerRef}
           onScroll={handleScroll}
-          className="flex-1 p-6 overflow-y-auto space-y-4 bg-slate-50/30"
+          className="flex-1 p-3 sm:p-6 overflow-y-auto space-y-4 bg-slate-50/30"
         >
           {/* Informational banner when project has no assigned in-charge */}
           {!hasAssignedInCharge && activeProject && (
@@ -1215,8 +1444,11 @@ export const ProjectMessagesPage: React.FC = () => {
               </div>
             </div>
           ) : (
-            messages.map((m: ProjectMessage) => {
-              const id = m._id || m.id;
+            messages.map((m: ProjectMessage, index: number) => {
+              const id = (m._id || m.id) as string;
+              const showDay = index === 0 || dayKey(messages[index - 1].createdAt) !== dayKey(m.createdAt);
+              const isDeleted = Boolean(m.deletedAt);
+              const isPinned = Boolean(m.pinnedAt);
               const isMine =
                 (typeof m.sender === 'object' && m.sender !== null
                   ? (m.sender as any)._id || (m.sender as any).id
@@ -1247,11 +1479,13 @@ export const ProjectMessagesPage: React.FC = () => {
 
               const hasAttachments = m.attachments && m.attachments.length > 0;
 
+              const modifiable = isMine && canStillModify(m);
               return (
+                <React.Fragment key={id}>
+                {showDay && <DayDivider iso={m.createdAt} />}
                 <div
-                  key={id}
                   id={`msg-${id}`}
-                  className={`flex flex-col ${isMine ? 'items-end' : 'items-start'} space-y-1 scroll-mt-24`}
+                  className={`group flex flex-col ${isMine ? 'items-end' : 'items-start'} space-y-1 scroll-mt-24`}
                 >
                   {/* Sender Header */}
                   <div className="flex items-center gap-1.5 px-1 text-[11px] text-slate-400">
@@ -1267,15 +1501,37 @@ export const ProjectMessagesPage: React.FC = () => {
                     </span>
                     <span>•</span>
                     <span>{formatDate(m.createdAt, 'hh:mm a')}</span>
-                    <button
-                      type="button"
-                      onClick={() => setReplyTarget(m)}
-                      className="ml-1 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md font-semibold text-slate-500 hover:text-amber-600 hover:bg-amber-50 cursor-pointer"
-                      aria-label={`Reply to ${m.sender?.name || 'message'}`}
-                    >
-                      <CornerUpLeft className="w-3 h-3" />
-                      <span>Reply</span>
-                    </button>
+                    {isPinned && !isDeleted && (
+                      <span className="inline-flex items-center gap-0.5 text-amber-600 font-semibold" title="Pinned message">
+                        <Pin className="w-3 h-3" />
+                        <span className="hidden sm:inline">Pinned</span>
+                      </span>
+                    )}
+                    {!isDeleted && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => startReply(m)}
+                          className="ml-1 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md font-semibold text-slate-500 hover:text-amber-600 hover:bg-amber-50 cursor-pointer"
+                          aria-label={`Reply to ${m.sender?.name || 'message'}`}
+                        >
+                          <CornerUpLeft className="w-3 h-3" />
+                          <span>Reply</span>
+                        </button>
+                        <MessageActions
+                          isMine={isMine}
+                          isPinned={isPinned}
+                          open={menuOpenId === id}
+                          onOpenChange={(open) => setMenuOpenId(open ? id : null)}
+                          onReply={() => startReply(m)}
+                          onReact={(emoji) => reactMutation.mutate({ id, emoji })}
+                          onCopy={m.content ? () => void copyText(m) : undefined}
+                          onEdit={modifiable && m.content ? () => startEdit(m) : undefined}
+                          onTogglePin={() => pinMutation.mutate({ id, pinned: !isPinned })}
+                          onDelete={modifiable ? () => confirmDelete(m) : undefined}
+                        />
+                      </>
+                    )}
                   </div>
 
                   {/* Message Bubble */}
@@ -1288,8 +1544,15 @@ export const ProjectMessagesPage: React.FC = () => {
                         : 'bg-white text-navy-950 border border-slate-200/90 rounded-tl-none'
                     }`}
                   >
+                    {isDeleted && (
+                      <p className={`text-xs sm:text-sm italic flex items-center gap-1.5 ${isMine ? 'text-slate-300' : 'text-slate-400'}`}>
+                        <Ban className="w-3.5 h-3.5" />
+                        {isMine ? 'You deleted this message' : 'This message was deleted'}
+                      </p>
+                    )}
+
                     {/* Quoted original (reply-to) */}
-                    {m.replyTo && (
+                    {!isDeleted && m.replyTo && (
                       <ReplyQuote
                         original={typeof m.replyTo === 'object' ? m.replyTo : null}
                         dark={isMine}
@@ -1343,6 +1606,10 @@ export const ProjectMessagesPage: React.FC = () => {
                     {/* MEDIA ATTACHMENTS (Images, Videos, PDFs) */}
                     {hasAttachments && (
                       <div className="space-y-2 pt-0.5">
+                        {/* 0. VOICE NOTES */}
+                        {m.attachments.filter(isAudioAttachment).map((att, idx) => (
+                          <VoiceNotePlayer key={`a-${idx}`} attachment={att} dark={isMine} />
+                        ))}
                         {/* 1. IMAGES GRID */}
                         {(() => {
                           const imageAtts = m.attachments.filter(
@@ -1520,6 +1787,11 @@ export const ProjectMessagesPage: React.FC = () => {
 
                     {/* MESSAGE FOOTER: TIME + SEEN STATUS */}
                     <div className="flex items-center justify-end gap-1 pt-1 text-[10px]">
+                      {m.editedAt && !isDeleted && (
+                        <span className="text-slate-400 italic" title={`Edited ${formatDate(m.editedAt, 'dd MMM, hh:mm a')}`}>
+                          edited •
+                        </span>
+                      )}
                       <span className="text-slate-400">
                         {formatDate(m.createdAt, 'hh:mm a')}
                       </span>
@@ -1556,7 +1828,15 @@ export const ProjectMessagesPage: React.FC = () => {
                       )}
                     </div>
                   </div>
+                  {!isDeleted && (
+                    <ReactionChips
+                      message={m}
+                      currentUserId={String(currentUserId || '')}
+                      onToggle={(emoji) => reactMutation.mutate({ id, emoji })}
+                    />
+                  )}
                 </div>
+                </React.Fragment>
               );
             })
           )}
@@ -1574,6 +1854,11 @@ export const ProjectMessagesPage: React.FC = () => {
 
           <div ref={messagesEndRef} />
         </div>
+        {showJump && messages.length > 0 && <JumpToLatest count={newBelow} onClick={scrollToLatest} />}
+        </div>
+
+        <TypingIndicator names={typingNames} />
+        {editTarget && <EditComposerBar target={editTarget} onCancel={cancelEdit} />}
 
         {replyTarget && <ReplyComposerBar target={replyTarget} onCancel={() => setReplyTarget(null)} />}
 
@@ -1727,6 +2012,13 @@ export const ProjectMessagesPage: React.FC = () => {
 
         {/* Message Input Box */}
         <div className="p-3 sm:p-4 border-t border-slate-200 bg-white shrink-0">
+          {recording ? (
+            <VoiceRecorder
+              onSend={(file, secs) => void sendVoiceNote(file, secs)}
+              onCancel={() => setRecording(false)}
+              onError={(msg) => showToast(msg, 'error')}
+            />
+          ) : (
           <form onSubmit={handleSend} className="flex items-end gap-2">
             {/* Attachment Button */}
             <button
@@ -1750,29 +2042,52 @@ export const ProjectMessagesPage: React.FC = () => {
 
             {/* Textarea */}
             <textarea
+              ref={textareaRef}
               rows={1}
-              aria-label="Message"
+              aria-label={editTarget ? 'Edit message' : 'Message'}
               value={content}
-              onChange={(e) => setContent(e.target.value)}
+              onChange={(e) => {
+                setContent(e.target.value);
+                if (e.target.value) typingEmitter.ping();
+                else typingEmitter.stop();
+                // Auto-grow up to the max height
+                e.target.style.height = 'auto';
+                e.target.style.height = `${Math.min(e.target.scrollHeight, 128)}px`;
+              }}
+              onBlur={() => typingEmitter.stop()}
               onKeyDown={handleKeyDown}
-              placeholder=""
+              placeholder={editTarget ? 'Edit your message…' : sendingVoice ? 'Sending voice note…' : 'Type a message'}
               className="flex-1 min-w-0 px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm text-navy-950 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none resize-none max-h-32 min-h-[42px] leading-relaxed bg-slate-50 focus:bg-white transition-colors"
             />
 
-            {/* Send Button */}
+            {/* Send / Voice Button */}
+            {showMic ? (
+              <button
+                type="button"
+                onClick={() => setRecording(true)}
+                disabled={sendingVoice || !activeProjectId}
+                className="rounded-xl min-w-[44px] min-h-[42px] flex items-center justify-center bg-navy-950 hover:bg-navy-900 disabled:opacity-50 cursor-pointer"
+                title="Record a voice note"
+                aria-label="Record voice note"
+              >
+                {sendingVoice ? <Loader2 className="w-4 h-4 text-amber-400 animate-spin" /> : <Mic className="w-4 h-4 text-amber-400" />}
+              </button>
+            ) : (
             <Button
               size="md"
               variant="primary"
               type="submit"
-              isLoading={sendMessageMutation.isPending || isAnyStagedUploading}
+              isLoading={sendMessageMutation.isPending || editMutation.isPending || isAnyStagedUploading}
               disabled={!canSend}
               className="rounded-xl min-w-[44px] min-h-[42px] cursor-pointer"
-              title="Send message"
-              aria-label="Send message"
+              title={editTarget ? 'Save edit' : 'Send message'}
+              aria-label={editTarget ? 'Save edit' : 'Send message'}
             >
-              <Send className="w-4 h-4 text-amber-400" />
+              {editTarget ? <Check className="w-4 h-4 text-amber-400" /> : <Send className="w-4 h-4 text-amber-400" />}
             </Button>
+            )}
           </form>
+          )}
         </div>
       </div>
 

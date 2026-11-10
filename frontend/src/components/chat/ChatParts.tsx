@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Download, FileText, Image as ImageIcon, Film, Loader2, Lock, Receipt, CreditCard, Camera, CornerUpLeft, X } from 'lucide-react';
+import { ArrowLeft, Download, FileText, Image as ImageIcon, Film, Loader2, Lock, Receipt, CreditCard, Camera, CornerUpLeft, X, Mic } from 'lucide-react';
 import { api, API_ORIGIN, ApiError } from '../../api/client.js';
 import { resolveMediaUrl } from '../../utils/media.js';
 import { SecureImage } from '../common/SecureMedia.js';
@@ -27,9 +27,18 @@ export function fileTypeLabel(a: Pick<MessageAttachment, 'mimeType' | 'name' | '
 }
 
 /** Short text describing a message, used in reply quotes. */
-export function messageSummary(m?: Partial<ProjectMessage> | null): { icon: 'doc' | 'image' | 'video' | null; text: string } {
+export function isAudioAttachment(a: MessageAttachment): boolean {
+  return a.type === 'audio' || Boolean(a.mimeType?.startsWith('audio/'));
+}
+
+export function messageSummary(m?: Partial<ProjectMessage> | null): { icon: 'doc' | 'image' | 'video' | 'audio' | null; text: string } {
   if (!m) return { icon: null, text: 'Original message unavailable' };
+  if (m.deletedAt) return { icon: null, text: 'This message was deleted' };
   const att = m.attachments?.[0];
+  if (att && isAudioAttachment(att)) {
+    const secs = Math.round(att.duration || 0);
+    return { icon: 'audio', text: m.content?.trim() || `Voice note${secs ? ` (${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')})` : ''}` };
+  }
   if (att) {
     const icon = isDocAttachment(att) ? 'doc' : att.type === 'video' ? 'video' : 'image';
     const extra = (m.attachments?.length || 0) > 1 ? ` +${(m.attachments?.length || 1) - 1}` : '';
@@ -38,13 +47,15 @@ export function messageSummary(m?: Partial<ProjectMessage> | null): { icon: 'doc
   return { icon: null, text: m.content || '' };
 }
 
-const QuoteIcon: React.FC<{ icon: 'doc' | 'image' | 'video' | null }> = ({ icon }) =>
+const QuoteIcon: React.FC<{ icon: 'doc' | 'image' | 'video' | 'audio' | null }> = ({ icon }) =>
   icon === 'doc' ? (
     <FileText className="w-3.5 h-3.5 shrink-0 text-amber-500" />
   ) : icon === 'image' ? (
     <ImageIcon className="w-3.5 h-3.5 shrink-0 text-sky-500" />
   ) : icon === 'video' ? (
     <Film className="w-3.5 h-3.5 shrink-0 text-sky-500" />
+  ) : icon === 'audio' ? (
+    <Mic className="w-3.5 h-3.5 shrink-0 text-emerald-500" />
   ) : null;
 
 /** Quoted original message shown inside a reply bubble. */

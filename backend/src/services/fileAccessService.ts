@@ -121,10 +121,11 @@ export async function recordUpload(params: {
 export interface ShareableAttachment {
   url: string;
   name: string;
-  type: 'image' | 'video' | 'document';
+  type: 'image' | 'video' | 'audio' | 'document';
   mimeType: string;
   size?: number;
   storageKey?: string;
+  duration?: number;
 }
 
 function inferMime(url: string, fallback?: string): string {
@@ -136,11 +137,15 @@ function inferMime(url: string, fallback?: string): string {
   if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
   if (ext === '.webm') return 'video/webm';
   if (ext === '.mp4' || ext === '.mov') return 'video/mp4';
+  if (ext === '.ogg' || ext === '.oga' || ext === '.opus') return 'audio/ogg';
+  if (ext === '.m4a') return 'audio/mp4';
+  if (ext === '.mp3') return 'audio/mpeg';
   return 'application/octet-stream';
 }
 
-function mediaTypeFor(mime: string): 'image' | 'video' | 'document' {
+function mediaTypeFor(mime: string): 'image' | 'video' | 'audio' | 'document' {
   if (mime.startsWith('image/')) return 'image';
+  if (mime.startsWith('audio/')) return 'audio';
   if (mime.startsWith('video/')) return 'video';
   return 'document';
 }

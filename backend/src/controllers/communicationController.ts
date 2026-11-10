@@ -20,6 +20,12 @@ import { storageService } from '../services/storageService.js';
 const MAX_IMAGE_SIZE = parseInt(process.env.CHAT_MAX_IMAGE_SIZE_MB || '10', 10) * 1024 * 1024;
 const MAX_VIDEO_SIZE = parseInt(process.env.CHAT_MAX_VIDEO_SIZE_MB || '100', 10) * 1024 * 1024;
 const MAX_DOC_SIZE = parseInt(process.env.CHAT_MAX_DOC_SIZE_MB || '25', 10) * 1024 * 1024;
+const MAX_AUDIO_SIZE = parseInt(process.env.CHAT_MAX_AUDIO_SIZE_MB || '15', 10) * 1024 * 1024;
+
+/** Sender may edit or delete-for-everyone within this window. */
+export const MESSAGE_EDIT_WINDOW_MS = 24 * 60 * 60 * 1000;
+export const ALLOWED_REACTIONS = ['👍', '❤️', '😂', '😮', '🙏', '✅', '👀', '🔥'];
+const MAX_PINNED_PER_PROJECT = 10;
 
 const REPLY_POPULATE = {
   path: 'replyTo',
@@ -28,8 +34,23 @@ const REPLY_POPULATE = {
 };
 
 export function validateMediaMagicBytes(
+  filePath: string,
+  declaredMime?: string
+): { valid: boolean; mediaType: 'image' | 'video' | 'audio' | 'document'; detectedMime: string } | null {
+  const result = detectMagicBytes(filePath);
+  if (!result) return null;
+  // Voice notes: WebM / MP4 containers are shared by audio and video. When the client
+  // declares audio, keep it as audio (the container itself was verified above).
+  const wantsAudio = typeof declaredMime === 'string' && declaredMime.toLowerCase().startsWith('audio/');
+  if (wantsAudio && result.mediaType === 'video') {
+    return { valid: true, mediaType: 'audio', detectedMime: result.detectedMime === 'video/webm' ? 'audio/webm' : 'audio/mp4' };
+  }
+  return result;
+}
+
+function detectMagicBytes(
   filePath: string
-): { valid: boolean; mediaType: 'image' | 'video' | 'document'; detectedMime: string } | null {
+): { valid: boolean; mediaType: 'image' | 'video' | 'audio' | 'document'; detectedMime: string } | null {
   try {
     const buffer = Buffer.alloc(32);
     const fd = fs.openSync(filePath, 'r');
@@ -67,6 +88,16 @@ export function validateMediaMagicBytes(
       return { valid: true, mediaType: 'video', detectedMime: 'video/webm' };
     }
 
+    // OGG (Opus voice notes): 'OggS'
+    if (buffer.toString('ascii', 0, 4) === 'OggS') {
+      return { valid: true, mediaType: 'audio', detectedMime: 'audio/ogg' };
+    }
+
+    // MP3: 'ID3' tag or MPEG frame sync
+    if (buffer.toString('ascii', 0, 3) === 'ID3' || (buffer[0] === 0xff && (buffer[1] & 0xe0) === 0xe0 && (buffer[1] & 0x06) !== 0)) {
+      return { valid: true, mediaType: 'audio', detectedMime: 'audio/mpeg' };
+    }
+
     // PDF: %PDF-
     if (buffer.toString('ascii', 0, 4) === '%PDF') {
       return { valid: true, mediaType: 'document', detectedMime: 'application/pdf' };
@@ -94,6 +125,14 @@ function getMimeTypeFromFilename(filename: string): string {
       return 'video/webm';
     case '.pdf':
       return 'application/pdf';
+    case '.ogg':
+    case '.oga':
+    case '.opus':
+      return 'audio/ogg';
+    case '.m4a':
+      return 'audio/mp4';
+    case '.mp3':
+      return 'audio/mpeg';
     default:
       return 'application/octet-stream';
   }
@@ -121,6 +160,8 @@ export async function listProjectMessages(req: AuthenticatedRequest, res: Respon
       .populate('sender', 'name email role')
       .populate(REPLY_POPULATE)
       .populate('readBy.user', 'name email role')
+      .populate('reactions.user', 'name role')
+      .populate('pinnedBy', 'name role')
       .sort({ createdAt: -1 })
       .limit(Math.min(Number(limit) || 100, 200));
 
@@ -218,6 +259,10 @@ export async function sendProjectMessage(req: AuthenticatedRequest, res: Respons
       if (!safe) {
         res.status(400).json({ success: false, message: 'One or more attachments are invalid or not accessible in this project.' });
         return;
+      }
+      const duration = Number(raw?.duration);
+      if ((safe.type === 'audio' || safe.type === 'video') && Number.isFinite(duration) && duration > 0) {
+        (safe as any).duration = Math.min(Math.round(duration), 60 * 60);
       }
       messageAttachments.push(safe);
     }
@@ -558,12 +603,12 @@ export async function uploadProjectMessageMedia(req: AuthenticatedRequest, res: 
       const filePath = file.path;
 
       // 1. Validate magic bytes
-      const detected = validateMediaMagicBytes(filePath);
+      const detected = validateMediaMagicBytes(filePath, file.mimetype);
       if (!detected) {
         try { fs.unlinkSync(filePath); } catch (e) { /* ignore */ }
         res.status(400).json({
           success: false,
-          message: `File "${file.originalname}" failed magic byte inspection. Unsupported or corrupted file format. Supported: JPEG, PNG, WEBP, MP4, WEBM, PDF.`,
+          message: `File "${file.originalname}" failed magic byte inspection. Unsupported or corrupted file format. Supported: JPEG, PNG, WEBP, MP4, WEBM, PDF, voice notes (WEBM/OGG/M4A/MP3).`,
         });
         return;
       }
@@ -583,6 +628,14 @@ export async function uploadProjectMessageMedia(req: AuthenticatedRequest, res: 
         res.status(400).json({
           success: false,
           message: `Document "${file.originalname}" exceeds maximum allowed size of ${MAX_DOC_SIZE / (1024 * 1024)}MB.`,
+        });
+        return;
+      }
+      if (detected.mediaType === 'audio' && stat.size > MAX_AUDIO_SIZE) {
+        try { fs.unlinkSync(filePath); } catch (e) { /* ignore */ }
+        res.status(400).json({
+          success: false,
+          message: `Voice note "${file.originalname}" exceeds maximum allowed size of ${MAX_AUDIO_SIZE / (1024 * 1024)}MB.`,
         });
         return;
       }
@@ -764,5 +817,298 @@ export async function listShareableProjectFiles(req: AuthenticatedRequest, res: 
     res.json({ success: true, files });
   } catch (err: any) {
     res.status(500).json({ success: false, message: 'Failed to list shareable files' });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Advanced chat: edit, delete for everyone, reactions, pins, search
+// ---------------------------------------------------------------------------
+
+async function populateFullMessage(id: unknown) {
+  return ProjectMessage.findById(id)
+    .populate('sender', 'name email role')
+    .populate(REPLY_POPULATE)
+    .populate('readBy.user', 'name email role')
+    .populate('reactions.user', 'name role')
+    .populate('pinnedBy', 'name role');
+}
+
+/** Broadcast a changed message to both the canonical and the requested project rooms. */
+function broadcastMessageUpdate(passedId: string, canonicalId: string, message: any, change: string): void {
+  const payload = { change, message };
+  emitToProject(passedId, 'message:updated', payload);
+  if (passedId !== canonicalId) emitToProject(canonicalId, 'message:updated', payload);
+}
+
+/** Resolve project access + the target message (must belong to that project). */
+async function loadProjectMessage(req: AuthenticatedRequest, res: Response) {
+  const { projectId, messageId } = req.params;
+  const access = await verifyUserProjectAccess(projectId, req.user!.userId, req.user!.role);
+  if (!access.allowed) {
+    res.status(403).json({ success: false, message: 'Forbidden. You do not have access to this project conversation.' });
+    return null;
+  }
+  const canonicalId = String(access.project ? access.project._id : projectId);
+  if (!mongoose.Types.ObjectId.isValid(String(messageId))) {
+    res.status(404).json({ success: false, message: 'Message not found.' });
+    return null;
+  }
+  const message = await ProjectMessage.findOne({ _id: messageId, project: canonicalId });
+  if (!message) {
+    res.status(404).json({ success: false, message: 'Message not found.' });
+    return null;
+  }
+  return { message, canonicalId, passedId: String(projectId) };
+}
+
+function withinEditWindow(createdAt: Date): boolean {
+  return Date.now() - new Date(createdAt).getTime() <= MESSAGE_EDIT_WINDOW_MS;
+}
+
+/** PATCH /projects/:projectId/messages/:messageId — sender edits the text of their message. */
+export async function editProjectMessage(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const ctx = await loadProjectMessage(req, res);
+    if (!ctx) return;
+    const { message } = ctx;
+
+    if (String(message.sender) !== req.user!.userId) {
+      res.status(403).json({ success: false, message: 'You can only edit your own messages.' });
+      return;
+    }
+    if (message.deletedAt) {
+      res.status(400).json({ success: false, message: 'A deleted message cannot be edited.' });
+      return;
+    }
+    if (!withinEditWindow(message.createdAt)) {
+      res.status(400).json({ success: false, message: 'Messages can only be edited within 24 hours of sending.' });
+      return;
+    }
+
+    const content = typeof req.body?.content === 'string' ? req.body.content.trim() : '';
+    if (content.length > 3000) {
+      res.status(400).json({ success: false, message: 'Message is too long (max 3000 characters).' });
+      return;
+    }
+    if (!content && message.attachments.length === 0) {
+      res.status(400).json({ success: false, message: 'Message text cannot be empty.' });
+      return;
+    }
+    if (content === message.content) {
+      res.json({ success: true, data: await populateFullMessage(message._id) });
+      return;
+    }
+
+    const previousContent = message.content;
+    message.content = content;
+    message.editedAt = new Date();
+    await message.save();
+
+    await logAudit('COMMUNICATION_MESSAGE_EDITED', req.user!.userId, 'COMMUNICATION', message._id, {
+      projectId: ctx.canonicalId,
+      previousContent: previousContent.slice(0, 3000),
+    });
+
+    const full = await populateFullMessage(message._id);
+    broadcastMessageUpdate(ctx.passedId, ctx.canonicalId, full, 'edited');
+    res.json({ success: true, data: full });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: 'Failed to edit message', error: err.message });
+  }
+}
+
+/** DELETE /projects/:projectId/messages/:messageId — sender deletes the message for everyone. */
+export async function deleteProjectMessage(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const ctx = await loadProjectMessage(req, res);
+    if (!ctx) return;
+    const { message } = ctx;
+
+    if (String(message.sender) !== req.user!.userId) {
+      res.status(403).json({ success: false, message: 'You can only delete your own messages.' });
+      return;
+    }
+    if (message.deletedAt) {
+      res.json({ success: true, data: await populateFullMessage(message._id) });
+      return;
+    }
+    if (!withinEditWindow(message.createdAt)) {
+      res.status(400).json({ success: false, message: 'Messages can only be deleted within 24 hours of sending.' });
+      return;
+    }
+
+    // The original stays in the audit trail for the MD; the thread shows a tombstone
+    await logAudit('COMMUNICATION_MESSAGE_DELETED', req.user!.userId, 'COMMUNICATION', message._id, {
+      projectId: ctx.canonicalId,
+      previousContent: message.content.slice(0, 3000),
+      attachments: message.attachments.map((a) => ({ name: a.name, type: a.type, url: a.url })),
+    });
+
+    message.content = '';
+    message.attachments = [];
+    message.reactions = [];
+    message.contextType = 'GENERAL';
+    message.contextId = undefined;
+    message.contextSummary = undefined;
+    message.pinnedAt = undefined;
+    message.pinnedBy = undefined;
+    message.deletedAt = new Date();
+    message.deletedBy = new mongoose.Types.ObjectId(req.user!.userId);
+    await message.save();
+
+    const full = await populateFullMessage(message._id);
+    broadcastMessageUpdate(ctx.passedId, ctx.canonicalId, full, 'deleted');
+    res.json({ success: true, data: full });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: 'Failed to delete message', error: err.message });
+  }
+}
+
+/**
+ * POST /projects/:projectId/messages/:messageId/reactions { emoji }
+ * One reaction per person: the same emoji again removes it, a different one replaces it.
+ */
+export async function reactToProjectMessage(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const emoji = typeof req.body?.emoji === 'string' ? req.body.emoji : '';
+    if (!ALLOWED_REACTIONS.includes(emoji)) {
+      res.status(400).json({ success: false, message: 'Unsupported reaction.' });
+      return;
+    }
+    const ctx = await loadProjectMessage(req, res);
+    if (!ctx) return;
+    const { message } = ctx;
+    if (message.deletedAt) {
+      res.status(400).json({ success: false, message: 'Cannot react to a deleted message.' });
+      return;
+    }
+
+    const userId = req.user!.userId;
+    const existing = message.reactions.find((r) => String(r.user) === userId);
+    const removing = existing?.emoji === emoji;
+    message.reactions = message.reactions.filter((r) => String(r.user) !== userId) as any;
+    if (!removing) {
+      message.reactions.push({ emoji, user: new mongoose.Types.ObjectId(userId), createdAt: new Date() } as any);
+    }
+    await message.save();
+
+    const full = await populateFullMessage(message._id);
+    broadcastMessageUpdate(ctx.passedId, ctx.canonicalId, full, 'reaction');
+
+    // Let the author know (not for self-reactions, not on removal)
+    if (!removing && String(message.sender) !== userId) {
+      const project = await Project.findById(ctx.canonicalId).select('name');
+      const preview = message.content ? `"${message.content.slice(0, 60)}"` : 'your attachment';
+      const who = req.user!.name || 'Someone';
+      await createNotification({
+        recipient: message.sender,
+        sender: userId,
+        project: project?._id,
+        type: 'PROJECT_MESSAGE',
+        title: `${who} reacted ${emoji}`,
+        message: `${project?.name ? `${project.name}: ` : ''}${who} reacted ${emoji} to ${preview}`,
+        relatedEntity: 'PROJECT_MESSAGE',
+        relatedId: String(message._id),
+      } as any).catch(() => undefined);
+    }
+
+    res.json({ success: true, data: full });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: 'Failed to update reaction', error: err.message });
+  }
+}
+
+/** PUT /projects/:projectId/messages/:messageId/pin { pinned: boolean } — either party can pin. */
+export async function pinProjectMessage(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const ctx = await loadProjectMessage(req, res);
+    if (!ctx) return;
+    const { message } = ctx;
+    const pinned = req.body?.pinned !== false;
+
+    if (pinned) {
+      if (message.deletedAt) {
+        res.status(400).json({ success: false, message: 'A deleted message cannot be pinned.' });
+        return;
+      }
+      if (!message.pinnedAt) {
+        const count = await ProjectMessage.countDocuments({ project: ctx.canonicalId, pinnedAt: { $ne: null } });
+        if (count >= MAX_PINNED_PER_PROJECT) {
+          res.status(400).json({ success: false, message: `Only ${MAX_PINNED_PER_PROJECT} messages can be pinned. Unpin one first.` });
+          return;
+        }
+        message.pinnedAt = new Date();
+        message.pinnedBy = new mongoose.Types.ObjectId(req.user!.userId);
+      }
+    } else {
+      message.pinnedAt = undefined;
+      message.pinnedBy = undefined;
+    }
+    await message.save();
+
+    await logAudit(pinned ? 'COMMUNICATION_MESSAGE_PINNED' : 'COMMUNICATION_MESSAGE_UNPINNED', req.user!.userId, 'COMMUNICATION', message._id, {
+      projectId: ctx.canonicalId,
+    });
+
+    const full = await populateFullMessage(message._id);
+    broadcastMessageUpdate(ctx.passedId, ctx.canonicalId, full, pinned ? 'pinned' : 'unpinned');
+    res.json({ success: true, data: full });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: 'Failed to update pin', error: err.message });
+  }
+}
+
+/** GET /projects/:projectId/messages/pinned */
+export async function listPinnedMessages(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const access = await verifyUserProjectAccess(req.params.projectId, req.user!.userId, req.user!.role);
+    if (!access.allowed) {
+      res.status(403).json({ success: false, message: 'Forbidden.' });
+      return;
+    }
+    const canonicalId = access.project ? access.project._id : req.params.projectId;
+    const messages = await ProjectMessage.find({ project: canonicalId, pinnedAt: { $ne: null }, deletedAt: null })
+      .populate('sender', 'name email role')
+      .populate('pinnedBy', 'name role')
+      .sort({ pinnedAt: -1 })
+      .limit(MAX_PINNED_PER_PROJECT);
+    res.json({ success: true, messages });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: 'Failed to load pinned messages', error: err.message });
+  }
+}
+
+/** GET /projects/:projectId/messages/search?q=...&type=all|media|docs|voice */
+export async function searchProjectMessages(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const access = await verifyUserProjectAccess(req.params.projectId, req.user!.userId, req.user!.role);
+    if (!access.allowed) {
+      res.status(403).json({ success: false, message: 'Forbidden.' });
+      return;
+    }
+    const canonicalId = access.project ? access.project._id : req.params.projectId;
+    const q = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 100) : '';
+    const type = typeof req.query.type === 'string' ? req.query.type : 'all';
+
+    const filter: any = { project: canonicalId, deletedAt: null };
+    if (q) {
+      const rx = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      filter.$or = [{ content: rx }, { 'attachments.name': rx }, { contextSummary: rx }];
+    }
+    if (type === 'media') filter['attachments.type'] = { $in: ['image', 'video'] };
+    else if (type === 'docs') filter['attachments.type'] = { $in: ['document', 'pdf'] };
+    else if (type === 'voice') filter['attachments.type'] = 'audio';
+    else if (!q) {
+      res.json({ success: true, messages: [] });
+      return;
+    }
+
+    const messages = await ProjectMessage.find(filter)
+      .populate('sender', 'name email role')
+      .sort({ createdAt: -1 })
+      .limit(50);
+    res.json({ success: true, messages });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: 'Search failed', error: err.message });
   }
 }

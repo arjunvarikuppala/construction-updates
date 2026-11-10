@@ -47,8 +47,15 @@ const fileFilter = (
     // Documents
     'application/pdf',
   ];
+  // Voice notes are accepted only by the project-chat upload endpoint
+  const isChatUpload = /\/messages\/upload(\?|$)/.test(String(_req?.originalUrl || ''));
+  if (isChatUpload) {
+    allowedMimes.push('audio/webm', 'audio/ogg', 'audio/mp4', 'audio/x-m4a', 'audio/aac', 'audio/mpeg');
+  }
 
-  if (allowedMimes.includes(file.mimetype.toLowerCase())) {
+  // Browsers report recorder output as e.g. "audio/webm;codecs=opus"
+  const baseMime = file.mimetype.toLowerCase().split(';')[0].trim();
+  if (allowedMimes.includes(baseMime)) {
     cb(null, true);
   } else {
     const err: any = new Error('Invalid file format. Allowed formats: Photos (JPG, PNG, WEBP, HEIC), Videos (MP4, MOV, WEBM), and PDF documents');
