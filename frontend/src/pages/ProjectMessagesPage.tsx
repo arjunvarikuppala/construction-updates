@@ -1135,8 +1135,8 @@ export const ProjectMessagesPage: React.FC = () => {
         )}
 
         {/* Chat Header with ONLINE presence */}
-        <div className="h-16 px-3 sm:px-6 border-b border-slate-200 flex items-center justify-between gap-2 sm:gap-4 bg-white shrink-0 min-w-0">
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+        <div className="min-h-16 py-2 px-2 sm:px-6 border-b border-slate-200 flex items-center justify-between gap-2 sm:gap-4 bg-white shrink-0 min-w-0">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
             {/* Back to Channels button on mobile */}
             <button
               type="button"
@@ -1164,20 +1164,20 @@ export const ProjectMessagesPage: React.FC = () => {
               )}
             </div>
 
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-extrabold text-navy-950 truncate">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 min-w-0">
+                <h3 className="text-sm font-extrabold text-navy-950 truncate min-w-0">
                   {activeProject?.name || (activeProjectId ? `Project #${activeProjectId.substring(0, 8)}` : 'Select a project channel')}
                 </h3>
 
-                {/* ONLINE / OFFLINE Status Badge */}
+                {/* ONLINE / OFFLINE Status Badge (phones rely on the avatar dot to save space) */}
                 {isOtherPartyOnline ? (
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 animate-in fade-in">
+                  <span className="hidden sm:inline-flex shrink-0 items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 animate-in fade-in">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
                     <span>Online</span>
                   </span>
                 ) : (
-                  <span className="inline-flex shrink-0 items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-500 border border-slate-200">
+                  <span className="hidden sm:inline-flex shrink-0 items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-500 border border-slate-200">
                     <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
                     <span>Offline</span>
                   </span>
@@ -1185,8 +1185,8 @@ export const ProjectMessagesPage: React.FC = () => {
               </div>
 
               {/* Subtitle: Linked Accounts status */}
-              <div className="text-[11px] text-slate-500 flex items-center gap-1.5 min-w-0">
-                <span className="font-medium text-slate-700 truncate max-w-[45%] shrink-0">
+              <div className="text-[11px] text-slate-500 flex items-center gap-1.5 min-w-0 whitespace-nowrap">
+                <span className="font-medium text-slate-700 truncate max-w-[50%] min-w-0">
                   MD: <strong className="text-navy-950">{mdName}</strong>
                 </span>
                 <span className="text-slate-300 shrink-0">•</span>
@@ -1205,16 +1205,13 @@ export const ProjectMessagesPage: React.FC = () => {
                     )}
                   </span>
                 ) : (
-                  <span className="text-amber-700 font-semibold flex items-center gap-1">
-                    <span>⚠️ No Site In-Charge assigned yet</span>
-                    {(user?.role === 'MD' || user?.role === 'OWNER') && (
-                      <button
-                        onClick={() => navigate(`/projects/${activeProjectId}`)}
-                        className="text-amber-800 underline font-bold hover:text-amber-950 ml-1 cursor-pointer"
-                      >
-                        Assign now
-                      </button>
-                    )}
+                  // Short status only; the banner below carries the "Assign In-Charge" action
+                  <span className="text-amber-700 font-semibold flex items-center gap-1 shrink-0">
+                    <AlertCircle className="w-3 h-3 shrink-0" />
+                    <span>
+                      <span className="sm:hidden">No In-Charge yet</span>
+                      <span className="hidden sm:inline">No Site In-Charge assigned yet</span>
+                    </span>
                   </span>
                 )}
               </div>
@@ -1342,6 +1339,35 @@ export const ProjectMessagesPage: React.FC = () => {
           />
         )}
 
+        {/* Banner when project has no assigned in-charge — kept outside the feed so auto-scroll never hides it */}
+        {!hasAssignedInCharge && activeProject && (
+          <div className="px-3 pt-3 sm:px-6 sm:pt-4 bg-slate-50/30 shrink-0">
+            <div className="bg-amber-50 border border-amber-200/90 rounded-2xl p-3.5 flex flex-col sm:flex-row sm:items-center gap-3 text-xs shadow-2xs">
+              <div className="flex items-start gap-3 min-w-0 flex-1">
+                <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center flex-shrink-0">
+                  <AlertCircle className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-navy-950">No Site In-Charge assigned</p>
+                  <p className="mt-0.5 text-xs text-slate-600 leading-relaxed">
+                    {(user?.role === 'MD' || user?.role === 'OWNER')
+                      ? `Assign an In-Charge to ${activeProject.name} to start two-way messaging on this channel.`
+                      : `Messaging opens once the MD assigns a Site In-Charge to ${activeProject.name}.`}
+                  </p>
+                </div>
+              </div>
+              {(user?.role === 'MD' || user?.role === 'OWNER') && (
+                <button
+                  onClick={() => navigate(`/projects/${activeProjectId}`)}
+                  className="w-full sm:w-auto px-4 py-2.5 min-h-[44px] bg-amber-500 hover:bg-amber-600 text-navy-950 font-bold text-sm rounded-xl flex-shrink-0 transition-colors shadow-2xs cursor-pointer whitespace-nowrap"
+                >
+                  Assign In-Charge
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Messages Feed */}
         <div className="relative flex-1 min-h-0 flex flex-col">
         <div
@@ -1349,33 +1375,6 @@ export const ProjectMessagesPage: React.FC = () => {
           onScroll={handleScroll}
           className="flex-1 p-3 sm:p-6 overflow-y-auto space-y-4 bg-slate-50/30"
         >
-          {/* Informational banner when project has no assigned in-charge */}
-          {!hasAssignedInCharge && activeProject && (
-            <div className="bg-amber-50 border border-amber-200/90 rounded-2xl p-3 mb-2 flex items-center justify-between gap-3 text-xs shadow-2xs">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-8 h-8 rounded-xl bg-amber-500 text-navy-950 flex items-center justify-center font-bold flex-shrink-0 shadow-xs">
-                  ⚠️
-                </div>
-                <div>
-                  <p className="font-bold text-navy-950">
-                    No Site In-Charge Assigned to {activeProject.name}
-                  </p>
-                  <p className="text-[11px] text-slate-600">
-                    BKR INFRA channels only show linked accounts (the MD and assigned Site In-Charges). Assign an engineer to enable direct two-way messaging.
-                  </p>
-                </div>
-              </div>
-              {(user?.role === 'MD' || user?.role === 'OWNER') && (
-                <button
-                  onClick={() => navigate(`/projects/${activeProjectId}`)}
-                  className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-navy-950 font-bold text-xs rounded-xl flex-shrink-0 transition-colors shadow-2xs cursor-pointer"
-                >
-                  Assign In-Charge
-                </button>
-              )}
-            </div>
-          )}
-
           {/* Conditional message content / loading / error states */}
           {isLoadingMessages || (isFetchingMessages && !messagesData) ? (
             <LoadingSkeleton rows={5} height="h-16" />
@@ -1428,13 +1427,11 @@ export const ProjectMessagesPage: React.FC = () => {
                 <MessageSquare className="w-7 h-7" />
               </div>
               <h4 className="text-sm font-bold text-navy-950">
-                {!hasAssignedInCharge
-                  ? 'No Site In-Charge Assigned Yet'
-                  : 'Start the conversation'}
+                {!hasAssignedInCharge ? 'No messages yet' : 'Start the conversation'}
               </h4>
               <p className="text-xs text-slate-400 max-w-sm">
                 {!hasAssignedInCharge
-                  ? 'Assign an In-Charge to this project to share photos, walkthrough videos, payment requests, and daily report discussions.'
+                  ? 'Photos, walkthrough videos, payment requests and report discussions will appear here.'
                   : `Coordinate operations between MD (${mdName}) and Site In-Charge (${assignedInChargeNames || 'Assigned In-Charge'}).`}
               </p>
               <div className="flex items-center gap-2 pt-1 text-[11px] text-slate-500 bg-slate-100/80 px-3 py-1.5 rounded-xl border border-slate-200">
