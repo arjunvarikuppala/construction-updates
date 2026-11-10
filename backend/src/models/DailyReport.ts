@@ -87,13 +87,7 @@ const DailyReportSchema = new Schema<IDailyReport>(
     },
     workSummary: {
       type: String,
-      // Drafts may be saved before the description is written; submission requires it.
-      required: [
-        function (this: any) {
-          return this.status === 'SUBMITTED';
-        },
-        'Work summary is required',
-      ],
+      // Optional: a submitted report only needs some section filled (enforced in the controller).
       default: '',
       trim: true,
       maxlength: 2000,

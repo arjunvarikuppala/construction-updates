@@ -100,11 +100,8 @@ export function sanitizeReportInput(
   }
 
   if (need('workSummary')) {
-    const s = cleanText(body.workSummary, 2000);
-    // Drafts may omit the description; it is required again on submission.
-    if (!s && body.status !== 'DRAFT' && !opts.partial) errors.push('Detailed work description is required');
-    else if (!s && opts.partial && has('workSummary') && body.status === 'SUBMITTED') errors.push('Detailed work description is required');
-    else data.workSummary = s ?? '';
+    // Optional: a report only needs *some* content (see reportHasContent) to be submitted.
+    data.workSummary = cleanText(body.workSummary, 2000) ?? '';
   }
 
   if (has('workItems') || !opts.partial) {
@@ -232,6 +229,32 @@ export function sanitizeReportInput(
   }
 
   return { data, errors };
+}
+
+export const EMPTY_REPORT_MESSAGE =
+  'Add at least one entry before submitting — a work item, labour, material, machinery, expense, photo or work description.';
+
+/** A submitted report needs at least one section filled in; no single section is mandatory. */
+export function reportHasContent(
+  r: {
+    workSummary?: string;
+    workItems?: unknown[];
+    labourBreakdown?: unknown[];
+    materials?: unknown[];
+    machinery?: unknown[];
+    photos?: unknown[];
+  },
+  expenseCount = 0
+): boolean {
+  return (
+    Boolean(String(r.workSummary || '').trim()) ||
+    (r.workItems?.length || 0) > 0 ||
+    (r.labourBreakdown?.length || 0) > 0 ||
+    (r.materials?.length || 0) > 0 ||
+    (r.machinery?.length || 0) > 0 ||
+    (r.photos?.length || 0) > 0 ||
+    expenseCount > 0
+  );
 }
 
 export interface ReportExpenseInput {

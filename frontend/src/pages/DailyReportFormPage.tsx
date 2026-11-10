@@ -233,8 +233,18 @@ export const DailyReportFormPage: React.FC = () => {
     if (!form.workDate) errs.workDate = 'Select the report date';
     else if (form.workDate > localToday()) errs.workDate = 'Date cannot be in the future';
     if (status === 'SUBMITTED') {
-      if (!form.workSummary.trim()) errs.workSummary = 'Describe the work completed';
-      if (!form.workItems.some((w) => w.description.trim())) errs.workItems = 'Add at least one work item';
+      // No single section is mandatory — the report just needs something in any one of them.
+      const hasContent =
+        form.workSummary.trim() ||
+        form.workItems.some((w) => w.description.trim()) ||
+        form.labourList.some((l) => l.count > 0) ||
+        form.materials.some((m) => m.name.trim()) ||
+        form.machinery.some((m) => m.name.trim()) ||
+        form.expenses.some((e) => e.description.trim() || e.amount) ||
+        form.photos.length > 0;
+      if (!hasContent) {
+        errs.workItems = 'Add at least one entry — a work item, labour, material, machinery, expense, photo or description';
+      }
       const p = form.overallProgressPercent;
       if (p !== '' && (Number(p) < 0 || Number(p) > 100)) errs.overallProgressPercent = 'Enter 0–100';
       form.expenses.forEach((e, i) => {
@@ -498,7 +508,6 @@ export const DailyReportFormPage: React.FC = () => {
             value={form.workSummary}
             onChange={(e) => set('workSummary', e.target.value)}
             error={err('workSummary')}
-            required
           />
         </div>
         <div id="field-workItems">

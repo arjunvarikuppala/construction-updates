@@ -18,6 +18,8 @@ import {
   syncReportExpenses,
   promoteDraftExpenses,
   getReportExpenses,
+  reportHasContent,
+  EMPTY_REPORT_MESSAGE,
 } from '../services/reportService.js';
 import { escapeRegex, parseDate } from '../utils/validation.js';
 
@@ -561,6 +563,11 @@ export async function createDailyReport(req: AuthenticatedRequest, res: Response
       return;
     }
 
+    if (status === 'SUBMITTED' && !reportHasContent(data, expenses.length)) {
+      res.status(400).json({ success: false, message: EMPTY_REPORT_MESSAGE });
+      return;
+    }
+
     // Guard against accidental duplicate submissions (same author, project, date and title)
     if (status === 'SUBMITTED') {
       const dayStart = new Date(data.workDate!);
@@ -683,9 +690,12 @@ export async function updateDailyReport(req: AuthenticatedRequest, res: Response
     Object.assign(report, data);
     if (requestedStatus) report.status = requestedStatus;
     const becameSubmitted = wasDraft && report.status === 'SUBMITTED';
-    if (report.status === 'SUBMITTED' && !String(report.workSummary || '').trim()) {
-      res.status(400).json({ success: false, message: 'Detailed work description is required before submitting.' });
-      return;
+    if (report.status === 'SUBMITTED') {
+      const expenseCount = expenseInput ? expenseInput.expenses.length : (await getReportExpenses(report._id)).length;
+      if (!reportHasContent(report, expenseCount)) {
+        res.status(400).json({ success: false, message: EMPTY_REPORT_MESSAGE });
+        return;
+      }
     }
     if (becameSubmitted) report.submittedAt = new Date();
 

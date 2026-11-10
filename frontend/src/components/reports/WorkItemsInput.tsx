@@ -137,15 +137,6 @@ export const WorkItemsInput: React.FC<WorkItemsInputProps> = ({ items, onChange,
                     }}
                   />
                 </div>
-                <div className="col-span-2 sm:col-span-6">
-                  <Input
-                    aria-label="Location (floor / block / section)"
-                    placeholder="Location: e.g. Block B, 3rd floor"
-                    value={item.location || ''}
-                    maxLength={150}
-                    onChange={(e) => updateItem(index, { location: e.target.value })}
-                  />
-                </div>
               </div>
 
               {!!item.rate && item.rate > 0 && (
@@ -154,37 +145,6 @@ export const WorkItemsInput: React.FC<WorkItemsInputProps> = ({ items, onChange,
                   <span className="font-bold text-emerald-700">{formatRupees(item.budget || 0)}</span>
                 </p>
               )}
-
-              <details className="group">
-                <summary className="cursor-pointer text-xs font-semibold text-navy-800 select-none py-1">
-                  {item.rate ? 'Remarks (optional)' : 'Lump-sum amount & remarks (optional)'}
-                </summary>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
-                  {!item.rate && (
-                  <Input
-                    type="number"
-                    inputMode="decimal"
-                    placeholder="Allocated budget (₹)"
-                    min="0"
-                    step="any"
-                    aria-label="Work item budget in rupees"
-                    leftIcon={<span className="text-xs font-bold text-slate-500">₹</span>}
-                    value={!item.budget ? '' : item.budget}
-                    onChange={(e) => {
-                      const parsed = e.target.value === '' ? 0 : parseFloat(e.target.value);
-                      updateItem(index, { budget: isNaN(parsed) || parsed < 0 ? 0 : parsed });
-                    }}
-                  />
-                  )}
-                  <Input
-                    placeholder="Remarks for this item"
-                    aria-label="Work item remarks"
-                    maxLength={500}
-                    value={item.remarks || ''}
-                    onChange={(e) => updateItem(index, { remarks: e.target.value })}
-                  />
-                </div>
-              </details>
             </fieldset>
           ))}
 
