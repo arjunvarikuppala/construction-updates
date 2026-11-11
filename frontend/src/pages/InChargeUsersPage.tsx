@@ -12,7 +12,7 @@ import {
   Check,
   Send,
   Edit3,
-  DollarSign,
+  IndianRupee,
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/common/Card.js';
 import { Button } from '../components/common/Button.js';

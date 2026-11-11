@@ -6,7 +6,7 @@ import {
   FileCheck2,
   Plus,
   FileText,
-  DollarSign,
+  IndianRupee,
   CreditCard,
   MessageSquare,
   X,
@@ -70,7 +70,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({ pendingApprova
                 className="flex flex-col items-center justify-center p-3 rounded-2xl bg-navy-50 hover:bg-navy-100 active:bg-navy-200 border border-navy-200 text-navy-950 text-center transition-colors min-h-[96px]"
               >
                 <div className="w-10 h-10 rounded-xl bg-navy-900 text-brand-400 flex items-center justify-center mb-1.5 shadow-xs font-bold">
-                  <DollarSign className="w-5 h-5" />
+                  <IndianRupee className="w-5 h-5" />
                 </div>
                 <span className="text-xs font-bold">Site Expense</span>
                 <span className="text-[10px] text-navy-700 mt-0.5 line-clamp-1">Upload receipt & bill</span>

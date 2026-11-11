@@ -6,7 +6,7 @@ import {
   MapPin,
   Calendar,
   User,
-  DollarSign,
+  IndianRupee,
   FileSpreadsheet,
   FileDown,
   Plus,

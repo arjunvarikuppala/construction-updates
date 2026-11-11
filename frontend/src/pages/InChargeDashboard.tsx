@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Building2,
   FileText,
-  DollarSign,
+  IndianRupee,
   Plus,
   Clock,
   CheckCircle2,
@@ -423,7 +423,7 @@ export const InChargeDashboard: React.FC = () => {
               className="p-4 rounded-2xl bg-white border border-slate-200 hover:border-amber-400 hover:shadow-card transition-all text-left space-y-1.5 group"
             >
               <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
-                <DollarSign className="w-5 h-5" />
+                <IndianRupee className="w-5 h-5" />
               </div>
               <span className="text-xs font-bold text-navy-950 block group-hover:text-amber-800">
                 Submit Site Expense

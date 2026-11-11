@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   Building2,
-  DollarSign,
+  IndianRupee,
   Clock,
   FileText,
   FileCheck2,
@@ -240,7 +240,7 @@ export const OwnerDashboard: React.FC = () => {
                 Actual Expenditure
               </span>
               <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                <DollarSign className="w-4 h-4" />
+                <IndianRupee className="w-4 h-4" />
               </div>
             </div>
             <div className="text-xl sm:text-2xl font-black text-emerald-700 truncate">

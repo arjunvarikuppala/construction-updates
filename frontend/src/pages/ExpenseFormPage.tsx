@@ -7,7 +7,7 @@ import {
   Camera,
   Upload,
   CheckCircle2,
-  DollarSign,
+  IndianRupee,
   Receipt,
   Trash2,
   AlertTriangle,
