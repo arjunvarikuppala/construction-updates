@@ -58,6 +58,108 @@ export interface PushPayload {
   tag?: string;
   /** Notification id, so the app can mark it read */
   id?: string;
+  /** 'chat' = a chat message: the phone stacks them per chat like a messaging app */
+  kind?: 'chat';
+  /** Chat name (project) and sender, for chat messages */
+  chat?: string;
+  sender?: string;
+  /** Absolute link to a photo shown inside the notification */
+  image?: string;
+  /** When it happened (ms) */
+  timestamp?: number;
+  /** Unread count for the app-icon badge */
+  badge?: number;
+  /** "Mark as read" button: where to post and the signed token that allows it */
+  actionUrl?: string;
+  readToken?: string;
+}
+
+/** Public address of this API (for links the phone opens itself). Render sets RENDER_EXTERNAL_URL. */
+export function publicApiOrigin(): string {
+  return (process.env.PUBLIC_API_URL || process.env.RENDER_EXTERNAL_URL || '').trim().replace(/\/+$/, '');
+}
+
+const ATTACHMENT_LABEL: Record<string, [string, string]> = {
+  image: ['📷 Photo', 'photos'],
+  video: ['🎥 Video', 'videos'],
+  audio: ['🎤 Voice message', 'voice messages'],
+  document: ['📄 Document', 'documents'],
+};
+
+function attachmentKind(a: { type?: string; mimeType?: string }): string {
+  if (a.type === 'image' || a.type === 'video') return a.type;
+  if (a.mimeType?.startsWith('audio/') || a.type === 'audio') return 'audio';
+  return 'document';
+}
+
+/** "📷 Photo", "📷 3 photos", "🎤 Voice message"… */
+export function attachmentPreview(attachments: Array<{ type?: string; mimeType?: string }>): string {
+  if (!attachments.length) return '';
+  const kinds = attachments.map(attachmentKind);
+  const first = kinds[0];
+  const [one, many] = ATTACHMENT_LABEL[first];
+  if (kinds.every((k) => k === first)) return kinds.length === 1 ? one : `${one.split(' ')[0]} ${kinds.length} ${many}`;
+  return `📎 ${attachments.length} attachments`;
+}
+
+/**
+ * Turns a saved notification into the push the phone shows. Chat messages get
+ * the sender as the title, the chat name, a photo preview, the unread badge
+ * and a "Mark as read" button; everything else keeps title + message.
+ */
+export async function buildPushPayload(doc: any): Promise<PushPayload> {
+  const { unreadNotificationCount } = await import('./chatReadService.js');
+  const projectId = doc.project ? String(doc.project._id || doc.project) : '';
+  const payload: PushPayload = {
+    title: doc.title,
+    body: doc.message,
+    url: notificationUrl(doc),
+    tag:
+      doc.relatedEntity === 'PROJECT_MESSAGE' ? `chat-${projectId}` : `${doc.relatedEntity || 'n'}-${doc.relatedId || doc._id}`,
+    id: String(doc._id),
+    timestamp: doc.createdAt ? new Date(doc.createdAt).getTime() : Date.now(),
+    badge: await unreadNotificationCount(doc.recipient).catch(() => undefined),
+  };
+
+  if (doc.type !== 'PROJECT_MESSAGE' || doc.relatedEntity !== 'PROJECT_MESSAGE' || !doc.relatedId || !projectId) return payload;
+  const { ProjectMessage } = await import('../models/ProjectMessage.js');
+  const { Project } = await import('../models/Project.js');
+  const [message, project] = await Promise.all([
+    ProjectMessage.findById(doc.relatedId).select('sender content attachments createdAt').populate('sender', 'name').lean(),
+    Project.findById(projectId).select('name').lean(),
+  ]);
+  if (!message) return payload;
+  const senderId = String((message.sender as any)?._id || message.sender);
+  // A reaction is about the message, not a new message: keep it as a plain alert of its own
+  if (!doc.sender || String(doc.sender) !== senderId) {
+    payload.tag = `reaction-${doc.relatedId}`;
+    return payload;
+  }
+
+  const senderName = (message.sender as any)?.name || 'New message';
+  const text = (message.content || '').trim();
+  const attachments = (message.attachments || []) as any[];
+  payload.kind = 'chat';
+  payload.title = senderName;
+  payload.sender = senderName;
+  payload.chat = project?.name || 'Project chat';
+  payload.body = text ? (attachments.length ? `${attachmentPreview(attachments).split(' ')[0]} ${text}` : text) : attachmentPreview(attachments);
+  payload.timestamp = new Date(message.createdAt).getTime();
+
+  const origin = publicApiOrigin();
+  const photo = attachments.find((a) => attachmentKind(a) === 'image');
+  if (photo) {
+    const { extractLocalFilename, signFilename } = await import('./fileAccessService.js');
+    const src = photo.thumbnailUrl || photo.url;
+    const filename = extractLocalFilename(src);
+    if (filename && origin) payload.image = `${origin}${signFilename(filename, 24 * 60 * 60)}`;
+    else if (/^https:\/\//i.test(String(src))) payload.image = src;
+  }
+
+  const { createChatReadToken } = await import('./pushActionToken.js');
+  payload.readToken = createChatReadToken(String(doc.recipient), projectId);
+  payload.actionUrl = `${origin}/api/v1/push/action`;
+  return payload;
 }
 
 /** Sends to every device of the user. Dead subscriptions are removed. Never throws. */
@@ -72,6 +174,14 @@ export async function sendPushToUser(userId: string | mongoose.Types.ObjectId, p
       url: payload.url,
       tag: payload.tag,
       id: payload.id,
+      kind: payload.kind,
+      chat: payload.chat?.slice(0, 80),
+      sender: payload.sender?.slice(0, 80),
+      image: payload.image,
+      timestamp: payload.timestamp,
+      badge: payload.badge,
+      actionUrl: payload.actionUrl,
+      readToken: payload.readToken,
     });
     let sent = 0;
     await Promise.all(

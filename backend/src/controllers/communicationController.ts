@@ -2,7 +2,7 @@ import { Response } from 'express';
 import mongoose from 'mongoose';
 import fs from 'fs';
 import path from 'path';
-import { AuthenticatedRequest } from '../types/index.js';
+import { AuthenticatedRequest, isMD } from '../types/index.js';
 import { ProjectMessage, MessageContextType, IMessageAttachment } from '../models/ProjectMessage.js';
 import { Project } from '../models/Project.js';
 import { ProjectAssignment } from '../models/ProjectAssignment.js';
@@ -14,6 +14,8 @@ import { PaymentRequest } from '../models/PaymentRequest.js';
 import { DailyReport } from '../models/DailyReport.js';
 import { emitToProject, isUserOnline, isUserInProject } from '../services/socketService.js';
 import { createNotification, notifyAllMDs } from '../services/notificationService.js';
+import { markChatRead } from '../services/chatReadService.js';
+import { attachmentPreview } from '../services/pushService.js';
 import { logAudit } from '../services/auditService.js';
 import { storageService } from '../services/storageService.js';
 
@@ -425,13 +427,13 @@ export async function sendProjectMessage(req: AuthenticatedRequest, res: Respons
 
     // Notify project members
     const senderObj = populatedMessage?.sender as any;
-    const senderName = senderObj?.name || (req.user!.role === 'MD' ? 'Managing Director' : 'Site In-Charge');
+    const senderName = senderObj?.name || (isMD(req.user!.role) ? 'Managing Director' : 'Site In-Charge');
     const notifTitle = `New Message in ${project.name}`;
     const notifMessage = textContent
       ? `${senderName}: ${textContent.slice(0, 100)}`
-      : `${senderName} sent ${messageAttachments.length} attachment(s)`;
+      : `${senderName}: ${attachmentPreview(messageAttachments as any[])}`;
 
-    if (req.user!.role === 'MD') {
+    if (isMD(req.user!.role)) {
       // Notify assigned in-charges
       const assignments = await ProjectAssignment.find({ project: resolvedProjectId, assignmentStatus: 'ACTIVE' });
       for (const assign of assignments) {
@@ -452,6 +454,7 @@ export async function sendProjectMessage(req: AuthenticatedRequest, res: Respons
       // In-Charge sent: notify MDs and other assigned in-charges
       await notifyAllMDs({
         sender: req.user!.userId,
+        excludeUserId: req.user!.userId,
         project: project._id,
         type: 'PROJECT_MESSAGE',
         title: notifTitle,
@@ -507,29 +510,8 @@ export async function markProjectMessagesRead(req: AuthenticatedRequest, res: Re
 
     const resolvedProjectId = access.project ? access.project._id : projectId;
 
-    const readAt = new Date();
-    await ProjectMessage.updateMany(
-      { project: resolvedProjectId, 'readBy.user': { $ne: req.user!.userId } },
-      { $push: { readBy: { user: req.user!.userId, readAt } } }
-    );
-
-    // Broadcast seen event live!
-    emitToProject(projectId, 'messages:seen', {
-      projectId: resolvedProjectId,
-      readerId: req.user!.userId,
-      readerName: req.user!.name || (req.user!.role === 'MD' ? 'MD' : 'Site Engineer'),
-      readerRole: req.user!.role,
-      readAt: readAt.toISOString(),
-    });
-    if (String(resolvedProjectId) !== String(projectId)) {
-      emitToProject(String(resolvedProjectId), 'messages:seen', {
-        projectId: resolvedProjectId,
-        readerId: req.user!.userId,
-        readerName: req.user!.name || (req.user!.role === 'MD' ? 'MD' : 'Site Engineer'),
-        readerRole: req.user!.role,
-        readAt: readAt.toISOString(),
-      });
-    }
+    // Read receipts, chat notifications marked read (badges drop), "seen" broadcast live
+    await markChatRead(req.user!, resolvedProjectId, String(projectId));
 
     res.json({ success: true, message: 'All messages marked as read.' });
   } catch (err: any) {

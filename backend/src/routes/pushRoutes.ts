@@ -1,10 +1,42 @@
 import { Router, Response } from 'express';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, verifyUserProjectAccess } from '../middleware/auth.js';
+import { User } from '../models/User.js';
+import { verifyChatReadToken } from '../services/pushActionToken.js';
+import { markChatRead, unreadNotificationCount } from '../services/chatReadService.js';
 import { AuthenticatedRequest } from '../types/index.js';
 import { PushSubscription } from '../models/PushSubscription.js';
 import { getVapidPublicKey, sendPushToUser } from '../services/pushService.js';
 
 const router = Router();
+
+/**
+ * "Mark as read" tapped on a phone notification. The service worker has no
+ * sign-in, so the push carried a signed token for exactly this user and chat.
+ */
+router.post('/action', async (req, res: Response) => {
+  try {
+    const target = verifyChatReadToken(req.body?.token);
+    if (!target) {
+      res.status(401).json({ success: false, message: 'This notification button has expired.' });
+      return;
+    }
+    const user = await User.findById(target.userId).select('name role isActive');
+    if (!user || !user.isActive) {
+      res.status(401).json({ success: false, message: 'Account not active.' });
+      return;
+    }
+    const access = await verifyUserProjectAccess(target.projectId, target.userId, user.role);
+    if (!access.allowed) {
+      res.status(403).json({ success: false, message: 'Forbidden.' });
+      return;
+    }
+    await markChatRead({ userId: target.userId, name: user.name, role: user.role }, target.projectId);
+    res.json({ success: true, badge: await unreadNotificationCount(target.userId) });
+  } catch {
+    res.status(500).json({ success: false, message: 'Could not mark as read.' });
+  }
+});
+
 router.use(authenticate);
 
 /** Public key the browser needs to subscribe */

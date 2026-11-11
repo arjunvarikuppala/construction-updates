@@ -68,6 +68,18 @@ export const NotificationCenter: React.FC = () => {
     return notifications.filter((n) => !n.isRead).length;
   }, [notifications]);
 
+  // Same number on the installed app's icon (phones / computers that support it)
+  useEffect(() => {
+    if (!data) return;
+    const nav = navigator as any;
+    try {
+      if (unreadCount > 0) nav.setAppBadge?.(unreadCount)?.catch?.(() => undefined);
+      else nav.clearAppBadge?.()?.catch?.(() => undefined);
+    } catch {
+      /* not supported */
+    }
+  }, [unreadCount, data]);
+
   // Exact boundary timer: triggers instant recalculation the second the oldest active notification turns 24h old
   useEffect(() => {
     if (notifications.length === 0) return;

@@ -197,6 +197,82 @@ describe('instant notifications', () => {
   });
 });
 
+describe('messaging-app style chat notifications', () => {
+  let push: any;
+
+  test('a chat push carries the sender, chat name, unread badge and a Mark as read button', async () => {
+    icPhone.received.length = 0;
+    await api('POST', `/api/v1/projects/${project._id}/messages`, { token: md.token, body: { content: 'Slab casting tomorrow 6am' } });
+    assert.ok(await waitFor(() => icPhone.received.length >= 1), 'push received');
+    push = icPhone.received.pop();
+    assert.equal(push.kind, 'chat');
+    assert.equal(push.title, 'PushMD', 'sender is the title');
+    assert.match(push.chat, /PushSite/);
+    assert.equal(push.body, 'Slab casting tomorrow 6am');
+    assert.equal(push.tag, `chat-${project._id}`);
+    assert.ok(push.badge >= 1, 'unread count for the app icon');
+    assert.equal(typeof push.readToken, 'string');
+    assert.match(push.actionUrl, /\/api\/v1\/push\/action$/);
+  });
+
+  test('Mark as read on the phone marks the chat read without signing in', async () => {
+    const before = await api('GET', '/api/v1/notifications?limit=50', { token: ic.token });
+    const unreadBefore = (before.body.notifications || []).filter((n: any) => n.relatedEntity === 'PROJECT_MESSAGE' && !n.isRead);
+    assert.ok(unreadBefore.length >= 1);
+
+    const r = await api('POST', '/api/v1/push/action', { body: { token: push.readToken } });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.equal(typeof r.body.badge, 'number');
+
+    const after = await api('GET', '/api/v1/notifications?limit=50', { token: ic.token });
+    const unreadAfter = (after.body.notifications || []).filter((n: any) => n.relatedEntity === 'PROJECT_MESSAGE' && !n.isRead);
+    assert.equal(unreadAfter.length, 0, 'chat notifications are read');
+  });
+
+  test('an MD with the OWNER role is not notified about their own message', async () => {
+    const { User } = await import('../src/models/User.js');
+    await User.updateOne({ _id: md.userId }, { role: 'OWNER' });
+    try {
+      mdPhone.received.length = 0;
+      icPhone.received.length = 0;
+      await api('POST', `/api/v1/projects/${project._id}/messages`, { token: md.token, body: { content: 'Owner note' } });
+      assert.ok(await waitFor(() => icPhone.received.length >= 1), 'in-charge is told');
+      await new Promise((r) => setTimeout(r, 300));
+      assert.equal(mdPhone.received.length, 0, 'sender gets nothing');
+      const mine = await api('GET', '/api/v1/notifications?limit=50', { token: md.token });
+      assert.ok(!(mine.body.notifications || []).some((n: any) => /Owner note/.test(n.message)));
+    } finally {
+      await User.updateOne({ _id: md.userId }, { role: 'MD' });
+    }
+  });
+
+  test('a changed or missing token is refused', async () => {
+    const [enc, sig] = push.readToken.split('.');
+    const forged = `${enc}.${sig.slice(0, -2)}${sig.endsWith('AA') ? 'BB' : 'AA'}`;
+    assert.equal((await api('POST', '/api/v1/push/action', { body: { token: forged } })).status, 401);
+    assert.equal((await api('POST', '/api/v1/push/action', { body: {} })).status, 401);
+  });
+
+  test('a photo shows as "📷 Photo" with a picture preview when there is no text', async () => {
+    process.env.PUBLIC_API_URL = 'https://api.example.test'; // Render sets RENDER_EXTERNAL_URL in production
+    mdPhone.received.length = 0;
+    const form = new FormData();
+    form.append('files', tinyPng(), 'site.png');
+    const up = await api('POST', `/api/v1/projects/${project._id}/messages/upload`, { token: ic.token, form });
+    assert.ok(up.status === 200 || up.status === 201, JSON.stringify(up.body));
+    const attachments = up.body.attachments || up.body.files || (up.body.attachment ? [up.body.attachment] : []);
+    const sent = await api('POST', `/api/v1/projects/${project._id}/messages`, { token: ic.token, body: { content: '', attachments } });
+    assert.ok(sent.status === 200 || sent.status === 201, JSON.stringify(sent.body));
+    assert.ok(await waitFor(() => mdPhone.received.length >= 1));
+    const p = mdPhone.received.pop();
+    assert.equal(p.kind, 'chat');
+    assert.equal(p.body, '📷 Photo');
+    assert.match(p.image, /^https:\/\/api\.example\.test\/uploads\/[^?]+\?exp=\d+&sig=[a-f0-9]{64}$/, 'signed, short-lived picture link');
+    assert.equal(p.actionUrl, 'https://api.example.test/api/v1/push/action');
+    delete process.env.PUBLIC_API_URL;
+  });
+});
+
 describe('device housekeeping', () => {
   test('a phone used by a new person gets only the new person’s notifications', async () => {
     // The in-charge signs in on the MD's device

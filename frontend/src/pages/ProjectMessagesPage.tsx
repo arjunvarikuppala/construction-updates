@@ -62,6 +62,7 @@ import { preparePhoto, prepareVideo } from '../utils/mediaPrep.js';
 import { MediaGallery } from '../components/chat/MediaGallery.js';
 import { loadSavedChat, saveChat, loadSavedProjects, saveProjects, useIsOffline } from '../utils/offlineChat.js';
 import { useChatOutbox, isNetworkError } from '../utils/chatOutbox.js';
+import { clearChatNotifications } from '../components/common/LiveNotifications.js';
 import {
   DocumentViewer,
   ReplyQuote,
@@ -207,6 +208,18 @@ export const ProjectMessagesPage: React.FC = () => {
   const [newBelow, setNewBelow] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
+  // "Reply" tapped on a phone notification: open the chat with the keyboard ready
+  const wantsReply = searchParams.get('reply') === '1';
+  useEffect(() => {
+    if (!wantsReply || !routeProjectId) return;
+    setMobileView('chat');
+    const t = window.setTimeout(() => {
+      textareaRef.current?.focus();
+      navigate(`/messages/${routeProjectId}`, { replace: true });
+    }, 500);
+    return () => window.clearTimeout(t);
+  }, [wantsReply, routeProjectId, navigate]);
+
   // Fetch Projects list
   const offlineUserId = String(user?.id || (user as any)?._id || '');
   const isOffline = useIsOffline();
@@ -309,6 +322,8 @@ export const ProjectMessagesPage: React.FC = () => {
       .put(`/projects/${activeProjectId}/messages/read`)
       .then(() => {
         socket?.emit('messages:mark_seen', { projectId: activeProjectId });
+        // This chat's phone notification on this device is now old news
+        clearChatNotifications(activeProjectId);
         queryClient.invalidateQueries({ queryKey: ['notifications'] });
         queryClient.invalidateQueries({ queryKey: ['notifications-unread-count'] });
         queryClient.invalidateQueries({ queryKey: ['unread-messages-count'] });

@@ -103,17 +103,9 @@ NotificationSchema.index({ recipient: 1, isRead: 1, createdAt: -1 });
 NotificationSchema.post('save', function (doc) {
   if (!(doc as any).$__wasNew) return;
   if (doc.sender && String(doc.sender) === String(doc.recipient)) return;
+  // Chat messages: sender as title, chat name, photo, "Mark as read"; one stack per chat on the phone
   import('../services/pushService.js')
-    .then(({ sendPushToUser, notificationUrl }) =>
-      sendPushToUser(doc.recipient, {
-        title: doc.title,
-        body: doc.message,
-        url: notificationUrl(doc as any),
-        // One notification per chat / request on the lock screen, updated in place
-        tag: doc.relatedEntity === 'PROJECT_MESSAGE' ? `chat-${String(doc.project || '')}` : `${doc.relatedEntity || 'n'}-${doc.relatedId || doc._id}`,
-        id: String(doc._id),
-      })
-    )
+    .then(async ({ sendPushToUser, buildPushPayload }) => sendPushToUser(doc.recipient, await buildPushPayload(doc)))
     .catch((err) => console.error('Push dispatch failed:', err?.message));
 });
 NotificationSchema.pre('save', function (next) {
