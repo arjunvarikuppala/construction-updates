@@ -165,7 +165,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     </div>
   );
 
-  const renderUserFooter = () => (
+  const renderUserFooter = (onItemClick?: () => void) => (
     <div className="p-4 border-t border-navy-900 bg-navy-950/90 flex-shrink-0">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3 overflow-hidden">
@@ -185,6 +185,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
         >
           <LogOut className="w-4 h-4" />
         </button>
+      </div>
+      <div className="mt-2 flex items-center gap-3 text-[11px] text-slate-500">
+        <NavLink to="/privacy" onClick={onItemClick} className="hover:text-slate-200 py-1">
+          Privacy Policy
+        </NavLink>
+        <NavLink to="/delete-account" onClick={onItemClick} className="hover:text-slate-200 py-1">
+          Delete account
+        </NavLink>
       </div>
     </div>
   );
@@ -271,7 +279,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
 
             {/* Profile Footer */}
-            {renderUserFooter()}
+            {renderUserFooter(onMobileClose)}
           </div>
         </div>
       )}

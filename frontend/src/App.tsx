@@ -25,6 +25,8 @@ function reloadOnStaleChunk<T>(loader: () => Promise<T>): () => Promise<T> {
     });
 }
 const RegisterPage = lazy(reloadOnStaleChunk(() => import('./pages/RegisterPage.js').then((m) => ({ default: m.RegisterPage }))));
+const PrivacyPolicyPage = lazy(reloadOnStaleChunk(() => import('./pages/PrivacyPolicyPage.js').then((m) => ({ default: m.PrivacyPolicyPage }))));
+const AccountDeletionPage = lazy(reloadOnStaleChunk(() => import('./pages/AccountDeletionPage.js').then((m) => ({ default: m.AccountDeletionPage }))));
 const OwnerDashboard = lazy(reloadOnStaleChunk(() => import('./pages/OwnerDashboard.js').then((m) => ({ default: m.OwnerDashboard }))));
 const InChargeDashboard = lazy(reloadOnStaleChunk(() => import('./pages/InChargeDashboard.js').then((m) => ({ default: m.InChargeDashboard }))));
 const ProjectsPage = lazy(reloadOnStaleChunk(() => import('./pages/ProjectsPage.js').then((m) => ({ default: m.ProjectsPage }))));
@@ -83,6 +85,23 @@ export const App: React.FC = () => {
         element={
           <Suspense fallback={null}>
             <RegisterPage />
+          </Suspense>
+        }
+      />
+      {/* Public legal pages (Google Play links to these; they work signed in or out) */}
+      <Route
+        path="/privacy"
+        element={
+          <Suspense fallback={null}>
+            <PrivacyPolicyPage />
+          </Suspense>
+        }
+      />
+      <Route
+        path="/delete-account"
+        element={
+          <Suspense fallback={null}>
+            <AccountDeletionPage />
           </Suspense>
         }
       />

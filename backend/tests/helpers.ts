@@ -51,7 +51,12 @@ export async function stopTestServer(): Promise<void> {
   await mongoose.disconnect();
   if (memoryServer) await memoryServer.stop();
   process.chdir(originalCwd);
-  fs.rmSync(tempRoot, { recursive: true, force: true });
+  try {
+    // Windows can keep the test database's files locked for a moment after it stops
+    fs.rmSync(tempRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+  } catch {
+    /* a leftover temp folder is harmless; never fail the run over it */
+  }
 }
 
 export interface ApiResult {

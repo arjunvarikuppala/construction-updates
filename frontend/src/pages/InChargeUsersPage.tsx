@@ -12,6 +12,7 @@ import {
   Check,
   Send,
   Edit3,
+  Trash2,
   IndianRupee,
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/common/Card.js';
@@ -90,6 +91,18 @@ export const InChargeUsersPage: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['in-charge-users'] });
     },
     onError: (err: any) => toastError(err.message || 'Failed to update salary'),
+  });
+
+  // Delete account (Google Play account-deletion policy)
+  const [deleteUser, setDeleteUser] = useState<User | null>(null);
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.delete<{ success: boolean; message: string }>(`/users/in-charge/${id}`),
+    onSuccess: (r: any) => {
+      success(r?.message || 'Account deleted.');
+      setDeleteUser(null);
+      queryClient.invalidateQueries({ queryKey: ['in-charge-users'] });
+    },
+    onError: (err: any) => toastError(err.message || 'Could not delete the account'),
   });
 
   const users = data?.users || [];
@@ -243,6 +256,17 @@ export const InChargeUsersPage: React.FC = () => {
                 ) : (
                   <span className="text-xs text-slate-400 italic">No projects currently assigned</span>
                 )}
+              </div>
+
+              <div className="pt-2 border-t border-slate-100 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setDeleteUser(user)}
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg px-2 min-h-[36px]"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Delete account
+                </button>
               </div>
             </Card>
           ))}
@@ -453,6 +477,40 @@ export const InChargeUsersPage: React.FC = () => {
               </Button>
             </div>
           </form>
+        )}
+      </Modal>
+
+      {/* Delete Account Modal */}
+      <Modal
+        isOpen={Boolean(deleteUser)}
+        onClose={() => !deleteMutation.isPending && setDeleteUser(null)}
+        title={`Delete ${deleteUser?.name || 'this'}'s account?`}
+        size="sm"
+      >
+        {deleteUser && (
+          <div className="space-y-4 text-sm text-slate-700">
+            <ul className="list-disc pl-5 space-y-1.5">
+              <li>Their name, email, phone and salary details are erased.</li>
+              <li>They are signed out everywhere and can never sign in again.</li>
+              <li>
+                Their reports, expenses, payments and chat stay as company records, shown as “Deleted user”.
+              </li>
+            </ul>
+            <p className="font-semibold text-rose-700">This cannot be undone.</p>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <Button type="button" variant="outline" onClick={() => setDeleteUser(null)} disabled={deleteMutation.isPending}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="danger"
+                isLoading={deleteMutation.isPending}
+                onClick={() => deleteMutation.mutate(deleteUser.id || (deleteUser as any)._id)}
+              >
+                Delete account
+              </Button>
+            </div>
+          </div>
         )}
       </Modal>
     </div>

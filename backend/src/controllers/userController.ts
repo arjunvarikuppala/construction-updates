@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { User } from '../models/User.js';
 import { Project } from '../models/Project.js';
 import { Invitation } from '../models/Invitation.js';
+import { PushSubscription } from '../models/PushSubscription.js';
 import { AuthenticatedRequest, isMD } from '../types/index.js';
 import { logAudit } from '../services/auditService.js';
 import { validatePasswordStrength } from '../utils/password.js';
@@ -16,7 +17,12 @@ export async function listInChargeUsers(req: AuthenticatedRequest, res: Response
     const isCallerMD = isMD(req.user?.role);
     // Company isolation: only In-Charges this MD created, invited or assigned
     const companyInCharges = await getCompanyInChargeIds(req.user!.userId);
-    const query: any = { role: { $in: ['SITE_INCHARGE', 'IN_CHARGE'] }, _id: { $in: companyInCharges } };
+    // Deleted accounts (personal details erased) are no longer listed
+    const query: any = {
+      role: { $in: ['SITE_INCHARGE', 'IN_CHARGE'] },
+      _id: { $in: companyInCharges },
+      email: { $not: /@deleted\.invalid$/ },
+    };
 
     if (req.query.q) {
       const searchStr = escapeRegex(String(req.query.q).trim());
@@ -102,6 +108,49 @@ export async function createInChargeUser(req: AuthenticatedRequest, res: Respons
     });
   } catch (error: any) {
     res.status(500).json({ success: false, message: 'Failed to create user', error: error.message });
+  }
+}
+
+/**
+ * MD deletes a Site In-Charge's account (Google Play account-deletion policy).
+ * Personal details are erased and sign-in is disabled for good. Reports,
+ * expenses, payments and chat stay as the company's business records (needed
+ * for accounts and GST); they now show "Deleted user" as the author.
+ */
+export async function deleteInChargeAccount(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    if (!isMD(req.user?.role)) {
+      res.status(403).json({ success: false, message: 'Only the Managing Director can delete accounts.' });
+      return;
+    }
+    const { id } = req.params;
+    const user = await User.findById(id);
+    if (!user || !['SITE_INCHARGE', 'IN_CHARGE'].includes(user.role) || !(await isInChargeInCompany(req.user!.userId, id))) {
+      res.status(404).json({ success: false, message: 'In-charge user not found' });
+      return;
+    }
+    if (user.email.endsWith('@deleted.invalid')) {
+      res.json({ success: true, message: 'This account was already deleted.' });
+      return;
+    }
+
+    user.name = 'Deleted user';
+    user.email = `deleted-${user._id}@deleted.invalid`;
+    user.phone = undefined;
+    user.salary = undefined;
+    user.salaryFrequency = undefined;
+    user.isActive = false;
+    user.assignedProjects = [];
+    user.password = crypto.randomBytes(32).toString('hex'); // hashed on save; nobody knows it
+    await user.save();
+
+    // Stop phone notifications to that device
+    await PushSubscription.deleteMany({ user: user._id });
+
+    await logAudit('ACCOUNT_DELETED', req.user!.userId, 'USER', user._id, { deletedUserId: user._id }, req.ip);
+    res.json({ success: true, message: 'Account deleted. Their personal details are erased and they can no longer sign in.' });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Could not delete the account.' });
   }
 }
 

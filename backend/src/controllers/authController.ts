@@ -4,11 +4,14 @@ import { User } from '../models/User.js';
 import { Project } from '../models/Project.js';
 import { ProjectAssignment } from '../models/ProjectAssignment.js';
 import { Invitation } from '../models/Invitation.js';
-import { AuthenticatedRequest, AuthUserPayload } from '../types/index.js';
+import { AuthenticatedRequest, AuthUserPayload, isMD } from '../types/index.js';
 import { logAudit } from '../services/auditService.js';
 import { validatePasswordStrength } from '../utils/password.js';
 
 import { getJwtSecret } from '../middleware/auth.js';
+import { AuditLog } from '../models/AuditLog.js';
+import { createNotification } from '../services/notificationService.js';
+import { getCompanyIdsForUser } from '../services/tenantService.js';
 const JWT_EXPIRES_IN = '7d';
 
 export async function getFirstMDStatus(req: AuthenticatedRequest, res: Response): Promise<void> {
@@ -170,6 +173,63 @@ export async function login(req: AuthenticatedRequest, res: Response): Promise<v
     });
   } catch (error: any) {
     res.status(500).json({ success: false, message: 'Internal server error during authentication', error: error.message });
+  }
+}
+
+/**
+ * A Site In-Charge asks for their account to be deleted (Google Play policy).
+ * The request goes to the MD(s) of their company, who delete it from
+ * In-Charge Accounts. MDs own the company account, so they contact support instead.
+ */
+export async function requestAccountDeletion(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    if (isMD(req.user!.role)) {
+      res.status(400).json({
+        success: false,
+        message: 'You are the company owner. To close the company account and delete its data, contact app support.',
+      });
+      return;
+    }
+    const user = await User.findById(req.user!.userId).select('name email createdByMD');
+    if (!user) {
+      res.status(404).json({ success: false, message: 'Account not found.' });
+      return;
+    }
+
+    // One request per day is enough; repeat taps just confirm it was sent
+    const recent = await AuditLog.findOne({
+      action: 'ACCOUNT_DELETION_REQUESTED',
+      performedBy: user._id,
+      createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+    });
+    if (recent) {
+      res.json({ success: true, alreadyRequested: true, message: 'Your request was already sent to the Managing Director.' });
+      return;
+    }
+
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 500) : '';
+    const mdIds = new Set(await getCompanyIdsForUser(req.user!));
+    if (user.createdByMD) mdIds.add(user.createdByMD.toString());
+    for (const mdId of mdIds) {
+      await createNotification({
+        recipient: mdId,
+        sender: user._id,
+        type: 'SYSTEM',
+        title: 'Account deletion requested',
+        message: `${user.name} (${user.email}) asked for their account and personal data to be deleted. Open In-Charge Accounts to delete it.${reason ? ` Reason: ${reason}` : ''}`,
+      });
+    }
+    await logAudit('ACCOUNT_DELETION_REQUESTED', user._id, 'USER', user._id, { reason: reason || undefined, notifiedMDs: mdIds.size }, req.ip);
+
+    res.json({
+      success: true,
+      message:
+        mdIds.size > 0
+          ? 'Your request has been sent to the Managing Director. Your account and personal details will be deleted within 30 days.'
+          : 'Your request has been recorded. Please also contact your Managing Director.',
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Could not send the deletion request.' });
   }
 }
 

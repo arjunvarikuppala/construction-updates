@@ -210,6 +210,10 @@ export const Login: React.FC = () => {
         <p className="mt-6 text-center text-xs text-slate-400">
           Authorised BKR Infra staff only
         </p>
+        <p className="mt-2 text-center text-xs text-slate-400 space-x-3">
+          <Link to="/privacy" className="hover:text-navy-900 underline-offset-2 hover:underline">Privacy Policy</Link>
+          <Link to="/delete-account" className="hover:text-navy-900 underline-offset-2 hover:underline">Delete account</Link>
+        </p>
         </div>
       </main>
     </div>
