@@ -52,6 +52,18 @@ if (isProduction) {
   if (!process.env.CORS_ORIGIN?.trim()) {
     console.warn('⚠️  CORS_ORIGIN is not set in production. Cross-origin browser requests will be blocked.');
   }
+  const hasCloudinary = ['CLOUDINARY_CLOUD_NAME', 'CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET'].every((k) =>
+    process.env[k]?.trim()
+  );
+  const hasR2 = ['R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET_NAME'].every((k) =>
+    process.env[k]?.trim()
+  );
+  if (!hasCloudinary && !hasR2) {
+    console.error(
+      '⚠️  NO CLOUD FILE STORAGE CONFIGURED. Photos, receipts and PDFs are being saved to the server disk and ' +
+        'WILL BE LOST on the next redeploy/restart. Set the CLOUDINARY_* (or R2_*) environment variables.'
+    );
+  }
   if (process.env.PAYMENTS_LIVE_ENABLED === 'true' && !process.env.RAZORPAYX_WEBHOOK_SECRET?.trim()) {
     console.error('FATAL: RAZORPAYX_WEBHOOK_SECRET is required when PAYMENTS_LIVE_ENABLED=true.');
     process.exit(1);

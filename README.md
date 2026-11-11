@@ -131,6 +131,9 @@ npx tsx src/scripts/verify-workflows.ts
 
 ## ☁️ Deployment Instructions
 
+> **Production setup for BKR Infra: follow [DEPLOYMENT.md](DEPLOYMENT.md)** (Render Blueprint in `render.yaml` + MongoDB Atlas + Cloudinary, on the client's accounts).
+> The notes below are the older generic Render + Vercel instructions. Vercel's free Hobby plan is for non-commercial use only.
+
 ### 1. MongoDB Atlas Setup
 1. Create a free M0 or production cluster on [MongoDB Atlas](https://www.mongodb.com/atlas).
 2. Under **Database Access**, create a user with read/write privileges.

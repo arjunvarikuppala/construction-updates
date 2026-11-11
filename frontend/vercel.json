@@ -1,7 +1,7 @@
 {
   "rewrites": [
     {
-      "source": "/((?!assets/|sw.js|manifest.webmanifest|icons/|fonts/).*)",
+      "source": "/((?!assets/|sw.js|manifest.webmanifest|icons/|fonts/|brand/).*)",
       "destination": "/index.html"
     }
   ],

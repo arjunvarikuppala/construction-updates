@@ -1,0 +1,54 @@
+# Render Blueprint — BKR Infra backend API (Express + Socket.IO).
+# The website is hosted on Cloudflare Pages (see DEPLOYMENT.md section 4).
+# In Render: New + → Blueprint → pick this repository. Values marked `sync: false`
+# are asked for during setup (they are secrets and are never stored in Git).
+# Full walkthrough: DEPLOYMENT.md
+services:
+  # ---- Backend API ----
+  - type: web
+    name: bkr-infra-api
+    runtime: node
+    plan: starter # always on; the free plan sleeps after 15 min idle (slow first load, dropped chat)
+    region: singapore # closest Render region to India
+    rootDir: backend
+    # --include=dev: TypeScript is a dev dependency and NODE_ENV=production would otherwise skip it
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      - key: JWT_SECRET
+        generateValue: true # Render creates a random secret; changing it later signs everyone out
+      - key: MONGODB_URI
+        sync: false # mongodb+srv://… from MongoDB Atlas
+      - key: CORS_ORIGIN
+        sync: false # the website address, e.g. https://app.bkrinfra.com (comma-separate several)
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: TRUST_PROXY_HOPS
+        value: "1"
+      - key: REPORT_TIMEZONE
+        value: Asia/Kolkata
+      - key: ALLOW_PUBLIC_REGISTRATION
+        value: "false"
+      - key: MERCHANT_BUSINESS_NAME
+        value: BKR INFRA
+      # ---- RazorpayX payouts (optional; leave blank and the MD records payments by hand) ----
+      - key: RAZORPAYX_KEY_ID
+        sync: false # rzp_test_… for testing, rzp_live_… for real money
+      - key: RAZORPAYX_KEY_SECRET
+        sync: false
+      - key: RAZORPAYX_ACCOUNT_NUMBER
+        sync: false # RazorpayX account number (Dashboard → My Account / Banking)
+      - key: RAZORPAYX_WEBHOOK_SECRET
+        sync: false # same secret typed into RazorpayX → Settings → Webhooks
+      - key: PAYMENTS_LIVE_ENABLED
+        value: "false" # set to "true" only after testing with rzp_test_ keys; live keys are blocked until then

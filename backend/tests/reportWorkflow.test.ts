@@ -238,7 +238,8 @@ describe('daily report workflow', () => {
       body: { project: project._id, titleOfWork: '', workDate: 'not-a-date', workSummary: '' },
     });
     assert.equal(r.status, 400);
-    assert.ok(r.body.errors.length >= 3);
+    // Title and date errors; the work description is optional (any one section is enough)
+    assert.ok(r.body.errors.length >= 2);
     const future = await api('POST', '/api/v1/daily-reports', {
       token: ic.token,
       body: { project: project._id, titleOfWork: 'x', workDate: new Date(Date.now() + 10 * 86400000).toISOString(), workSummary: 'x' },
@@ -249,6 +250,24 @@ describe('daily report workflow', () => {
       body: { ...fullReport(), clientRequestId: 'wf-test-request-0003', expenses: [{ category: 'NOPE', description: 'x', amount: 0.5 }] },
     });
     assert.equal(badExpense.status, 400);
+  });
+
+  test('a submitted report needs at least one section filled, but no particular one', async () => {
+    const base = { project: project._id, workDate: new Date(Date.now() - 5 * 86400000).toISOString(), status: 'SUBMITTED' };
+    const empty = await api('POST', '/api/v1/daily-reports', {
+      token: ic.token,
+      body: { ...base, titleOfWork: 'Empty report' },
+    });
+    assert.equal(empty.status, 400);
+    assert.match(empty.body.message, /at least one entry/i);
+
+    // Only machinery — no description, no work items — is enough to submit
+    const machineryOnly = await api('POST', '/api/v1/daily-reports', {
+      token: ic.token,
+      body: { ...base, titleOfWork: 'Machinery only', machinery: [{ name: 'JCB', quantity: 1, hoursUsed: 4 }] },
+    });
+    assert.equal(machineryOnly.status, 201, JSON.stringify(machineryOnly.body));
+    assert.equal(machineryOnly.body.report.status, 'SUBMITTED');
   });
 
   test('work item amount is quantity × rate per unit, computed on the server', async () => {

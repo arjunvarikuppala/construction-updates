@@ -1,0 +1,14 @@
+# Cloudflare Pages response headers (same caching rules as vercel.json / render.yaml).
+# Page routes need no rewrite file: with no 404.html in the build, Cloudflare Pages
+# serves index.html for every unknown path (single-page app mode).
+
+# Service worker: always check for a new version, so updates reach phones quickly
+/sw.js
+  Cache-Control: no-cache
+
+# Hashed JS/CSS bundles never change once built
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/fonts/*
+  Cache-Control: public, max-age=2592000

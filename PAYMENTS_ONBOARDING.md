@@ -20,23 +20,26 @@ SiteTrack has been extended with a secure, enterprise-grade financial and operat
 
 ## 1. Environment Configuration
 
-Add the following environment variables to your backend `.env` file:
+In production, set these on the Render service **bkr-infra-api** → *Environment* (see `DEPLOYMENT.md`). Locally, put them in `backend/.env`.
 
 ```env
 # ==========================================
 # RAZORPAYX PAYOUTS INTEGRATION
 # ==========================================
-RAZORPAYX_KEY_ID="rzp_test_YOUR_KEY_ID"
+RAZORPAYX_KEY_ID="rzp_test_YOUR_KEY_ID"        # rzp_test_… = test mode (no real money); rzp_live_… = real money
 RAZORPAYX_KEY_SECRET="YOUR_KEY_SECRET"
-RAZORPAYX_ACCOUNT_NUMBER="2323230000000000" # RazorpayX Current Account Number
-RAZORPAYX_WEBHOOK_SECRET="YOUR_WEBHOOK_SECRET"
+RAZORPAYX_ACCOUNT_NUMBER="2323230000000000"   # RazorpayX account number (Dashboard → My Account / Banking)
+RAZORPAYX_WEBHOOK_SECRET="YOUR_WEBHOOK_SECRET" # must match the secret typed in RazorpayX → Settings → Webhooks
 
-# Safety toggle: keep false until live onboarding and security verification are complete
-RAZORPAYX_LIVE_TRANSFERS_ENABLED="false"
+# Safety switch: live (rzp_live_…) keys are blocked until this is "true".
+# The server refuses to start with this "true" and no webhook secret.
+PAYMENTS_LIVE_ENABLED="false"
 
-# Threshold in paise (₹1,00,000 = 10,000,000 paise)
-HIGH_VALUE_THRESHOLD_PAISE="10000000"
+# Payment requests above this (in paise) need MD authorisation (₹1,00,000 = 10,000,000 paise)
+PAYMENT_HIGH_VALUE_THRESHOLD_PAISE="10000000"
 ```
+
+Check the result in the app: **Payments → RazorpayX setup card** (MD only) shows *Off / Test / Live*, whether the webhook secret is set, and the exact webhook URL to copy.
 
 ---
 
@@ -53,13 +56,17 @@ To enable live bank transfers:
    - **UPI Payouts**: Request approval from RazorpayX support to enable UPI payouts to verified VPAs (capped at ₹1,00,000 per transaction per NPCI guidelines).
 3. **Webhook Setup**:
    - Navigate to **RazorpayX Dashboard → Settings → Webhooks**.
-   - Add endpoint URL: `https://your-domain.com/api/v1/payments/webhooks`.
+   - Add endpoint URL: `https://api.<client-domain>/api/v1/payments/webhook` (the API address, **not** the website; copy it from the app's RazorpayX setup card).
    - Secret: Configure identical string in `RAZORPAYX_WEBHOOK_SECRET`.
    - Select Events:
      - `payout.processed`
      - `payout.failed`
      - `payout.reversed`
-     - `payout.initiated`
+     - `payout.rejected`
+     - `payout.updated`
+     - `fund_account.validation.completed`
+     - `fund_account.validation.failed`
+   - Do this once for **Test mode** (with the test keys) and again for **Live mode** when going live. Razorpay keeps separate webhooks per mode.
 4. **Penny Drop Account Validation**:
    - Enable Bank Account Verification (Penny Drop) under API & Plugins.
    - Allows instant verification of contractor account numbers and legal registered names before dispatching transfers.
