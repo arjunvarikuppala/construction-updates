@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -49,6 +49,15 @@ import { formatDate } from '../utils/dates.js';
 import { SecureImage, SecureVideo } from '../components/common/SecureMedia.js';
 import { resolveMediaUrl } from '../utils/media.js';
 import {
+  CHAT_PAGE_SIZE,
+  MessagePage,
+  mergeLatestPage,
+  prependOlderPage,
+  appendMessage,
+  replaceMessage,
+} from '../utils/chatHistory.js';
+import { preparePhoto, prepareVideo } from '../utils/mediaPrep.js';
+import {
   DocumentViewer,
   ReplyQuote,
   ReplyComposerBar,
@@ -76,12 +85,14 @@ import {
   isVoiceRecordingSupported,
   canStillModify,
   idOf,
+  formatClock,
 } from '../components/chat/AdvancedChat.js';
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
 const ALLOWED_DOC_TYPES = ['application/pdf'];
 
-const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10 MB
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10 MB (after compression on the phone)
+const MAX_RAW_IMAGE_SIZE = 40 * 1024 * 1024; // camera originals are shrunk before upload
 const MAX_VIDEO_SIZE = 100 * 1024 * 1024; // 100 MB
 const MAX_DOC_SIZE = 25 * 1024 * 1024; // 25 MB
 
@@ -98,6 +109,11 @@ interface StagedAttachment {
   progress: number;
   uploadedUrl?: string;
   storageKey?: string;
+  /** Preview image (photo thumbnail / video poster) stored next to the file. */
+  thumbnailUrl?: string;
+  width?: number;
+  height?: number;
+  duration?: number;
   error?: string;
 }
 
@@ -311,14 +327,22 @@ export const ProjectMessagesPage: React.FC = () => {
     refetch: refetchMessages,
   } = useQuery({
     queryKey: ['project-messages', activeProjectId],
-    queryFn: ({ signal }) =>
-      api.get<{ success: boolean; messages: ProjectMessage[] }>(
-        `/projects/${activeProjectId}/messages`,
+    // Fetches the latest page and merges it into the cached window, so a refetch
+    // (reconnect, app back in focus, after sending) keeps older pages already loaded.
+    queryFn: async ({ signal }) => {
+      const fresh = await api.get<MessagePage>(
+        `/projects/${activeProjectId}/messages?limit=${CHAT_PAGE_SIZE}`,
         { signal }
-      ),
+      );
+      const cached = queryClient.getQueryData<MessagePage>(['project-messages', activeProjectId]);
+      return mergeLatestPage(cached, fresh);
+    },
     enabled: Boolean(activeProjectId),
-    refetchInterval: 6000,
+    // New messages, edits and read ticks arrive over the live connection. Poll only
+    // while that connection is down, as a fallback.
+    refetchInterval: isConnected ? false : 15000,
   });
+  const hasOlderMessages = Boolean(messagesData?.hasMore);
 
   // Strict message isolation: guarantees no previous or cross-project messages ever render
   const rawMessages = messagesData?.messages || [];
@@ -333,12 +357,74 @@ export const ProjectMessagesPage: React.FC = () => {
     });
   }, [rawMessages, activeProjectId]);
 
+  // ---- Older history: loaded page by page as the user scrolls up ----
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const loadingOlderRef = useRef(false);
+  /** Keeps the visible message in place when older messages are added above it. */
+  const scrollAnchorRef = useRef<{ height: number; top: number } | null>(null);
+  /** Message to scroll to once the history containing it has rendered. */
+  const pendingJumpRef = useRef<string | null>(null);
+  /** Newest message id last seen, to tell new messages apart from loaded history. */
+  const prevLastIdRef = useRef('');
+
+  const highlightMessage = useCallback((messageId: string) => {
+    const el = document.getElementById(`msg-${messageId}`);
+    if (!el) return false;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setHighlightId(messageId);
+    window.setTimeout(() => setHighlightId((cur) => (cur === messageId ? null : cur)), 2000);
+    return true;
+  }, []);
+
+  /**
+   * Load the page before the oldest loaded message. With `untilId`, load everything
+   * back to that message in one request (used to jump to an old reply / pin / search hit).
+   */
+  const loadOlder = useCallback(
+    async (untilId?: string): Promise<boolean> => {
+      const channelId = activeProjectId;
+      const key = ['project-messages', channelId];
+      const current = queryClient.getQueryData<MessagePage>(key);
+      const oldest = current?.messages?.[0];
+      if (!channelId || !oldest || !current?.hasMore || loadingOlderRef.current) return false;
+
+      loadingOlderRef.current = true;
+      setLoadingOlder(true);
+      try {
+        const params = new URLSearchParams({
+          before: new Date(oldest.createdAt).toISOString(),
+          beforeId: idOf(oldest),
+          limit: String(CHAT_PAGE_SIZE),
+        });
+        if (untilId) params.set('untilId', untilId);
+        const page = await api.get<MessagePage>(`/projects/${channelId}/messages?${params.toString()}`);
+        if (channelId !== prevProjectIdRef.current) return false; // switched channel meanwhile
+        const el = messagesContainerRef.current;
+        if (el) scrollAnchorRef.current = { height: el.scrollHeight, top: el.scrollTop };
+        queryClient.setQueryData<MessagePage>(key, (old) =>
+          prependOlderPage(old, page.messages || [], Boolean(page.hasMore))
+        );
+        return true;
+      } catch (err: any) {
+        showToast(err?.message || 'Could not load earlier messages', 'error');
+        return false;
+      } finally {
+        loadingOlderRef.current = false;
+        setLoadingOlder(false);
+      }
+    },
+    [activeProjectId, queryClient, showToast]
+  );
+
   // Scroll management:
   // 1. Channel switch: immediate scroll to bottom
   useEffect(() => {
     if (activeProjectId && activeProjectId !== prevProjectIdRef.current) {
       prevProjectIdRef.current = activeProjectId;
       isNearBottomRef.current = true;
+      prevLastIdRef.current = '';
+      scrollAnchorRef.current = null;
+      pendingJumpRef.current = null;
       requestAnimationFrame(() => {
         if (messagesContainerRef.current) {
           messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
@@ -347,7 +433,7 @@ export const ProjectMessagesPage: React.FC = () => {
     }
   }, [activeProjectId]);
 
-  // Track if user is near bottom
+  // Track if user is near bottom; near the top, fetch the previous page
   const handleScroll = useCallback(() => {
     const el = messagesContainerRef.current;
     if (!el) return;
@@ -356,7 +442,8 @@ export const ProjectMessagesPage: React.FC = () => {
     isNearBottomRef.current = isBottom;
     setShowJump(!isBottom);
     if (isBottom) setNewBelow(0);
-  }, []);
+    if (el.scrollTop < 300 && !isBottom) void loadOlder();
+  }, [loadOlder]);
 
   // The feed also changes size when bars above/below it appear (edit, reply, typing)
   useEffect(() => {
@@ -372,25 +459,44 @@ export const ProjectMessagesPage: React.FC = () => {
     setNewBelow(0);
   }, []);
 
-  // 2. Incoming or updated messages: smooth scroll ONLY if user is near bottom or sent own message
-  const prevMessagesCountRef = useRef(messages.length);
-  useEffect(() => {
-    if (messages.length > prevMessagesCountRef.current) {
-      const lastMsg = messages[messages.length - 1];
-      const sId =
-        typeof lastMsg?.sender === 'object' && lastMsg?.sender !== null
-          ? (lastMsg?.sender as any)._id || (lastMsg?.sender as any).id
-          : lastMsg?.sender;
-      const isMine = String(sId) === String(currentUserId);
-
-      if (isMine || isNearBottomRef.current) {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-      } else {
-        const added = messages.length - prevMessagesCountRef.current;
-        setNewBelow((n) => n + added);
-      }
+  // 2. Older messages were added above: keep the same message on screen (no jump)
+  useLayoutEffect(() => {
+    const el = messagesContainerRef.current;
+    const anchor = scrollAnchorRef.current;
+    if (el && anchor) {
+      el.scrollTop = el.scrollHeight - anchor.height + anchor.top;
+      scrollAnchorRef.current = null;
     }
-    prevMessagesCountRef.current = messages.length;
+    const target = pendingJumpRef.current;
+    if (target && highlightMessage(target)) pendingJumpRef.current = null;
+  }, [messages, highlightMessage]);
+
+  // 3. New messages at the bottom: smooth scroll ONLY if user is near bottom or sent own message.
+  //    (Compared by the newest message, so loading older history never counts as "new".)
+  useEffect(() => {
+    const lastMsg = messages[messages.length - 1];
+    const lastId = lastMsg ? idOf(lastMsg) : '';
+    const prevLastId = prevLastIdRef.current;
+    prevLastIdRef.current = lastId;
+    if (!lastId || lastId === prevLastId) return;
+
+    if (!prevLastId) {
+      // First load of this channel: start at the latest message
+      requestAnimationFrame(() => {
+        const el = messagesContainerRef.current;
+        if (el) el.scrollTop = el.scrollHeight;
+      });
+      return;
+    }
+
+    const isMine = idOf(lastMsg.sender) === String(currentUserId);
+    if (isMine || isNearBottomRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    } else {
+      const prevIndex = messages.findIndex((m) => idOf(m) === prevLastId);
+      const added = prevIndex >= 0 ? messages.length - 1 - prevIndex : 1;
+      setNewBelow((n) => n + added);
+    }
   }, [messages, currentUserId]);
 
   // Send message mutation
@@ -417,24 +523,12 @@ export const ProjectMessagesPage: React.FC = () => {
       // If backend returned the created message, add to cache immediately if not already present
       const createdMsg = res?.data?._id ? res.data : res?.message?._id ? res.message : null;
       if (createdMsg) {
-        queryClient.setQueriesData<any>(
-          { queryKey: ['project-messages', activeProjectId] },
-          (old: any) => {
-            if (!old || !Array.isArray(old.messages)) return old;
-            const exists = old.messages.some(
-              (m: any) => String(m._id || m.id) === String(createdMsg._id || createdMsg.id)
-            );
-            if (exists) return old;
-            return {
-              ...old,
-              messages: [...old.messages, createdMsg],
-              count: (old.count || old.messages.length) + 1,
-            };
-          }
+        queryClient.setQueriesData<any>({ queryKey: ['project-messages', activeProjectId] }, (old: any) =>
+          appendMessage(old, createdMsg)
         );
+      } else {
+        queryClient.invalidateQueries({ queryKey: ['project-messages', activeProjectId] });
       }
-
-      queryClient.invalidateQueries({ queryKey: ['project-messages', activeProjectId] });
       queryClient.invalidateQueries({ queryKey: ['unread-messages-count'] });
 
       // Immediate scroll to bottom on own message
@@ -451,10 +545,9 @@ export const ProjectMessagesPage: React.FC = () => {
   const applyUpdatedMessage = useCallback(
     (updated: any) => {
       if (!updated?._id) return;
-      queryClient.setQueriesData<any>({ queryKey: ['project-messages', activeProjectId] }, (old: any) => {
-        if (!old || !Array.isArray(old.messages)) return old;
-        return { ...old, messages: old.messages.map((m: any) => (idOf(m) === String(updated._id) ? updated : m)) };
-      });
+      queryClient.setQueriesData<any>({ queryKey: ['project-messages', activeProjectId] }, (old: any) =>
+        replaceMessage(old, updated)
+      );
     },
     [queryClient, activeProjectId]
   );
@@ -554,11 +647,9 @@ export const ProjectMessagesPage: React.FC = () => {
       });
       setReplyTarget(null);
       if (res?.data?._id) {
-        queryClient.setQueriesData<any>({ queryKey: ['project-messages', channelId] }, (old: any) => {
-          if (!old || !Array.isArray(old.messages)) return old;
-          if (old.messages.some((m: any) => idOf(m) === String(res.data._id))) return old;
-          return { ...old, messages: [...old.messages, res.data] };
-        });
+        queryClient.setQueriesData<any>({ queryKey: ['project-messages', channelId] }, (old: any) =>
+          appendMessage(old, res.data)
+        );
       }
       requestAnimationFrame(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }));
     } catch (err: any) {
@@ -584,8 +675,8 @@ export const ProjectMessagesPage: React.FC = () => {
 
       if (ALLOWED_IMAGE_TYPES.includes(mime)) {
         mediaType = 'image';
-        if (file.size > MAX_IMAGE_SIZE) {
-          showToast(`"${file.name}" exceeds 10 MB limit for images`, 'error');
+        if (file.size > MAX_RAW_IMAGE_SIZE) {
+          showToast(`"${file.name}" is too large (max 40 MB per photo)`, 'error');
           continue;
         }
       } else if (
@@ -652,8 +743,20 @@ export const ProjectMessagesPage: React.FC = () => {
     if (!staged.file) return;
     patchStaged(staged.id, { uploading: true, error: undefined, progress: 0 });
     try {
+      // Shrink photos and make light previews on the phone before uploading
+      const prepared =
+        staged.type === 'image'
+          ? await preparePhoto(staged.file)
+          : staged.type === 'video'
+          ? await prepareVideo(staged.file)
+          : { file: staged.file, thumb: null as Blob | null };
+      if (staged.type === 'image' && prepared.file.size > MAX_IMAGE_SIZE) {
+        throw new Error('Photo is larger than 10 MB even after compression');
+      }
+
       const formData = new FormData();
-      formData.append('files', staged.file);
+      formData.append('files', prepared.file);
+      if (prepared.thumb) formData.append('thumb', prepared.thumb, 'preview.jpg');
       const res = await uploadWithProgress<{ success: boolean; message?: string; attachments: MessageAttachment[] }>(
         `/projects/${channelId}/messages/upload`,
         formData,
@@ -666,6 +769,10 @@ export const ProjectMessagesPage: React.FC = () => {
         progress: 100,
         uploadedUrl: uploaded.url,
         storageKey: uploaded.storageKey,
+        thumbnailUrl: uploaded.thumbnailUrl,
+        width: 'width' in prepared ? prepared.width : undefined,
+        height: 'height' in prepared ? prepared.height : undefined,
+        duration: 'duration' in prepared ? prepared.duration : undefined,
         type: (uploaded.type as any) || staged.type,
         mimeType: uploaded.mimeType || staged.mimeType,
         size: uploaded.size || staged.size,
@@ -706,16 +813,27 @@ export const ProjectMessagesPage: React.FC = () => {
     setShareOpen(false);
   };
 
-  // Scroll to a quoted message and flash it
-  const jumpToMessage = (messageId: string) => {
-    const el = document.getElementById(`msg-${messageId}`);
-    if (!el) {
-      showToast('The original message is older than the loaded conversation history.', 'info');
+  // Scroll to a quoted / pinned / searched message and flash it, loading older
+  // history first when that message isn't on screen yet
+  const jumpToMessage = async (messageId: string) => {
+    if (!messageId || highlightMessage(messageId)) return;
+    if (!hasOlderMessages) {
+      showToast('That message is no longer available.', 'info');
       return;
     }
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    setHighlightId(messageId);
-    window.setTimeout(() => setHighlightId((cur) => (cur === messageId ? null : cur)), 2000);
+    pendingJumpRef.current = messageId;
+    const loaded = await loadOlder(messageId);
+    if (!loaded) {
+      pendingJumpRef.current = null;
+      return;
+    }
+    // Rendered by now unless the message no longer exists in this channel
+    window.setTimeout(() => {
+      if (pendingJumpRef.current === messageId) {
+        pendingJumpRef.current = null;
+        if (!highlightMessage(messageId)) showToast('That message is no longer available.', 'info');
+      }
+    }, 600);
   };
 
   const handleFilesSelected = (files: File[]) => {
@@ -818,6 +936,10 @@ export const ProjectMessagesPage: React.FC = () => {
         size: a.size || undefined,
         mimeType: a.mimeType,
         storageKey: a.storageKey,
+        thumbnailUrl: a.thumbnailUrl,
+        width: a.width,
+        height: a.height,
+        duration: a.duration,
       }));
 
     if (!content.trim() && readyAttachments.length === 0) {
@@ -1441,7 +1563,23 @@ export const ProjectMessagesPage: React.FC = () => {
               </div>
             </div>
           ) : (
-            messages.map((m: ProjectMessage, index: number) => {
+            <>
+            <div className="flex justify-center py-1">
+              {hasOlderMessages ? (
+                <button
+                  type="button"
+                  onClick={() => void loadOlder()}
+                  disabled={loadingOlder}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-60 cursor-pointer shadow-2xs"
+                >
+                  <RefreshCw className={`w-3 h-3 ${loadingOlder ? 'animate-spin' : ''}`} />
+                  {loadingOlder ? 'Loading earlier messages…' : 'Load earlier messages'}
+                </button>
+              ) : (
+                <span className="text-[11px] text-slate-400">Start of the conversation</span>
+              )}
+            </div>
+            {messages.map((m: ProjectMessage, index: number) => {
               const id = (m._id || m.id) as string;
               const showDay = index === 0 || dayKey(messages[index - 1].createdAt) !== dayKey(m.createdAt);
               const isDeleted = Boolean(m.deletedAt);
@@ -1633,7 +1771,7 @@ export const ProjectMessagesPage: React.FC = () => {
                                     className="group relative rounded-xl overflow-hidden bg-black/10 border border-slate-200/50 cursor-pointer aspect-video sm:aspect-square flex items-center justify-center"
                                   >
                                     <SecureImage
-                                      src={mediaUrl}
+                                      src={att.thumbnailUrl || mediaUrl}
                                       alt={att.name || 'Project photo'}
                                       className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                                       loading="lazy"
@@ -1682,7 +1820,8 @@ export const ProjectMessagesPage: React.FC = () => {
                                   >
                                     <SecureVideo
                                       controls
-                                      preload="metadata"
+                                      preload={att.thumbnailUrl ? 'none' : 'metadata'}
+                                      posterSrc={att.thumbnailUrl}
                                       className="w-full max-h-72 object-contain bg-black"
                                       src={mediaUrl}
                                       controlsList="nodownload"
@@ -1699,6 +1838,11 @@ export const ProjectMessagesPage: React.FC = () => {
                                       <div className="flex items-center gap-1.5 truncate">
                                         <Film className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
                                         <span className="truncate">{att.name}</span>
+                                        {!!att.duration && (
+                                          <span className="text-[10px] font-mono font-bold">
+                                            {formatClock(att.duration)}
+                                          </span>
+                                        )}
                                         {!!att.size && (
                                           <span className="text-[10px] text-slate-400 font-mono">
                                             ({formatFileSize(att.size)})
@@ -1835,7 +1979,8 @@ export const ProjectMessagesPage: React.FC = () => {
                 </div>
                 </React.Fragment>
               );
-            })
+            })}
+            </>
           )}
 
           {/* Real-time "Seen by" receipt tag at bottom of thread */}

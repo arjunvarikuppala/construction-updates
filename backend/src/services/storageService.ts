@@ -183,12 +183,20 @@ export class StorageService {
     format: string,
     range?: string
   ): Promise<globalThis.Response> {
-    const url = cloudinary.utils.private_download_url(key, format, {
+    const url = this.privateCloudinaryUrl(key, resourceType, format, 120);
+    return fetch(url, { headers: range ? { Range: range } : {} });
+  }
+
+  /**
+   * Short-lived signed link to a private Cloudinary asset. Only the link's signature is
+   * exposed (never the API secret) and it stops working after `ttlSeconds`.
+   */
+  public privateCloudinaryUrl(key: string, resourceType: string, format: string, ttlSeconds: number): string {
+    return cloudinary.utils.private_download_url(key, format, {
       resource_type: resourceType as any,
       type: 'private',
-      expires_at: Math.floor(Date.now() / 1000) + 120,
+      expires_at: Math.floor(Date.now() / 1000) + ttlSeconds,
     });
-    return fetch(url, { headers: range ? { Range: range } : {} });
   }
 
   /**

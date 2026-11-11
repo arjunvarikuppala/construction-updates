@@ -1,13 +1,13 @@
 import React from 'react';
 import { ImageOff, Lock, FileText } from 'lucide-react';
-import { useMediaUrl, openMedia } from '../../utils/media.js';
+import { useDisplayMedia, openMedia } from '../../utils/media.js';
 import { useToast } from '../../context/ToastContext.js';
 
 type ImgProps = Omit<React.ImgHTMLAttributes<HTMLImageElement>, 'src'> & { src?: string | null };
 
 /** <img> for private uploads: fetches a short-lived signed URL first. */
 export const SecureImage: React.FC<ImgProps> = ({ src, className = '', alt = '', onError, ...rest }) => {
-  const { url, loading, denied } = useMediaUrl(src);
+  const { url, loading, denied, retryWithFallback } = useDisplayMedia(src);
   const [failed, setFailed] = React.useState(false);
   React.useEffect(() => setFailed(false), [url]);
   if (loading) return <div className={`bg-slate-200 animate-pulse ${className}`} aria-label="Loading image" />;
@@ -26,6 +26,7 @@ export const SecureImage: React.FC<ImgProps> = ({ src, className = '', alt = '',
       className={className}
       loading="lazy"
       onError={(e) => {
+        if (retryWithFallback()) return;
         setFailed(true);
         onError?.(e);
       }}
@@ -34,13 +35,29 @@ export const SecureImage: React.FC<ImgProps> = ({ src, className = '', alt = '',
   );
 };
 
-type VideoProps = Omit<React.VideoHTMLAttributes<HTMLVideoElement>, 'src'> & { src?: string | null };
+type VideoProps = Omit<React.VideoHTMLAttributes<HTMLVideoElement>, 'src' | 'poster'> & {
+  src?: string | null;
+  /** Stored URL of a preview frame; shown until the video is played. */
+  posterSrc?: string | null;
+};
 
-export const SecureVideo: React.FC<VideoProps> = ({ src, className = '', ...rest }) => {
-  const { url, loading } = useMediaUrl(src);
+export const SecureVideo: React.FC<VideoProps> = ({ src, posterSrc, className = '', onError, ...rest }) => {
+  const { url, loading, retryWithFallback } = useDisplayMedia(src);
+  const poster = useDisplayMedia(posterSrc);
   if (loading) return <div className={`bg-slate-800 animate-pulse ${className}`} aria-label="Loading video" />;
   if (!url) return <div className={`flex items-center justify-center bg-slate-800 text-slate-400 text-xs ${className}`}>Video unavailable</div>;
-  return <video src={url} className={className} {...rest} />;
+  return (
+    <video
+      src={url}
+      poster={poster.url || undefined}
+      className={className}
+      onError={(e) => {
+        if (retryWithFallback()) return;
+        onError?.(e);
+      }}
+      {...rest}
+    />
+  );
 };
 
 interface LinkProps extends Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, 'href' | 'onClick'> {

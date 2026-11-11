@@ -66,7 +66,7 @@ async function findReferencingProjectIds(filename: string): Promise<string[]> {
     DailyReport.find({ 'photos.url': pattern }).select('project'),
     Expense.find({ receiptUrl: pattern }).select('project'),
     PaymentRequest.find({ $or: [{ invoiceUrl: pattern }, { 'settlements.proofUrl': pattern }] }).select('project'),
-    ProjectMessage.find({ 'attachments.url': pattern }).select('project'),
+    ProjectMessage.find({ $or: [{ 'attachments.url': pattern }, { 'attachments.thumbnailUrl': pattern }] }).select('project'),
   ]);
   const ids = new Set<string>();
   [...reports, ...expenses, ...payments, ...messages].forEach((doc: any) => doc.project && ids.add(String(doc.project)));
@@ -184,7 +184,7 @@ export async function resolveShareableAttachment(
     DailyReport.exists({ project, 'photos.url': match }),
     Expense.exists({ project, receiptUrl: match }),
     PaymentRequest.exists({ project, invoiceUrl: match }),
-    ProjectMessage.exists({ project, 'attachments.url': match }),
+    ProjectMessage.exists({ project, $or: [{ 'attachments.url': match }, { 'attachments.thumbnailUrl': match }] }),
   ]);
   if (!report && !expense && !payment && !message) return null;
 

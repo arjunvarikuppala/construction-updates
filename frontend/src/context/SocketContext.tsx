@@ -3,6 +3,7 @@ import { io, Socket } from 'socket.io-client';
 import { useAuth } from './AuthContext.js';
 import { useToast } from './ToastContext.js';
 import { useQueryClient } from '@tanstack/react-query';
+import { appendMessage, replaceMessage, applySeen } from '../utils/chatHistory.js';
 
 interface SocketContextType {
   socket: Socket | null;
@@ -94,20 +95,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             ? String((message.project as any)._id || (message.project as any).id)
             : String(message.project);
 
-        queryClient.setQueriesData(
-          { queryKey: ['project-messages', projId] },
-          (old: any) => {
-            if (!old || !Array.isArray(old.messages)) return old;
-            const msgId = String(message._id || message.id);
-            const exists = old.messages.some((m: any) => String(m._id || m.id) === msgId);
-            if (exists) return old;
-            return {
-              ...old,
-              messages: [...old.messages, message],
-              count: (old.count || old.messages.length) + 1,
-            };
-          }
-        );
+        queryClient.setQueriesData({ queryKey: ['project-messages', projId] }, (old: any) => appendMessage(old, message));
 
         queryClient.invalidateQueries({ queryKey: ['unread-messages-count'] });
       }
@@ -119,13 +107,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (!message?._id || !message.project) return;
       const projId =
         typeof message.project === 'object' ? String(message.project._id || message.project.id) : String(message.project);
-      queryClient.setQueriesData({ queryKey: ['project-messages', projId] }, (old: any) => {
-        if (!old || !Array.isArray(old.messages)) return old;
-        return {
-          ...old,
-          messages: old.messages.map((m: any) => (String(m._id || m.id) === String(message._id) ? message : m)),
-        };
-      });
+      queryClient.setQueriesData({ queryKey: ['project-messages', projId] }, (old: any) => replaceMessage(old, message));
       if (payload.change === 'pinned' || payload.change === 'unpinned' || payload.change === 'deleted' || payload.change === 'edited') {
         queryClient.invalidateQueries({ queryKey: ['project-pinned', projId] });
       }
@@ -135,7 +117,15 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     socketInstance.on('messages:seen', (data) => {
       if (data?.projectId) {
         const pId = String(data.projectId);
-        queryClient.invalidateQueries({ queryKey: ['project-messages', pId] });
+        // Update the ticks in place: no need to reload the whole conversation
+        queryClient.setQueriesData({ queryKey: ['project-messages', pId] }, (old: any) =>
+          applySeen(old, {
+            readerId: String(data.readerId || ''),
+            readerName: data.readerName,
+            readerRole: data.readerRole,
+            readAt: data.readAt,
+          })
+        );
         queryClient.invalidateQueries({ queryKey: ['unread-messages-count'] });
       }
     });

@@ -35,6 +35,7 @@ router.post(
   upload.fields([
     { name: 'files', maxCount: 10 },
     { name: 'file', maxCount: 1 },
+    { name: 'thumb', maxCount: 1 }, // optional phone-made preview (photo thumbnail / video poster)
   ]),
   uploadProjectMessageMedia
 );

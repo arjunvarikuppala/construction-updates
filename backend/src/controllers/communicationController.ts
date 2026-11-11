@@ -26,6 +26,12 @@ const MAX_AUDIO_SIZE = parseInt(process.env.CHAT_MAX_AUDIO_SIZE_MB || '15', 10) 
 export const MESSAGE_EDIT_WINDOW_MS = 24 * 60 * 60 * 1000;
 export const ALLOWED_REACTIONS = ['👍', '❤️', '😂', '😮', '🙏', '✅', '👀', '🔥'];
 const MAX_PINNED_PER_PROJECT = 10;
+/** Messages per history page (the chat loads older pages as the user scrolls up). */
+const DEFAULT_PAGE_SIZE = 50;
+/** Upper bound when loading back to a specific old message in one request. */
+const MAX_JUMP_MESSAGES = 1000;
+/** Preview images (photo thumbnails / video posters) generated on the phone. */
+const MAX_THUMB_SIZE = 1024 * 1024;
 
 const REPLY_POPULATE = {
   path: 'replyTo',
@@ -141,7 +147,7 @@ function getMimeTypeFromFilename(filename: string): string {
 export async function listProjectMessages(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
     const { projectId } = req.params;
-    const { limit = 100, before } = req.query;
+    const { limit, before, beforeId, untilId } = req.query;
 
     const access = await verifyUserProjectAccess(projectId, req.user!.userId, req.user!.role);
     if (!access.allowed) {
@@ -150,23 +156,66 @@ export async function listProjectMessages(req: AuthenticatedRequest, res: Respon
     }
 
     const resolvedProjectId = access.project ? access.project._id : projectId;
+    const pageSize = Math.min(Math.max(Number(limit) || DEFAULT_PAGE_SIZE, 1), 200);
 
-    const query: any = { project: resolvedProjectId };
-    if (before) {
-      query.createdAt = { $lt: new Date(String(before)) };
+    // Cursor: messages strictly older than (before, beforeId). The id breaks ties between
+    // messages created in the same millisecond, so paging never skips or repeats one.
+    const conditions: any[] = [{ project: resolvedProjectId }];
+    const beforeDate = before ? new Date(String(before)) : null;
+    if (beforeDate && !Number.isNaN(beforeDate.getTime())) {
+      const idValid = beforeId && mongoose.Types.ObjectId.isValid(String(beforeId));
+      conditions.push(
+        idValid
+          ? {
+              $or: [
+                { createdAt: { $lt: beforeDate } },
+                { createdAt: beforeDate, _id: { $lt: new mongoose.Types.ObjectId(String(beforeId)) } },
+              ],
+            }
+          : { createdAt: { $lt: beforeDate } }
+      );
     }
 
-    const messages = await ProjectMessage.find(query)
+    // untilId: load everything back to (and including) that message, e.g. to jump to an old
+    // quoted / pinned / searched message in one request instead of paging step by step.
+    let floor: Date | null = null;
+    if (untilId && mongoose.Types.ObjectId.isValid(String(untilId))) {
+      const target = await ProjectMessage.findOne({ _id: String(untilId), project: resolvedProjectId })
+        .select('createdAt')
+        .lean();
+      if (target) {
+        floor = target.createdAt;
+        conditions.push({ createdAt: { $gte: floor } });
+      }
+    }
+
+    const fetched = await ProjectMessage.find({ $and: conditions })
       .populate('sender', 'name email role')
       .populate(REPLY_POPULATE)
-      .populate('readBy.user', 'name email role')
+      .populate('readBy.user', 'name role')
       .populate('reactions.user', 'name role')
       .populate('pinnedBy', 'name role')
-      .sort({ createdAt: -1 })
-      .limit(Math.min(Number(limit) || 100, 200));
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(floor ? MAX_JUMP_MESSAGES : pageSize + 1)
+      .lean();
+
+    let hasMore: boolean;
+    if (floor) {
+      const oldest = fetched[fetched.length - 1];
+      hasMore = Boolean(
+        oldest &&
+          (await ProjectMessage.exists({
+            project: resolvedProjectId,
+            $or: [{ createdAt: { $lt: oldest.createdAt } }, { createdAt: oldest.createdAt, _id: { $lt: oldest._id } }],
+          }))
+      );
+    } else {
+      hasMore = fetched.length > pageSize;
+      if (hasMore) fetched.length = pageSize;
+    }
 
     // Reverse to chronological order for chat view
-    messages.reverse();
+    const messages = fetched.reverse();
 
     // Mark messages as read by current user in background
     const unreadMessageIds = messages
@@ -205,6 +254,7 @@ export async function listProjectMessages(req: AuthenticatedRequest, res: Respon
     res.json({
       success: true,
       count: messages.length,
+      hasMore,
       messages,
     });
   } catch (err: any) {
@@ -263,6 +313,20 @@ export async function sendProjectMessage(req: AuthenticatedRequest, res: Respons
       const duration = Number(raw?.duration);
       if ((safe.type === 'audio' || safe.type === 'video') && Number.isFinite(duration) && duration > 0) {
         (safe as any).duration = Math.min(Math.round(duration), 60 * 60);
+      }
+      if (safe.type === 'image' || safe.type === 'video') {
+        // Display size (lets the chat reserve space before the picture loads)
+        const width = Math.round(Number(raw?.width));
+        const height = Math.round(Number(raw?.height));
+        if (width > 0 && width <= 20000 && height > 0 && height <= 20000) {
+          (safe as any).width = width;
+          (safe as any).height = height;
+        }
+        // Preview image: must itself be the sender's upload or a file of this project
+        if (typeof raw?.thumbnailUrl === 'string' && raw.thumbnailUrl) {
+          const thumb = await resolveShareableAttachment(req.user!, String(resolvedProjectId), { url: raw.thumbnailUrl });
+          if (thumb?.type === 'image') (safe as any).thumbnailUrl = thumb.url;
+        }
       }
       messageAttachments.push(safe);
     }
@@ -571,6 +635,7 @@ export async function getUnreadMessagesCount(req: AuthenticatedRequest, res: Res
 }
 
 export async function uploadProjectMessageMedia(req: AuthenticatedRequest, res: Response): Promise<void> {
+  let thumbFile: Express.Multer.File | undefined;
   try {
     const { projectId } = req.params;
     const access = await verifyUserProjectAccess(projectId, req.user!.userId, req.user!.role);
@@ -581,20 +646,28 @@ export async function uploadProjectMessageMedia(req: AuthenticatedRequest, res: 
 
     const resolvedProjectId = access.project ? access.project._id : projectId;
 
-    // Collect uploaded files from req.files or req.file
+    // Collect uploaded files from req.files or req.file. The optional "thumb" field is a
+    // small preview image (photo thumbnail / video poster) made on the phone.
     let uploadedFiles: Express.Multer.File[] = [];
     if (Array.isArray(req.files)) {
       uploadedFiles = req.files;
     } else if (req.files && typeof req.files === 'object') {
-      const fieldFiles = Object.values(req.files).flat() as Express.Multer.File[];
-      uploadedFiles = fieldFiles;
+      const { thumb, ...rest } = req.files as Record<string, Express.Multer.File[]>;
+      thumbFile = thumb?.[0];
+      uploadedFiles = Object.values(rest).flat();
     } else if (req.file) {
       uploadedFiles = [req.file];
     }
 
     if (!uploadedFiles || uploadedFiles.length === 0) {
+      if (thumbFile) removeTempFile(thumbFile.path);
       res.status(400).json({ success: false, message: 'No media files provided.' });
       return;
+    }
+    // A preview only makes sense for a single photo or video
+    if (thumbFile && uploadedFiles.length !== 1) {
+      removeTempFile(thumbFile.path);
+      thumbFile = undefined;
     }
 
     const processedAttachments: IMessageAttachment[] = [];
@@ -658,14 +731,24 @@ export async function uploadProjectMessageMedia(req: AuthenticatedRequest, res: 
       }
       await recordExternalUpload({ url: fileUrl, uploadedBy: req.user!.userId, mimetype: detected.detectedMime, size: uploadResult.size, storage: uploadResult });
 
-      processedAttachments.push({
+      const attachment: IMessageAttachment = {
         type: detected.mediaType,
         url: fileUrl,
         name: file.originalname.slice(0, 200),
         size: uploadResult.size,
         mimeType: detected.detectedMime,
         storageKey: uploadResult.key,
-      });
+      };
+
+      // 4. Optional preview image. A bad or failed preview never fails the upload itself:
+      //    the chat then simply shows the full file.
+      if (thumbFile && (detected.mediaType === 'image' || detected.mediaType === 'video')) {
+        const thumbUrl = await storeThumbnail(thumbFile, String(resolvedProjectId), req.user!.userId);
+        if (thumbUrl) attachment.thumbnailUrl = thumbUrl;
+        thumbFile = undefined;
+      }
+
+      processedAttachments.push(attachment);
     }
 
     await logAudit('COMMUNICATION_MEDIA_UPLOAD', req.user!.userId, 'COMMUNICATION', resolvedProjectId, {
@@ -681,6 +764,43 @@ export async function uploadProjectMessageMedia(req: AuthenticatedRequest, res: 
     });
   } catch (err: any) {
     res.status(err?.status === 400 ? 400 : 500).json({ success: false, message: err?.userMessage || 'Media upload failed', error: err.message });
+  } finally {
+    // An unused preview (rejected file, voice note, PDF) must not stay on the server disk
+    if (thumbFile) removeTempFile(thumbFile.path);
+  }
+}
+
+function removeTempFile(filePath: string | undefined): void {
+  if (!filePath) return;
+  try {
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Validate and store a phone-generated preview image; returns its URL or undefined. */
+async function storeThumbnail(
+  thumb: Express.Multer.File,
+  projectId: string,
+  userId: string
+): Promise<string | undefined> {
+  try {
+    const detected = validateMediaMagicBytes(thumb.path, thumb.mimetype);
+    if (!detected || detected.mediaType !== 'image' || fs.statSync(thumb.path).size > MAX_THUMB_SIZE) {
+      removeTempFile(thumb.path);
+      return undefined;
+    }
+    const result = await storageService.uploadFile(thumb.path, thumb.filename, detected.detectedMime);
+    const url = result.url.startsWith('/uploads/')
+      ? `/api/v1/projects/${projectId}/messages/media/${thumb.filename}`
+      : result.url;
+    await recordExternalUpload({ url, uploadedBy: userId, mimetype: detected.detectedMime, size: result.size, storage: result });
+    return url;
+  } catch (err) {
+    console.error('Preview image upload failed:', (err as Error).message);
+    removeTempFile(thumb.path);
+    return undefined;
   }
 }
 

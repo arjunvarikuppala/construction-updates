@@ -11,6 +11,8 @@ import {
   streamCloudFile,
   SIGNED_URL_TTL_SECONDS,
 } from '../services/fileAccessService.js';
+import { storageService } from '../services/storageService.js';
+import { UploadedFile } from '../models/UploadedFile.js';
 
 export const uploadsDir = path.resolve(process.cwd(), 'uploads');
 
@@ -48,7 +50,35 @@ fileApiRouter.post('/sign', async (req: AuthenticatedRequest, res: Response) => 
     signed[raw] = cache.get(filename) ? signFilename(filename) : null;
   }
 
-  res.json({ success: true, expiresIn: SIGNED_URL_TTL_SECONDS, signed });
+  // Optional: for photos/videos kept in Cloudinary, also hand out a short-lived signed
+  // Cloudinary link so the browser loads them straight from Cloudinary's servers instead
+  // of through this API. Access was already checked above (only signed files qualify).
+  // The app falls back to the `signed` link if a direct link fails to load.
+  const direct: Record<string, string> = {};
+  if (req.body?.direct === true && storageService.isCloudinaryEnabled()) {
+    const byFilename = new Map<string, string[]>();
+    for (const [raw, value] of Object.entries(signed)) {
+      const filename = value && !/^https?:/i.test(raw) ? extractLocalFilename(raw) : null;
+      if (filename) byFilename.set(filename, [...(byFilename.get(filename) || []), raw]);
+    }
+    if (byFilename.size > 0) {
+      const records = await UploadedFile.find({
+        filename: { $in: Array.from(byFilename.keys()) },
+        provider: 'CLOUDINARY',
+        storageKey: { $exists: true },
+        resourceType: { $in: ['image', 'video'] },
+      })
+        .select('filename storageKey resourceType format')
+        .lean();
+      for (const r of records) {
+        if (!r.storageKey || !r.format || !r.resourceType) continue;
+        const link = storageService.privateCloudinaryUrl(r.storageKey, r.resourceType, r.format, SIGNED_URL_TTL_SECONDS);
+        byFilename.get(r.filename)?.forEach((raw) => (direct[raw] = link));
+      }
+    }
+  }
+
+  res.json({ success: true, expiresIn: SIGNED_URL_TTL_SECONDS, signed, direct });
 });
 
 /**

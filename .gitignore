@@ -44,3 +44,7 @@ Thumbs.db
 
 # TypeScript
 *.tsbuildinfo
+
+# Live credentials for one-off maintenance scripts (never commit)
+backend/.env.migrate
+.env.migrate

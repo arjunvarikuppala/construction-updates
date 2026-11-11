@@ -26,7 +26,7 @@ import {
   FileText,
 } from 'lucide-react';
 import { api } from '../../api/client.js';
-import { useMediaUrl } from '../../utils/media.js';
+import { useDisplayMedia } from '../../utils/media.js';
 import { formatDate } from '../../utils/dates.js';
 import { MessageAttachment, ProjectMessage } from '../../types/index.js';
 import { messageSummary } from './ChatParts.js';
@@ -640,7 +640,7 @@ export const VoiceRecorder: React.FC<{
 
 /** Compact voice-note player that streams the private file through a signed URL. */
 export const VoiceNotePlayer: React.FC<{ attachment: MessageAttachment; dark: boolean }> = ({ attachment, dark }) => {
-  const { url, loading } = useMediaUrl(attachment.url);
+  const { url, loading, retryWithFallback } = useDisplayMedia(attachment.url);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState(false);
   const [current, setCurrent] = useState(0);
@@ -669,6 +669,7 @@ export const VoiceNotePlayer: React.FC<{ attachment: MessageAttachment; dark: bo
           ref={audioRef}
           src={url}
           preload="metadata"
+          onError={() => retryWithFallback()}
           onPlay={() => setPlaying(true)}
           onPause={() => setPlaying(false)}
           onEnded={() => {
