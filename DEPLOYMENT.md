@@ -4,7 +4,7 @@ This guide puts the app online on **the client's own accounts**, so BKR Infra ow
 
 | Part | Service | Plan | Approx. cost |
 |---|---|---|---|
-| Website (what people open) | Cloudflare Pages | Free (commercial use allowed) | ₹0 |
+| Website (what people open) | Cloudflare Workers (static assets) | Free (commercial use allowed) | ₹0 |
 | Backend API + live chat | Render — web service | Starter (always on) | ~$7 / month |
 | Database | MongoDB Atlas | M0 Free (512 MB) | ₹0 |
 | Photos, receipts, PDFs | Cloudinary | Free | ₹0 |
@@ -77,7 +77,7 @@ You need:
    |---|---|
    | `MONGODB_URI` | from step 1 |
    | `CLOUDINARY_CLOUD_NAME` / `_API_KEY` / `_API_SECRET` | from step 2 |
-   | `CORS_ORIGIN` | leave as `https://bkr-infra.pages.dev` for now (the website address from step 4) |
+   | `CORS_ORIGIN` | the website address from step 4 (set it after step 4 if you do this first) |
 
    `JWT_SECRET` (login security) is generated automatically. **Don't change it later**, or everyone is signed out.
 
@@ -87,35 +87,33 @@ You need:
 
 ---
 
-## 4. Website — Cloudflare Pages
+## 4. Website — Cloudflare Workers
 
-Cloudflare Pages is free for business use, has unlimited bandwidth, and serves from data centres across India.
+Cloudflare is free for business use, has unlimited bandwidth, and serves from data centres across India.
 
 1. Sign up at **dash.cloudflare.com** with the company email.
-2. **Workers & Pages** → **Create** → choose the **Pages** tab → **Connect to Git** → pick this repository.
-   (Choose *Pages*, not *Workers*. The Workers option needs extra config files this project doesn't have.)
-3. Fill in the build settings:
+2. **Workers & Pages** → **Create** → **Import a repository** → pick this repository.
+3. Fill in the settings:
 
    | Setting | Value |
    |---|---|
-   | Project name | `bkr-infra` (gives `https://bkr-infra.pages.dev`) |
-   | Production branch | `main` |
-   | Framework preset | `React (Vite)` |
+   | Project name | `construction-updates` (must match `name` in `frontend/wrangler.jsonc`; change both if you pick another name) |
+   | Root directory (path) | `frontend` |
    | Build command | `npm run build` |
-   | Build output directory | `dist` |
-   | Root directory | `frontend` |
+   | Deploy command | `npx wrangler deploy` |
+   | Production branch | `main` |
 
-4. Under **Environment variables**, add:
+4. Under **Build variables** (Settings → Build → *Variables and secrets*, **not** the runtime variables), add:
 
    | Variable | Value |
    |---|---|
    | `VITE_API_URL` | `https://bkr-infra-api.onrender.com` (the API address from step 3) |
    | `NODE_VERSION` | `22` |
 
-5. **Save and Deploy**. When it finishes, open `https://bkr-infra.pages.dev`. The login page with the BKR logo should appear.
-6. If the project name was taken, Cloudflare picks another address (e.g. `bkr-infra-abc.pages.dev`). Put that exact address in Render → **bkr-infra-api** → *Environment* → `CORS_ORIGIN`.
+5. **Deploy**. When it finishes, open the `https://construction-updates.<your-subdomain>.workers.dev` address shown on the Worker's page. The login page with the BKR logo should appear.
+6. Put that exact address in Render → **bkr-infra-api** → *Environment* → `CORS_ORIGIN`.
 
-Page routing and caching are already set up in the code: `frontend/public/_headers` sets the caching rules, and Cloudflare automatically sends every page address to the app.
+Page routing and caching are already set up in the code: `frontend/wrangler.jsonc` sends every page address to the app, and `frontend/public/_headers` sets the caching rules.
 
 ### Moving from Vercel (if the site is already live there)
 
@@ -123,8 +121,8 @@ Keep Vercel running until Cloudflare works, so nobody is cut off:
 
 1. Do steps 1–5 above.
 2. Render → **bkr-infra-api** → *Environment* → set `CORS_ORIGIN` to **both** addresses, comma-separated, then *Save*:
-   `https://your-app.vercel.app,https://bkr-infra.pages.dev`
-3. Test on `https://bkr-infra.pages.dev`: log in, open a project chat, upload a photo.
+   `https://your-app.vercel.app,https://construction-updates.<your-subdomain>.workers.dev`
+3. Test on `https://construction-updates.<your-subdomain>.workers.dev`: log in, open a project chat, upload a photo.
 4. Move the domain (section 5) to Cloudflare.
 5. Once the domain works, remove the Vercel address from `CORS_ORIGIN` and delete the Vercel project.
    People who installed the app on their phone from the **Vercel address** need to install it again from the new address. Installs from the custom domain keep working.
@@ -134,10 +132,9 @@ Keep Vercel running until Cloudflare works, so nobody is cut off:
 ## 5. Connect the client's domain
 
 ### Website → `app.bkrinfra.com`
-1. Cloudflare → **Workers & Pages** → **bkr-infra** → *Custom domains* → **Set up a custom domain** → `app.bkrinfra.com`.
-2. If the domain's DNS is on Cloudflare, it adds the record for you. Otherwise, add this at the domain provider:
-   `CNAME` · name `app` · value `bkr-infra.pages.dev`
-   (If this domain was pointing at Vercel, **replace** the old Vercel record. Don't add a second one.)
+1. Cloudflare → **Workers & Pages** → **construction-updates** → *Settings* → *Domains & Routes* → **Add** → *Custom domain* → `app.bkrinfra.com`.
+2. This needs the domain's DNS on Cloudflare (add the domain under *Domains* and switch its nameservers at the registrar). Cloudflare then creates the record for you.
+   If this domain was pointing at Vercel, delete the old Vercel record first.
 
 ### API → `api.bkrinfra.com`
 1. Render → **bkr-infra-api** → *Settings* → *Custom Domains* → add `api.bkrinfra.com`.
@@ -148,11 +145,11 @@ Wait until both show as active with HTTPS. This usually takes minutes, but can t
 
 ### Point the app at the real addresses
 1. Render → **bkr-infra-api** → *Environment* → set `CORS_ORIGIN` = `https://app.bkrinfra.com` → *Save* (it redeploys).
-2. Cloudflare → **bkr-infra** → *Settings* → *Variables and Secrets* → set `VITE_API_URL` = `https://api.bkrinfra.com`.
-   Then *Deployments* → latest → **Retry deployment**. The website must be **rebuilt** after this change, because the address is built into the website files.
+2. Cloudflare → **construction-updates** → *Settings* → *Build* → *Variables and secrets* → set `VITE_API_URL` = `https://api.bkrinfra.com`.
+   Then push a commit (or *Deployments* → latest build → **Retry build**). The website must be **rebuilt** after this change, because the address is built into the website files.
 3. Open **https://app.bkrinfra.com** and check it loads.
 
-> Want the website on the main domain (`bkrinfra.com`) instead of `app.`? Add `bkrinfra.com` as the custom domain in Cloudflare Pages instead (this needs the domain's DNS on Cloudflare). Then set `CORS_ORIGIN` to `https://bkrinfra.com`.
+> Want the website on the main domain (`bkrinfra.com`) instead of `app.`? Add `bkrinfra.com` as the custom domain in Cloudflare instead. Then set `CORS_ORIGIN` to `https://bkrinfra.com`.
 
 ---
 
@@ -192,6 +189,6 @@ Without RazorpayX keys, the MD still records payments by hand. Everything else w
 ## 9. Day-to-day
 
 - **Updates:** pushing to the `main` branch on GitHub redeploys the website (Cloudflare) and the API (Render) automatically.
-- **Logs / problems:** API → Render → service → *Logs*. Website build → Cloudflare → **bkr-infra** → *Deployments*.
+- **Logs / problems:** API → Render → service → *Logs*. Website build → Cloudflare → **construction-updates** → *Deployments*.
 - **Backups:** Atlas M0 has no automatic backups. For important data, upgrade to an Atlas **M10** cluster (backups included). Or periodically export from Atlas → *Collections* → *Export*.
 - **Storage limits:** Atlas M0 = 512 MB of data (text only; files live in Cloudinary). Cloudinary Free = 25 monthly credits. Both dashboards show usage, so upgrade when they get close.

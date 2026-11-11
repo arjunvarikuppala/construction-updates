@@ -1,5 +1,5 @@
 # Render Blueprint — BKR Infra backend API (Express + Socket.IO).
-# The website is hosted on Cloudflare Pages (see DEPLOYMENT.md section 4).
+# The website is hosted on Cloudflare Workers (see DEPLOYMENT.md section 4).
 # In Render: New + → Blueprint → pick this repository. Values marked `sync: false`
 # are asked for during setup (they are secrets and are never stored in Git).
 # Full walkthrough: DEPLOYMENT.md

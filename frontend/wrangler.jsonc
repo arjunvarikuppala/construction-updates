@@ -1,0 +1,14 @@
+// Cloudflare Workers static hosting for the website (Workers & Pages → construction-updates).
+// "name" must match the Worker's name in the Cloudflare dashboard, or the build fails.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "construction-updates",
+  "compatibility_date": "2025-11-01",
+  "assets": {
+    // Vite build output (build command: npm run build)
+    "directory": "./dist",
+    // Single-page app: any page address (e.g. /projects/123) loads index.html,
+    // so refreshing or opening a link doesn't show a 404. Real files are served first.
+    "not_found_handling": "single-page-application"
+  }
+}
