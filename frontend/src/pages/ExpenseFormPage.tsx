@@ -257,7 +257,7 @@ export const ExpenseFormPage: React.FC = () => {
               <p className="text-xs text-slate-500">Attach stamped tax invoice, weighbridge receipt, or voucher</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500 text-navy-950 text-xs font-bold cursor-pointer hover:bg-amber-400 transition-colors min-h-[38px]">
+              <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-brand-600 text-white text-xs font-bold cursor-pointer hover:bg-brand-700 transition-colors min-h-[38px]">
                 <Camera className="w-4 h-4" />
                 <span>{isUploading ? 'Uploading...' : 'Camera'}</span>
                 <input
@@ -271,7 +271,7 @@ export const ExpenseFormPage: React.FC = () => {
               </label>
 
               <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-navy-900 text-white text-xs font-semibold cursor-pointer hover:bg-navy-800 transition-colors min-h-[38px]">
-                <Upload className="w-4 h-4 text-amber-400" />
+                <Upload className="w-4 h-4 text-brand-400" />
                 <span>{isUploading ? 'Uploading...' : 'File / PDF'}</span>
                 <input
                   type="file"

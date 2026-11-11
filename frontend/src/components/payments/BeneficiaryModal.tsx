@@ -112,7 +112,7 @@ export const BeneficiaryModal: React.FC<BeneficiaryModalProps> = ({
         {/* Header */}
         <div className="px-4 sm:px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/60 shrink-0">
           <div className="flex items-center gap-2.5 min-w-0 pr-2">
-            <div className="w-9 h-9 rounded-xl bg-amber-500 text-navy-950 flex items-center justify-center font-bold shrink-0">
+            <div className="w-9 h-9 rounded-xl bg-brand-600 text-white flex items-center justify-center font-bold shrink-0">
               <Users className="w-5 h-5" />
             </div>
             <div className="min-w-0">
@@ -165,7 +165,7 @@ export const BeneficiaryModal: React.FC<BeneficiaryModalProps> = ({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="As registered with bank / PAN"
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm text-slate-800 focus:ring-2 focus:ring-amber-500 outline-none"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm text-slate-800 focus:ring-2 focus:ring-navy-500 outline-none"
             />
           </div>
 
@@ -180,7 +180,7 @@ export const BeneficiaryModal: React.FC<BeneficiaryModalProps> = ({
                 onClick={() => setAccountType('BANK')}
                 className={`py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors ${
                   accountType === 'BANK'
-                    ? 'bg-amber-500 text-navy-950 shadow-xs'
+                    ? 'bg-brand-600 text-white shadow-xs'
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
@@ -192,7 +192,7 @@ export const BeneficiaryModal: React.FC<BeneficiaryModalProps> = ({
                 onClick={() => setAccountType('UPI')}
                 className={`py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors ${
                   accountType === 'UPI'
-                    ? 'bg-amber-500 text-navy-950 shadow-xs'
+                    ? 'bg-brand-600 text-white shadow-xs'
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
@@ -215,7 +215,7 @@ export const BeneficiaryModal: React.FC<BeneficiaryModalProps> = ({
                   value={accountNumber}
                   onChange={(e) => setAccountNumber(e.target.value)}
                   placeholder="Enter account number"
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white focus:ring-2 focus:ring-amber-500 outline-none font-mono"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white focus:ring-2 focus:ring-navy-500 outline-none font-mono"
                 />
               </div>
 
@@ -229,7 +229,7 @@ export const BeneficiaryModal: React.FC<BeneficiaryModalProps> = ({
                   value={confirmAccountNumber}
                   onChange={(e) => setConfirmAccountNumber(e.target.value)}
                   placeholder="Re-enter account number to verify"
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white focus:ring-2 focus:ring-amber-500 outline-none font-mono"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white focus:ring-2 focus:ring-navy-500 outline-none font-mono"
                 />
               </div>
 
@@ -244,7 +244,7 @@ export const BeneficiaryModal: React.FC<BeneficiaryModalProps> = ({
                   value={ifsc}
                   onChange={(e) => setIfsc(e.target.value.toUpperCase())}
                   placeholder="e.g. HDFC0001234"
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white focus:ring-2 focus:ring-amber-500 outline-none font-mono uppercase"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white focus:ring-2 focus:ring-navy-500 outline-none font-mono uppercase"
                 />
               </div>
             </div>
@@ -260,7 +260,7 @@ export const BeneficiaryModal: React.FC<BeneficiaryModalProps> = ({
                   value={vpa}
                   onChange={(e) => setVpa(e.target.value.toLowerCase())}
                   placeholder="e.g. supplier@okhdfcbank or 9876543210@paytm"
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white focus:ring-2 focus:ring-amber-500 outline-none font-mono"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white focus:ring-2 focus:ring-navy-500 outline-none font-mono"
                 />
               </div>
               <p className="text-[11px] text-slate-500">
@@ -278,7 +278,7 @@ export const BeneficiaryModal: React.FC<BeneficiaryModalProps> = ({
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 placeholder="+91..."
-                className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-amber-500 outline-none"
+                className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-navy-500 outline-none"
               />
             </div>
             <div>
@@ -288,7 +288,7 @@ export const BeneficiaryModal: React.FC<BeneficiaryModalProps> = ({
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="accounts@..."
-                className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-amber-500 outline-none"
+                className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-navy-500 outline-none"
               />
             </div>
           </div>

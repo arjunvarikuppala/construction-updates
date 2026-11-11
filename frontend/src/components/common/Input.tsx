@@ -29,7 +29,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           <input
             ref={ref}
             id={inputId}
-            className={`w-full rounded-xl border bg-white px-3.5 py-2.5 sm:py-2 min-h-[44px] sm:min-h-[40px] text-sm text-slate-900 placeholder-slate-400 transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500/25 focus:border-amber-500 scroll-mt-24 ${
+            className={`w-full rounded-xl border bg-white px-3.5 py-2.5 sm:py-2 min-h-[44px] sm:min-h-[40px] text-sm text-slate-900 placeholder-slate-400 transition-colors focus:outline-none focus:ring-2 focus:ring-navy-500/20 focus:border-navy-500 scroll-mt-24 ${
               leftIcon ? 'pl-10' : ''
             } ${rightIcon ? 'pr-10' : ''} ${
               error
@@ -78,7 +78,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
           ref={ref}
           id={inputId}
           rows={props.rows || 3}
-          className={`w-full rounded-xl border bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500/25 focus:border-amber-500 min-h-[88px] leading-relaxed resize-y scroll-mt-24 ${
+          className={`w-full rounded-xl border bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 transition-colors focus:outline-none focus:ring-2 focus:ring-navy-500/20 focus:border-navy-500 min-h-[88px] leading-relaxed resize-y scroll-mt-24 ${
             error
               ? 'border-rose-400 focus:ring-rose-500 focus:border-rose-500'
               : 'border-slate-300 hover:border-slate-400'
@@ -119,7 +119,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
         <select
           ref={ref}
           id={inputId}
-          className={`w-full rounded-xl border bg-white px-3.5 py-2.5 sm:py-2 min-h-[44px] sm:min-h-[40px] text-sm text-slate-900 transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500/25 focus:border-amber-500 scroll-mt-24 ${
+          className={`w-full rounded-xl border bg-white px-3.5 py-2.5 sm:py-2 min-h-[44px] sm:min-h-[40px] text-sm text-slate-900 transition-colors focus:outline-none focus:ring-2 focus:ring-navy-500/20 focus:border-navy-500 scroll-mt-24 ${
             error
               ? 'border-rose-400 focus:ring-rose-500 focus:border-rose-500'
               : 'border-slate-300 hover:border-slate-400'

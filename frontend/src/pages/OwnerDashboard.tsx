@@ -178,7 +178,7 @@ export const OwnerDashboard: React.FC = () => {
               size="sm"
               variant="primary"
               onClick={() => navigate('/projects')}
-              leftIcon={<Plus className="w-4 h-4 text-amber-400" />}
+              leftIcon={<Plus className="w-4 h-4 text-brand-400" />}
             >
               New Project
             </Button>

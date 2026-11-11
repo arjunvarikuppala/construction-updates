@@ -95,7 +95,7 @@ export const LiveNotifications: React.FC = () => {
             onKeyDown={(e) => e.key === 'Enter' && open(item)}
             className="flex items-start gap-3 p-3 rounded-2xl bg-white border border-slate-200 shadow-2xl cursor-pointer hover:border-amber-400 animate-in slide-in-from-top-2"
           >
-            <div className="w-9 h-9 rounded-xl bg-amber-500 text-navy-950 flex items-center justify-center shrink-0">
+            <div className="w-9 h-9 rounded-xl bg-brand-600 text-white flex items-center justify-center shrink-0">
               <Icon className="w-4 h-4" />
             </div>
             <div className="flex-1 min-w-0">
@@ -174,7 +174,7 @@ export const EnableNotificationsPrompt: React.FC = () => {
   return (
     <div className="fixed z-40 bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] md:bottom-6 left-3 right-3 md:left-auto md:right-6 md:max-w-sm bg-navy-900 text-white p-4 rounded-2xl shadow-2xl border border-navy-700/80">
       <div className="flex items-start gap-3">
-        <div className="w-10 h-10 rounded-xl bg-amber-500 text-navy-950 flex items-center justify-center shrink-0">
+        <div className="w-10 h-10 rounded-xl bg-brand-600 text-white flex items-center justify-center shrink-0">
           {state === 'ios-needs-install' ? <Smartphone className="w-5 h-5" /> : <BellRing className="w-5 h-5" />}
         </div>
         <div className="flex-1 min-w-0">
@@ -197,7 +197,7 @@ export const EnableNotificationsPrompt: React.FC = () => {
           <button
             onClick={turnOn}
             disabled={busy}
-            className="min-h-[36px] px-4 rounded-lg text-xs font-bold bg-amber-500 text-navy-950 hover:bg-amber-400 disabled:opacity-60"
+            className="min-h-[36px] px-4 rounded-lg text-xs font-bold bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-60"
           >
             {busy ? 'Turning on…' : 'Turn on notifications'}
           </button>

@@ -133,7 +133,7 @@ export const PaymentQrModal: React.FC<PaymentQrModalProps> = ({
         {/* Header */}
         <div className="px-4 sm:px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/60">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-amber-500 text-navy-950 flex items-center justify-center font-bold">
+            <div className="w-9 h-9 rounded-xl bg-brand-600 text-white flex items-center justify-center font-bold">
               <QrCode className="w-5 h-5" />
             </div>
             <div>
@@ -176,7 +176,7 @@ export const PaymentQrModal: React.FC<PaymentQrModalProps> = ({
                     required
                     value={amountInr}
                     onChange={(e) => setAmountInr(e.target.value ? Number(e.target.value) : '')}
-                    className="w-full pl-8 pr-4 py-2.5 rounded-xl border border-slate-300 text-sm font-bold text-navy-950 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
+                    className="w-full pl-8 pr-4 py-2.5 rounded-xl border border-slate-300 text-sm font-bold text-navy-950 focus:ring-2 focus:ring-navy-500 focus:border-navy-500 outline-none"
                     placeholder="Enter amount"
                   />
                 </div>
@@ -191,7 +191,7 @@ export const PaymentQrModal: React.FC<PaymentQrModalProps> = ({
                   required
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm text-slate-800 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm text-slate-800 focus:ring-2 focus:ring-navy-500 focus:border-navy-500 outline-none"
                   placeholder="e.g. Project advance or site deposit"
                 />
               </div>

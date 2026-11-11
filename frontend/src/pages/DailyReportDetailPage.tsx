@@ -179,7 +179,7 @@ export const DailyReportDetailPage: React.FC = () => {
           <Button
             variant="primary"
             onClick={() => exportDailyReportPdf(report)}
-            leftIcon={<FileDown className="w-4 h-4 text-amber-400" />}
+            leftIcon={<FileDown className="w-4 h-4 text-brand-400" />}
           >
             Export Official PDF
           </Button>
@@ -238,7 +238,7 @@ export const DailyReportDetailPage: React.FC = () => {
           {typeof report.overallProgressPercent === 'number' ? (
             <div className="mt-1 flex items-center gap-2">
               <div className="flex-1 h-2 rounded-full bg-slate-100 overflow-hidden">
-                <div className="h-full bg-amber-500" style={{ width: `${report.overallProgressPercent}%` }} />
+                <div className="h-full bg-navy-900" style={{ width: `${report.overallProgressPercent}%` }} />
               </div>
               <span className="font-bold text-navy-950">{report.overallProgressPercent}%</span>
             </div>
@@ -611,7 +611,7 @@ export const DailyReportDetailPage: React.FC = () => {
         <CardHeader>
           <div className="flex items-center justify-between w-full">
             <div className="flex items-center gap-2">
-              <MessageSquare className="w-5 h-5 text-amber-500" />
+              <MessageSquare className="w-5 h-5 text-brand-600" />
               <CardTitle>Management Review & Feedback</CardTitle>
             </div>
             {report.comments && report.comments.length > 0 && (
@@ -670,7 +670,7 @@ export const DailyReportDetailPage: React.FC = () => {
                     name="commentType"
                     checked={commentType === 'COMMENT'}
                     onChange={() => setCommentType('COMMENT')}
-                    className="accent-amber-500"
+                    className="accent-navy-900"
                   />
                   <span>General Comment</span>
                 </label>
@@ -680,7 +680,7 @@ export const DailyReportDetailPage: React.FC = () => {
                     name="commentType"
                     checked={commentType === 'CHANGES_REQUESTED'}
                     onChange={() => setCommentType('CHANGES_REQUESTED')}
-                    className="accent-amber-500"
+                    className="accent-navy-900"
                   />
                   <span>Request Changes / Additional Photos</span>
                 </label>
@@ -696,7 +696,7 @@ export const DailyReportDetailPage: React.FC = () => {
                       : 'Leave an official MD note or guidance on this report...'
                   }
                   rows={2}
-                  className="w-full text-xs p-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 resize-none"
+                  className="w-full text-xs p-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-navy-500/20 focus:border-navy-500 resize-none"
                 />
                 <Button
                   type="submit"

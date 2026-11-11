@@ -15,8 +15,8 @@ interface CategoryExpensePieChartProps {
 }
 
 const CATEGORY_COLORS: Record<string, string> = {
-  LABOUR: '#F5A623', // Construction Amber
-  CONSTRUCTION_MATERIALS: '#142B4A', // Deep Navy
+  LABOUR: '#D9262E', // Construction Amber
+  CONSTRUCTION_MATERIALS: '#2A3384', // Deep Navy
   DIESEL_AND_FUEL: '#EF4444', // Red
   MACHINERY_AND_EQUIPMENT: '#0284C7', // Sky Blue
   TRANSPORTATION: '#8B5CF6', // Purple
@@ -46,7 +46,7 @@ export const CategoryExpensePieChart: React.FC<CategoryExpensePieChartProps> = (
       const dataItem = payload[0];
       return (
         <div className="bg-navy-950 text-white p-3 rounded-xl shadow-xl border border-navy-800 text-xs">
-          <p className="font-bold text-amber-400 mb-1">{dataItem.name}</p>
+          <p className="font-bold text-brand-400 mb-1">{dataItem.name}</p>
           <p className="text-white font-semibold">
             ₹{Number(dataItem.value).toLocaleString('en-IN')}
           </p>

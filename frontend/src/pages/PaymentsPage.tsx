@@ -200,7 +200,7 @@ export const PaymentsPage: React.FC = () => {
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-2 border-b border-slate-200">
         <div>
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-navy-900 text-amber-500 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-navy-900 text-brand-400 flex items-center justify-center shrink-0">
               <CreditCard className="w-4 h-4" />
             </div>
             <h1 className="text-xl sm:text-2xl font-black text-navy-950 tracking-tight">Payments</h1>
@@ -214,7 +214,7 @@ export const PaymentsPage: React.FC = () => {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 [&>button]:flex-1 [&>button]:sm:flex-initial">
-          <Button size="sm" variant="outline" onClick={() => setIsQrScannerOpen(true)} leftIcon={<QrCode className="w-4 h-4 text-amber-600" />}>
+          <Button size="sm" variant="outline" onClick={() => setIsQrScannerOpen(true)} leftIcon={<QrCode className="w-4 h-4 text-brand-600" />}>
             Scan vendor UPI QR
           </Button>
           <Button size="sm" onClick={() => setIsRequestModalOpen(true)} leftIcon={<Plus className="w-4 h-4" />}>
@@ -269,7 +269,7 @@ export const PaymentsPage: React.FC = () => {
               value={month}
               max={localMonthString()}
               onChange={(e) => e.target.value && setMonth(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white focus:ring-2 focus:ring-amber-500 outline-none"
+              className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white focus:ring-2 focus:ring-navy-500 outline-none"
             />
             <Button size="sm" variant="outline" className="w-full" onClick={downloadRegister} isLoading={downloading} leftIcon={<Download className="w-4 h-4" />}>
               Download Excel
@@ -288,7 +288,7 @@ export const PaymentsPage: React.FC = () => {
             key={t.id}
             onClick={() => setActiveTab(t.id)}
             className={`py-2.5 px-4 sm:px-6 text-xs font-bold border-b-2 whitespace-nowrap flex items-center gap-2 shrink-0 ${
-              activeTab === t.id ? 'border-amber-500 text-navy-950' : 'border-transparent text-slate-500 hover:text-slate-700'
+              activeTab === t.id ? 'border-brand-600 text-navy-950' : 'border-transparent text-slate-500 hover:text-slate-700'
             }`}
           >
             <t.icon className="w-4 h-4" />
@@ -311,7 +311,7 @@ export const PaymentsPage: React.FC = () => {
                     view === v.id ? 'bg-navy-900 border-navy-900 text-white' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
                   }`}
                 >
-                  {v.label} <span className={view === v.id ? 'text-amber-300' : 'text-slate-400'}>{counts[v.id]}</span>
+                  {v.label} <span className={view === v.id ? 'text-brand-300' : 'text-slate-400'}>{counts[v.id]}</span>
                 </button>
               ))}
             </div>
@@ -324,14 +324,14 @@ export const PaymentsPage: React.FC = () => {
                   onChange={(e) => setSearchQuery(e.target.value)}
                   aria-label="Search payments"
                   placeholder="Search name, purpose, UTR…"
-                  className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-300 text-xs bg-white focus:ring-2 focus:ring-amber-500 outline-none"
+                  className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-300 text-xs bg-white focus:ring-2 focus:ring-navy-500 outline-none"
                 />
               </div>
               <select
                 value={projectFilter}
                 onChange={(e) => setProjectFilter(e.target.value)}
                 aria-label="Filter by site"
-                className="sm:max-w-[220px] truncate px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white focus:ring-2 focus:ring-amber-500 outline-none"
+                className="sm:max-w-[220px] truncate px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white focus:ring-2 focus:ring-navy-500 outline-none"
               >
                 <option value="ALL">All sites</option>
                 {projects.map((p: any) => (
@@ -368,7 +368,7 @@ export const PaymentsPage: React.FC = () => {
                       tabIndex={0}
                       onClick={() => setSelectedPayment(p)}
                       onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), setSelectedPayment(p))}
-                      className="bg-white rounded-2xl border border-slate-200 p-3.5 sm:p-4 shadow-card hover:shadow-card-hover hover:border-slate-300 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-500"
+                      className="bg-white rounded-2xl border border-slate-200 p-3.5 sm:p-4 shadow-card hover:shadow-card-hover hover:border-slate-300 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-navy-500"
                     >
                       <div className="flex items-start gap-3">
                         <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${kind === 'INCHARGE' ? 'bg-sky-100 text-sky-700' : 'bg-amber-100 text-amber-700'}`}>

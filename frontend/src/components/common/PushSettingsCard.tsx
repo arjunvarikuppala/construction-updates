@@ -81,7 +81,7 @@ export const PushSettingsCard: React.FC = () => {
             onClick={toggle}
             disabled={Boolean(busy)}
             className={`min-h-[40px] px-4 rounded-xl text-xs font-bold disabled:opacity-60 ${
-              on ? 'bg-slate-200 text-slate-800 hover:bg-slate-300' : 'bg-amber-500 text-navy-950 hover:bg-amber-400'
+              on ? 'bg-slate-200 text-slate-800 hover:bg-slate-300' : 'bg-brand-600 text-white hover:bg-brand-700'
             }`}
           >
             {busy === 'toggle' ? 'Please wait…' : on ? 'Turn off' : 'Turn on'}

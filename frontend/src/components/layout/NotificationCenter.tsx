@@ -250,7 +250,7 @@ export const NotificationCenter: React.FC = () => {
       {/* Bell Trigger Button */}
       <button
         onClick={toggleDropdown}
-        className="relative p-2 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl text-slate-600 hover:text-navy-900 hover:bg-slate-100 transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+        className="relative p-2 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl text-slate-600 hover:text-navy-900 hover:bg-slate-100 transition-colors focus:outline-none focus:ring-2 focus:ring-navy-500/20"
         title="Notifications"
         aria-label="View notifications"
       >
@@ -260,7 +260,7 @@ export const NotificationCenter: React.FC = () => {
         {/* Site In-Charge role: strictly NO orange unread dot and NO unread badge */}
         {isMDOrOwner && unreadCount > 0 && (
           <span
-            className="absolute top-1 right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-black text-white bg-amber-500 rounded-full border-2 border-white animate-pulse shadow-2xs"
+            className="absolute top-1 right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-black text-white bg-brand-600 rounded-full border-2 border-white animate-pulse shadow-2xs"
             title={`${unreadCount} unread notification${unreadCount > 1 ? 's' : ''}`}
             aria-label={`${unreadCount} unread notifications`}
           >
@@ -293,10 +293,10 @@ export const NotificationCenter: React.FC = () => {
               <button
                 onClick={() => markAllReadMutation.mutate()}
                 disabled={markAllReadMutation.isPending}
-                className="flex items-center gap-1 text-xs font-semibold text-navy-800 hover:text-amber-600 transition-colors"
+                className="flex items-center gap-1 text-xs font-semibold text-navy-800 hover:text-brand-600 transition-colors"
                 title="Mark all notifications as read"
               >
-                <CheckCheck className="w-3.5 h-3.5 text-amber-600" />
+                <CheckCheck className="w-3.5 h-3.5 text-brand-600" />
                 <span>Mark all read</span>
               </button>
             )}
@@ -384,7 +384,7 @@ export const NotificationCenter: React.FC = () => {
                 setIsOpen(false);
                 navigate('/notifications');
               }}
-              className="w-full text-center py-1.5 px-3 rounded-lg text-xs font-bold text-navy-900 hover:text-amber-700 hover:bg-amber-50/50 transition-colors flex items-center justify-center gap-1.5"
+              className="w-full text-center py-1.5 px-3 rounded-lg text-xs font-bold text-navy-900 hover:text-brand-700 hover:bg-brand-50 transition-colors flex items-center justify-center gap-1.5"
             >
               <span>View All Historical Notifications</span>
               <ArrowRight className="w-3.5 h-3.5" />

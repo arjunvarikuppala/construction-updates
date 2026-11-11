@@ -29,7 +29,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({ onOpenMobileDrawer }) => {
           <Menu className="w-5 h-5" />
           {(isMD || isOwner) && totalUnread > 0 && (
             <span
-              className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2 w-2.5 h-2.5 rounded-full bg-amber-500 ring-2 ring-white animate-pulse"
+              className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2 w-2.5 h-2.5 rounded-full bg-brand-600 ring-2 ring-white animate-pulse"
               title={`${totalUnread} unread daily report(s)`}
             />
           )}
@@ -60,7 +60,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({ onOpenMobileDrawer }) => {
           aria-label="Synchronize data"
           className="flex items-center justify-center gap-1.5 px-2 py-1.5 min-w-[38px] min-h-[38px] sm:min-h-[40px] rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 active:bg-slate-100 transition-colors shrink-0"
         >
-          <RefreshCw className={`w-3.5 h-3.5 text-amber-500 ${isSyncing ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`w-3.5 h-3.5 text-brand-600 ${isSyncing ? 'animate-spin' : ''}`} />
           <span className="hidden sm:inline">{isSyncing ? 'Syncing...' : 'Sync Now'}</span>
         </button>
 

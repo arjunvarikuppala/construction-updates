@@ -53,13 +53,13 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({ pendingApprova
                   setShowActionSheet(false);
                   navigate('/reports/new');
                 }}
-                className="flex flex-col items-center justify-center p-3 rounded-2xl bg-amber-50 hover:bg-amber-100 active:bg-amber-200 border border-amber-200 text-amber-950 text-center transition-colors min-h-[96px]"
+                className="flex flex-col items-center justify-center p-3 rounded-2xl bg-brand-50 hover:bg-brand-100 active:bg-brand-200 border border-brand-200 text-brand-950 text-center transition-colors min-h-[96px]"
               >
-                <div className="w-10 h-10 rounded-xl bg-amber-500 text-navy-950 flex items-center justify-center mb-1.5 shadow-xs font-bold">
+                <div className="w-10 h-10 rounded-xl bg-brand-600 text-white flex items-center justify-center mb-1.5 shadow-xs font-bold">
                   <FileText className="w-5 h-5" />
                 </div>
                 <span className="text-xs font-bold">Daily Report</span>
-                <span className="text-[10px] text-amber-800 mt-0.5 line-clamp-1">Submit site log & photos</span>
+                <span className="text-[10px] text-brand-800 mt-0.5 line-clamp-1">Submit site log & photos</span>
               </button>
 
               <button
@@ -69,7 +69,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({ pendingApprova
                 }}
                 className="flex flex-col items-center justify-center p-3 rounded-2xl bg-navy-50 hover:bg-navy-100 active:bg-navy-200 border border-navy-200 text-navy-950 text-center transition-colors min-h-[96px]"
               >
-                <div className="w-10 h-10 rounded-xl bg-navy-900 text-amber-400 flex items-center justify-center mb-1.5 shadow-xs font-bold">
+                <div className="w-10 h-10 rounded-xl bg-navy-900 text-brand-400 flex items-center justify-center mb-1.5 shadow-xs font-bold">
                   <DollarSign className="w-5 h-5" />
                 </div>
                 <span className="text-xs font-bold">Site Expense</span>
@@ -155,7 +155,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({ pendingApprova
           <span className="truncate">Projects</span>
           {isOwner && totalUnread > 0 && (
             <span
-              className="absolute top-1 right-2 sm:right-4 w-2 h-2 rounded-full bg-amber-500 ring-2 ring-white"
+              className="absolute top-1 right-2 sm:right-4 w-2 h-2 rounded-full bg-brand-600 ring-2 ring-white"
               title={`${totalUnread} unread daily report(s)`}
             />
           )}
@@ -166,7 +166,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({ pendingApprova
           <button
             onClick={() => setShowActionSheet(true)}
             aria-label="Quick Action Menu"
-            className="-mt-5 w-12 h-12 rounded-full bg-amber-500 text-navy-950 flex items-center justify-center shadow-lg border-2 border-white active:scale-95 transition-transform hover:bg-amber-400 shrink-0"
+            className="-mt-5 w-12 h-12 rounded-full bg-brand-600 text-white flex items-center justify-center shadow-lg border-2 border-white active:scale-95 transition-transform hover:bg-brand-700 shrink-0"
           >
             <Plus className="w-6 h-6 stroke-[2.5]" />
           </button>

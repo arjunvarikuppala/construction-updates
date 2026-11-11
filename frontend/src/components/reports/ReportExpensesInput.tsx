@@ -136,7 +136,7 @@ export const ReportExpensesInput: React.FC<Props> = ({ expenses, onChange, onBus
                 {!locked && (
                   <>
                     <label className="inline-flex items-center gap-1.5 px-3 min-h-[40px] rounded-lg bg-navy-900 text-white text-xs font-semibold cursor-pointer">
-                      <Camera className="w-4 h-4 text-amber-400" />
+                      <Camera className="w-4 h-4 text-brand-400" />
                       {e.receiptUrl ? 'Retake bill' : 'Photo of bill'}
                       <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={(ev) => { uploadReceipt(i, ev.target.files?.[0]); ev.target.value = ''; }} />
                     </label>

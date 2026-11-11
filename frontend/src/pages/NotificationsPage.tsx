@@ -235,7 +235,7 @@ export const NotificationsPage: React.FC = () => {
       <div className="bg-white rounded-2xl border border-slate-200/80 p-5 sm:p-6 shadow-xs">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-navy-900 text-amber-500 flex items-center justify-center shadow-xs">
+            <div className="w-12 h-12 rounded-2xl bg-navy-900 text-brand-400 flex items-center justify-center shadow-xs">
               <Bell className="w-6 h-6" />
             </div>
             <div>
@@ -273,7 +273,7 @@ export const NotificationsPage: React.FC = () => {
               <button
                 onClick={() => markAllReadMutation.mutate()}
                 disabled={markAllReadMutation.isPending}
-                className="px-3.5 py-2 text-xs font-bold rounded-xl bg-amber-500 hover:bg-amber-600 text-navy-950 transition-colors shadow-2xs flex items-center gap-1.5"
+                className="px-3.5 py-2 text-xs font-bold rounded-xl bg-brand-600 hover:bg-brand-700 text-white transition-colors shadow-2xs flex items-center gap-1.5"
               >
                 <CheckCheck className="w-4 h-4" />
                 <span>Mark all as read</span>
@@ -313,7 +313,7 @@ export const NotificationsPage: React.FC = () => {
                 onClick={() => setActiveTab('UNREAD')}
                 className={`px-3 py-1.5 text-xs font-bold rounded-xl whitespace-nowrap flex items-center gap-1 transition-colors ${
                   activeTab === 'UNREAD'
-                    ? 'bg-amber-500 text-navy-950'
+                    ? 'bg-brand-600 text-white'
                     : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200'
                 }`}
               >
@@ -363,7 +363,7 @@ export const NotificationsPage: React.FC = () => {
               placeholder="Search notifications..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+              className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-navy-500/20 focus:border-navy-500"
             />
           </div>
         </div>

@@ -266,7 +266,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                 type="button"
                 onClick={handleVerifyLocation}
                 disabled={isVerifyingLocation || !location.trim()}
-                className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-navy-950 text-xs font-bold transition-colors flex items-center justify-center gap-1.5 shrink-0 shadow-sm"
+                className="px-3.5 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-xs font-bold transition-colors flex items-center justify-center gap-1.5 shrink-0 shadow-sm"
               >
                 {isVerifyingLocation ? (
                   <>

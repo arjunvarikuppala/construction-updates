@@ -53,7 +53,7 @@ export const ExpenseApprovalModal: React.FC<ExpenseApprovalModalProps> = ({
         <div className="bg-navy-900 text-white p-4 rounded-xl flex items-center justify-between">
           <div>
             <span className="text-xs uppercase text-slate-300 font-bold tracking-wider">Requested Amount</span>
-            <div className="text-2xl sm:text-3xl font-extrabold text-amber-400">
+            <div className="text-2xl sm:text-3xl font-extrabold text-brand-400">
               {formatINR(expense.amount)}
             </div>
           </div>

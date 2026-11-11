@@ -1328,6 +1328,7 @@ export async function handlePaymentWebhook(req: any, res: Response): Promise<voi
       (await WebhookEvent.create({ eventId, provider: 'RAZORPAYX', eventType, payload: event, signature, processed: false }));
 
     let note = 'ignored';
+    let retryable = false;
     const payout = event.payload?.payout?.entity;
     const validation = event.payload?.fund_account_validation?.entity || event.payload?.fund_account?.validation?.entity;
 
@@ -1338,7 +1339,13 @@ export async function handlePaymentWebhook(req: any, res: Response): Promise<voi
         note = `${result.outcome}: ${result.message}`;
       } catch (err: any) {
         // A payout we do not know (e.g. made from the RazorpayX dashboard) is not an error
-        note = err instanceof SettlementError ? err.message : `error: ${err.message}`;
+        if (err instanceof SettlementError) {
+          note = err.message;
+        } else {
+          // Unexpected failure (e.g. database hiccup): leave the event unprocessed so Razorpay retries it
+          note = `error: ${err.message}`;
+          retryable = true;
+        }
       }
     } else if (eventType.startsWith('fund_account.validation') && validation?.id) {
       const b = await Beneficiary.findOne({ pennyDropValidationId: validation.id });
@@ -1357,9 +1364,15 @@ export async function handlePaymentWebhook(req: any, res: Response): Promise<voi
       }
     }
 
+    if (retryable) {
+      record.error = note;
+      await record.save();
+      res.status(500).json({ success: false, message: 'Webhook error' });
+      return;
+    }
     record.processed = true;
     record.processedAt = new Date();
-    record.error = note.startsWith('error') ? note : undefined;
+    record.error = undefined;
     await record.save();
     res.status(200).json({ success: true, message: 'Webhook processed' });
   } catch (err: any) {

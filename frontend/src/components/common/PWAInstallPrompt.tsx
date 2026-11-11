@@ -34,7 +34,7 @@ export const PWAInstallPrompt: React.FC = () => {
     <div className="fixed bottom-20 md:bottom-6 right-4 left-4 md:left-auto md:max-w-md bg-navy-900 text-white p-4 rounded-2xl shadow-2xl border border-navy-700/80 z-40 animate-in slide-in-from-bottom-4">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-amber-500 text-navy-950 flex items-center justify-center font-bold flex-shrink-0">
+          <div className="w-10 h-10 rounded-xl bg-brand-600 text-white flex items-center justify-center font-bold flex-shrink-0">
             <Download className="w-5 h-5" />
           </div>
           <div>

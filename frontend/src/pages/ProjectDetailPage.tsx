@@ -224,7 +224,7 @@ export const ProjectDetailPage: React.FC = () => {
               <select
                 value={project._id || project.id}
                 onChange={(e) => navigate(`/projects/${e.target.value}`)}
-                className="text-xs bg-white border border-slate-300 rounded-lg py-1 px-2 font-medium text-navy-950 focus:outline-none focus:ring-1 focus:ring-amber-500 flex-1 sm:flex-initial min-w-0 w-0 sm:w-auto sm:max-w-[320px] truncate"
+                className="text-xs bg-white border border-slate-300 rounded-lg py-1 px-2 font-medium text-navy-950 focus:outline-none focus:ring-1 focus:ring-navy-500 flex-1 sm:flex-initial min-w-0 w-0 sm:w-auto sm:max-w-[320px] truncate"
               >
                 {authorizedProjects.map((p) => {
                   const pid = p._id || p.id;
@@ -266,7 +266,7 @@ export const ProjectDetailPage: React.FC = () => {
             size="sm"
             variant="primary"
             onClick={handleExportPdf}
-            leftIcon={<FileDown className="w-3.5 h-3.5 text-amber-400" />}
+            leftIcon={<FileDown className="w-3.5 h-3.5 text-brand-400" />}
           >
             PDF Statement
           </Button>
@@ -277,7 +277,7 @@ export const ProjectDetailPage: React.FC = () => {
       {!hasInCharges && (
         <div className="bg-amber-500/15 border-2 border-amber-500/40 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-500 text-navy-950 flex items-center justify-center font-bold flex-shrink-0 shadow-sm">
+            <div className="w-10 h-10 rounded-xl bg-brand-600 text-white flex items-center justify-center font-bold flex-shrink-0 shadow-sm">
               <UserX className="w-5 h-5" />
             </div>
             <div>
@@ -612,7 +612,7 @@ export const ProjectDetailPage: React.FC = () => {
                       {assignedEngineers.map((engineer: any, idx: number) => (
                         <div key={engineer._id || engineer.id || idx} className="pt-2 first:pt-0 space-y-2">
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-amber-500 text-navy-950 flex items-center justify-center font-bold text-sm shadow-sm flex-shrink-0">
+                            <div className="w-10 h-10 rounded-xl bg-brand-600 text-white flex items-center justify-center font-bold text-sm shadow-sm flex-shrink-0">
                               {engineer.name?.charAt(0) || 'E'}
                             </div>
                             <div className="min-w-0 flex-1">
@@ -997,7 +997,7 @@ export const ProjectDetailPage: React.FC = () => {
                 <p className="text-xs text-slate-500">
                   Comprehensive audit statement with project metadata, budget utilization, category breakdowns, and verified line-item receipts.
                 </p>
-                <Button variant="primary" onClick={handleExportPdf} leftIcon={<FileDown className="w-4 h-4 text-amber-400" />}>
+                <Button variant="primary" onClick={handleExportPdf} leftIcon={<FileDown className="w-4 h-4 text-brand-400" />}>
                   Export Project PDF
                 </Button>
               </div>

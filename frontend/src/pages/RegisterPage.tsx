@@ -177,7 +177,7 @@ export const RegisterPage: React.FC = () => {
   if (isLoadingInvite) {
     return (
       <div className="min-h-screen bg-background flex flex-col justify-center items-center py-12 px-4">
-        <div className="w-10 h-10 border-4 border-navy-900 border-t-amber-500 rounded-full animate-spin" />
+        <div className="w-10 h-10 border-4 border-navy-900 border-t-brand-600 rounded-full animate-spin" />
         <p className="text-xs font-semibold text-slate-500 mt-3">Verifying invitation link...</p>
       </div>
     );
@@ -187,7 +187,7 @@ export const RegisterPage: React.FC = () => {
     <div className="min-h-screen bg-background flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       {/* Brand Header */}
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center px-4">
-        <div className="w-14 h-14 rounded-2xl bg-navy-900 text-amber-500 mx-auto flex items-center justify-center shadow-lg border border-navy-800">
+        <div className="w-14 h-14 rounded-2xl bg-navy-900 text-brand-400 mx-auto flex items-center justify-center shadow-lg border border-navy-800">
           <HardHat className="w-8 h-8" />
         </div>
         <h2 className="mt-4 text-2xl sm:text-3xl font-extrabold text-navy-950 tracking-tight">

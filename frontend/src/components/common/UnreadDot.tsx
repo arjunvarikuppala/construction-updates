@@ -43,7 +43,7 @@ export const UnreadDot: React.FC<UnreadDotProps> = ({
   if (showCount && count !== undefined && count > 0) {
     return (
       <span
-        className={`inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-black bg-amber-500 text-white shadow-2xs ${className}`}
+        className={`inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-black bg-brand-600 text-white shadow-2xs ${className}`}
         title={label}
         aria-label={label}
       >
@@ -60,11 +60,11 @@ export const UnreadDot: React.FC<UnreadDotProps> = ({
     >
       {pulse && (
         <span
-          className={`absolute inline-flex rounded-full bg-amber-400 opacity-75 animate-ping ${sizeClasses}`}
+          className={`absolute inline-flex rounded-full bg-brand-400 opacity-75 animate-ping ${sizeClasses}`}
         />
       )}
       <span
-        className={`relative inline-flex rounded-full bg-amber-500 ring-2 ring-white ${sizeClasses}`}
+        className={`relative inline-flex rounded-full bg-brand-600 ring-2 ring-white ${sizeClasses}`}
       />
     </span>
   );

@@ -222,7 +222,7 @@ export const UPIQRScannerModal: React.FC<UPIQRScannerModalProps> = ({
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/60">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-amber-500 text-navy-950 flex items-center justify-center font-bold">
+            <div className="w-9 h-9 rounded-xl bg-brand-600 text-white flex items-center justify-center font-bold">
               <QrCode className="w-5 h-5" />
             </div>
             <div>
@@ -382,7 +382,7 @@ export const UPIQRScannerModal: React.FC<UPIQRScannerModalProps> = ({
                     {/* Loading or Permission Error */}
                     {analyzing && (
                       <div className="absolute inset-0 bg-navy-950/70 flex flex-col items-center justify-center text-white gap-2">
-                        <RefreshCw className="w-7 h-7 text-amber-400 animate-spin" />
+                        <RefreshCw className="w-7 h-7 text-brand-400 animate-spin" />
                         <span className="text-xs font-bold">Verifying UPI Payload...</span>
                       </div>
                     )}
@@ -421,7 +421,7 @@ export const UPIQRScannerModal: React.FC<UPIQRScannerModalProps> = ({
 
                   {analyzing && (
                     <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-center flex items-center justify-center gap-2 text-xs font-bold text-slate-700">
-                      <RefreshCw className="w-4 h-4 text-amber-500 animate-spin" />
+                      <RefreshCw className="w-4 h-4 text-brand-600 animate-spin" />
                       <span>Reading and verifying QR code...</span>
                     </div>
                   )}

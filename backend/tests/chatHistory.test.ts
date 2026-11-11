@@ -142,3 +142,36 @@ describe('preview images', () => {
     assert.equal(sent.body.data.attachments[0].thumbnailUrl, undefined);
   });
 });
+
+describe('shared media gallery', () => {
+  test('lists photos shared in the chat, newest first, page by page', async () => {
+    const first = await api('GET', `${base(project._id)}/gallery?type=media&limit=1`, { token: md.token });
+    assert.equal(first.status, 200, JSON.stringify(first.body));
+    assert.equal(first.body.items.length, 1);
+    assert.equal(first.body.items[0].attachment.type, 'image');
+    assert.ok(first.body.items[0].messageId);
+    assert.ok(first.body.items[0].sender?.name);
+    assert.equal(first.body.hasMore, true);
+
+    const q = new URLSearchParams({ type: 'media', limit: '50', ...first.body.nextCursor });
+    const rest = await api('GET', `${base(project._id)}/gallery?${q}`, { token: md.token });
+    assert.equal(rest.status, 200);
+    assert.ok(rest.body.items.length >= 1);
+    assert.ok(!rest.body.items.some((i: any) => i.messageId === first.body.items[0].messageId));
+    const times = [...first.body.items, ...rest.body.items].map((i: any) => new Date(i.createdAt).getTime());
+    assert.deepEqual(times, [...times].sort((a, b) => b - a));
+  });
+
+  test('documents and voice tabs only contain their own kind', async () => {
+    const docs = await api('GET', `${base(project._id)}/gallery?type=docs`, { token: ic.token });
+    assert.equal(docs.status, 200);
+    assert.ok(docs.body.items.every((i: any) => ['document', 'pdf'].includes(i.attachment.type)));
+    const voice = await api('GET', `${base(project._id)}/gallery?type=voice`, { token: ic.token });
+    assert.ok(voice.body.items.every((i: any) => i.attachment.type === 'audio'));
+  });
+
+  test('another company cannot see the gallery', async () => {
+    const r = await api('GET', `${base(project._id)}/gallery?type=media`, { token: otherMd.token });
+    assert.equal(r.status, 403);
+  });
+});

@@ -79,7 +79,7 @@ export const ApprovalsPage: React.FC = () => {
             <h1 className="text-xl sm:text-2xl font-bold text-navy-950 tracking-tight">
               Expense Approval Queue
             </h1>
-            <span className="text-xs font-bold bg-amber-500 text-navy-950 px-2.5 py-0.5 rounded-full">
+            <span className="text-xs font-bold bg-brand-600 text-white px-2.5 py-0.5 rounded-full">
               {pendingExpenses.length} Pending
             </span>
           </div>
@@ -93,7 +93,7 @@ export const ApprovalsPage: React.FC = () => {
             size="sm"
             variant="outline"
             onClick={() => refetch()}
-            leftIcon={<RefreshCw className="w-3.5 h-3.5 text-amber-500" />}
+            leftIcon={<RefreshCw className="w-3.5 h-3.5 text-brand-600" />}
           >
             Refresh Queue
           </Button>
@@ -103,7 +103,7 @@ export const ApprovalsPage: React.FC = () => {
       {/* Summary Banner */}
       <div className="bg-gradient-to-r from-navy-900 to-navy-950 text-white rounded-2xl p-5 shadow-lg border border-navy-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <span className="text-xs font-bold text-amber-400 uppercase tracking-wider block">
+          <span className="text-xs font-bold text-brand-400 uppercase tracking-wider block">
             Awaiting Executive Verification
           </span>
           <div className="text-2xl sm:text-3xl font-black text-white mt-1">

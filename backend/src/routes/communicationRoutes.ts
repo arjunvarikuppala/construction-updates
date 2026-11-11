@@ -14,6 +14,7 @@ import {
   pinProjectMessage,
   listPinnedMessages,
   searchProjectMessages,
+  listProjectMediaGallery,
 } from '../controllers/communicationController.js';
 import { authenticate } from '../middleware/auth.js';
 import { upload } from '../middleware/upload.js';
@@ -44,6 +45,7 @@ router.get('/media/:filename', serveProjectMessageMedia);
 // Advanced chat: pins, search, edit, delete-for-everyone, reactions
 router.get('/pinned', listPinnedMessages);
 router.get('/search', searchProjectMessages);
+router.get('/gallery', listProjectMediaGallery);
 router.patch('/:messageId', editProjectMessage);
 router.delete('/:messageId', deleteProjectMessage);
 router.post('/:messageId/reactions', reactToProjectMessage);

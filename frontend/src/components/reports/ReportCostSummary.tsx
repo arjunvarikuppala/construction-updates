@@ -49,7 +49,7 @@ export const ReportCostSummary: React.FC<{ totals: ReportCostTotals; className?:
       </dl>
       <div className="mt-2 flex items-center justify-between gap-3 px-4 sm:px-5 py-3.5 bg-navy-950 text-white">
         <span className="text-sm font-bold uppercase tracking-wider">Grand total</span>
-        <span className="text-xl font-black text-amber-400 tabular-nums">{formatRupees(grand)}</span>
+        <span className="text-xl font-black text-brand-400 tabular-nums">{formatRupees(grand)}</span>
       </div>
       {!!totals.gst && totals.gst > 0 && (
         <dl className="px-4 sm:px-5 py-2.5 bg-emerald-50 text-xs divide-y divide-emerald-100">

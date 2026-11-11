@@ -193,7 +193,7 @@ export const PaymentReviewModal: React.FC<PaymentReviewModalProps> = ({ payment:
               </div>
               <div className="flex justify-between text-xs mt-1.5">
                 <span>
-                  Paid <strong className="text-amber-300">{inr(paid)}</strong>
+                  Paid <strong className="text-brand-300">{inr(paid)}</strong>
                 </span>
                 <span>
                   Balance <strong className={balance ? 'text-white' : 'text-emerald-300'}>{inr(balance)}</strong>
@@ -201,7 +201,7 @@ export const PaymentReviewModal: React.FC<PaymentReviewModalProps> = ({ payment:
               </div>
             </div>
             {payment.requiresHighValueAuth && paid === 0 && isOwner && !payment.pendingPayout && (
-              <p className="text-[11px] text-amber-300 flex items-center gap-1">
+              <p className="text-[11px] text-brand-300 flex items-center gap-1">
                 <ShieldAlert className="w-3.5 h-3.5" /> Above ₹1,00,000 — check the bill before paying.
               </p>
             )}

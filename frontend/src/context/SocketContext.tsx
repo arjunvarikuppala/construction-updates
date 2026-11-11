@@ -96,6 +96,9 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             : String(message.project);
 
         queryClient.setQueriesData({ queryKey: ['project-messages', projId] }, (old: any) => appendMessage(old, message));
+        if (Array.isArray(message.attachments) && message.attachments.length > 0) {
+          queryClient.invalidateQueries({ queryKey: ['project-gallery', projId] });
+        }
 
         queryClient.invalidateQueries({ queryKey: ['unread-messages-count'] });
       }

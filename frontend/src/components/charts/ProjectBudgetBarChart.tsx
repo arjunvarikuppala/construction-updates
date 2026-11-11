@@ -34,7 +34,7 @@ export const ProjectBudgetBarChart: React.FC<ProjectBudgetBarChartProps> = ({ da
     if (active && payload && payload.length) {
       return (
         <div className="bg-navy-950 text-white p-3 rounded-xl shadow-xl border border-navy-800 text-xs space-y-1">
-          <p className="font-bold text-amber-400 mb-1">{payload[0]?.payload?.fullName || label}</p>
+          <p className="font-bold text-brand-400 mb-1">{payload[0]?.payload?.fullName || label}</p>
           {payload.map((entry: any, index: number) => (
             <div key={`item-${index}`} className="flex items-center justify-between gap-4">
               <span className="text-slate-300">{entry.name}:</span>
@@ -71,9 +71,9 @@ export const ProjectBudgetBarChart: React.FC<ProjectBudgetBarChartProps> = ({ da
             wrapperStyle={{ paddingTop: 10, fontSize: 12 }}
             iconType="circle"
           />
-          <Bar dataKey="Budget (₹)" fill="#142B4A" radius={[4, 4, 0, 0]} maxBarSize={36} />
+          <Bar dataKey="Budget (₹)" fill="#2A3384" radius={[4, 4, 0, 0]} maxBarSize={36} />
           <Bar dataKey="Approved (₹)" fill="#10B981" radius={[4, 4, 0, 0]} maxBarSize={36} />
-          <Bar dataKey="Pending (₹)" fill="#F5A623" radius={[4, 4, 0, 0]} maxBarSize={36} />
+          <Bar dataKey="Pending (₹)" fill="#D9262E" radius={[4, 4, 0, 0]} maxBarSize={36} />
         </BarChart>
       </ResponsiveContainer>
     </div>

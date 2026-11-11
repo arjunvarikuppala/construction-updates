@@ -171,7 +171,7 @@ export const InChargeDashboard: React.FC = () => {
               size="sm"
               variant="outline"
               onClick={() => refetch()}
-              leftIcon={<RefreshCw className="w-4 h-4 text-amber-600" />}
+              leftIcon={<RefreshCw className="w-4 h-4 text-brand-600" />}
             >
               Check for New Assignments
             </Button>
@@ -210,14 +210,14 @@ export const InChargeDashboard: React.FC = () => {
           {/* 1. Project Summary Card */}
           <div className="bg-navy-950 text-white rounded-3xl p-5 sm:p-6 shadow-xl border border-navy-900 space-y-4">
             <div>
-              <span className="inline-block font-mono text-xs font-bold text-amber-400 bg-amber-500/20 border border-amber-500/30 px-2.5 py-0.5 rounded-lg">
+              <span className="inline-block font-mono text-xs font-bold text-brand-400 bg-amber-500/20 border border-amber-500/30 px-2.5 py-0.5 rounded-lg">
                 {activeProject.code}
               </span>
               <h2 className="text-xl sm:text-2xl font-black text-white mt-2 leading-snug">
                 {activeProject.name}
               </h2>
               <div className="flex items-center gap-1.5 text-xs text-navy-200 mt-1">
-                <MapPin className="w-3.5 h-3.5 text-amber-400/90 shrink-0" />
+                <MapPin className="w-3.5 h-3.5 text-brand-400/90 shrink-0" />
                 <span>{activeProject.location}</span>
               </div>
             </div>
@@ -244,7 +244,7 @@ export const InChargeDashboard: React.FC = () => {
               <div className="flex items-center justify-between text-[11px] text-navy-300 pt-0.5">
                 <span>Active Project Workspace</span>
                 {(activeProject.pending ?? 0) > 0 ? (
-                  <span className="text-amber-400 font-semibold">
+                  <span className="text-brand-400 font-semibold">
                     {formatCompactINR(activeProject.pending)} pending MD review
                   </span>
                 ) : (

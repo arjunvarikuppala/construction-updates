@@ -123,7 +123,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             className={({ isActive }) =>
               `flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 min-h-[44px] ${
                 isActive
-                  ? 'bg-amber-500 text-navy-950 font-bold shadow-sm'
+                  ? 'bg-brand-600 text-white font-bold shadow-sm'
                   : 'text-slate-300 hover:bg-navy-900 hover:text-white'
               }`
             }
@@ -131,7 +131,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {({ isActive }) => (
               <>
                 <div className="flex items-center gap-3 min-w-0">
-                  <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-navy-950' : 'text-slate-400'}`} />
+                  <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-white' : 'text-slate-400'}`} />
                   <span className="truncate">{link.label}</span>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
@@ -149,8 +149,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <span
                       className={`px-2 py-0.5 text-xs font-bold rounded-full ${
                         isActive
-                          ? 'bg-navy-950 text-amber-400'
-                          : 'bg-amber-500 text-navy-950'
+                          ? 'bg-white text-brand-700'
+                          : 'bg-brand-600 text-white'
                       }`}
                     >
                       {link.badge}
@@ -169,7 +169,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <div className="p-4 border-t border-navy-900 bg-navy-950/90 flex-shrink-0">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3 overflow-hidden">
-          <div className="w-9 h-9 rounded-full bg-navy-800 border border-navy-700 flex items-center justify-center font-bold text-amber-400 flex-shrink-0">
+          <div className="w-9 h-9 rounded-full bg-navy-800 border border-navy-700 flex items-center justify-center font-bold text-brand-400 flex-shrink-0">
             {user?.name?.charAt(0) || 'U'}
           </div>
           <div className="min-w-0">
@@ -212,7 +212,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             disabled={isSyncing}
             className="w-full flex items-center justify-center gap-2 py-2 px-3 min-h-[38px] text-xs font-semibold rounded-lg bg-navy-900 hover:bg-navy-850 text-slate-300 border border-navy-800 transition-colors"
           >
-            <RefreshCw className={`w-3.5 h-3.5 text-amber-400 ${isSyncing ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 text-brand-400 ${isSyncing ? 'animate-spin' : ''}`} />
             <span>{isSyncing ? 'Synchronizing...' : 'Sync Cloud Data'}</span>
           </button>
         </div>
@@ -265,7 +265,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 disabled={isSyncing}
                 className="w-full flex items-center justify-center gap-2 py-2 px-3 min-h-[42px] text-xs font-semibold rounded-xl bg-navy-900 text-slate-300 border border-navy-800"
               >
-                <RefreshCw className={`w-3.5 h-3.5 text-amber-400 ${isSyncing ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`w-3.5 h-3.5 text-brand-400 ${isSyncing ? 'animate-spin' : ''}`} />
                 <span>{isSyncing ? 'Synchronizing...' : 'Sync Cloud Data'}</span>
               </button>
             </div>

@@ -4,8 +4,9 @@
 
 @layer base {
   :root {
-    --navy-primary: #142B4A;
-    --amber-primary: #F5A623;
+    --navy-primary: #2A3384;
+    --brand-red: #D9262E;
+    --navy-deep: #181D52;
     --bg-light: #F6F8FB;
   }
 

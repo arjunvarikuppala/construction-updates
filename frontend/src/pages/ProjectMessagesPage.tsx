@@ -13,6 +13,7 @@ import {
   Check,
   CheckCheck,
   Search,
+  Images,
   Image as ImageIcon,
   Film,
   Download,
@@ -26,6 +27,7 @@ import {
   RefreshCw,
   ArrowLeft,
   WifiOff,
+  Clock,
   CornerUpLeft,
   FolderOpen,
   Mic,
@@ -57,6 +59,9 @@ import {
   replaceMessage,
 } from '../utils/chatHistory.js';
 import { preparePhoto, prepareVideo } from '../utils/mediaPrep.js';
+import { MediaGallery } from '../components/chat/MediaGallery.js';
+import { loadSavedChat, saveChat, loadSavedProjects, saveProjects, useIsOffline } from '../utils/offlineChat.js';
+import { useChatOutbox, isNetworkError } from '../utils/chatOutbox.js';
 import {
   DocumentViewer,
   ReplyQuote,
@@ -180,6 +185,7 @@ export const ProjectMessagesPage: React.FC = () => {
   const [editTarget, setEditTarget] = useState<ProjectMessage | null>(null);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [galleryOpen, setGalleryOpen] = useState(false);
   const [recording, setRecording] = useState(false);
   const [sendingVoice, setSendingVoice] = useState(false);
   const [showJump, setShowJump] = useState(false);
@@ -187,10 +193,18 @@ export const ProjectMessagesPage: React.FC = () => {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   // Fetch Projects list
+  const offlineUserId = String(user?.id || (user as any)?._id || '');
+  const isOffline = useIsOffline();
   const { data: projectsData, isLoading: isLoadingProjects } = useQuery({
     queryKey: ['projects'],
     queryFn: () => api.get<{ success: boolean; projects: any[] }>('/projects'),
+    // Saved copy lets the chat open with no signal; it is refreshed as soon as possible
+    initialData: () => loadSavedProjects<{ success: boolean; projects: any[] }>(offlineUserId)?.data,
+    initialDataUpdatedAt: () => loadSavedProjects(offlineUserId)?.savedAt,
   });
+  useEffect(() => {
+    if (projectsData?.projects?.length) saveProjects(offlineUserId, projectsData);
+  }, [projectsData, offlineUserId]);
   const projects = useMemo(() => projectsData?.projects || [], [projectsData]);
 
   // Synchronously match routeProjectId with projects list
@@ -257,6 +271,7 @@ export const ProjectMessagesPage: React.FC = () => {
       setReplyTarget(null);
       setEditTarget(null);
       setSearchOpen(false);
+      setGalleryOpen(false);
       setRecording(false);
       setContent('');
       clientMessageIdRef.current = null;
@@ -338,11 +353,26 @@ export const ProjectMessagesPage: React.FC = () => {
       return mergeLatestPage(cached, fresh);
     },
     enabled: Boolean(activeProjectId),
+    // Saved copy on this device: the chat opens instantly and can be read offline
+    initialData: () => loadSavedChat(offlineUserId, activeProjectId)?.data,
+    initialDataUpdatedAt: () => loadSavedChat(offlineUserId, activeProjectId)?.savedAt,
     // New messages, edits and read ticks arrive over the live connection. Poll only
     // while that connection is down, as a fallback.
-    refetchInterval: isConnected ? false : 15000,
+    refetchInterval: isConnected || isOffline ? false : 15000,
   });
+  // Keep the newest messages saved on this device (debounced)
+  useEffect(() => {
+    if (!activeProjectId || !messagesData?.messages?.length) return;
+    const t = window.setTimeout(() => saveChat(offlineUserId, activeProjectId, messagesData), 800);
+    return () => window.clearTimeout(t);
+  }, [messagesData, activeProjectId, offlineUserId]);
   const hasOlderMessages = Boolean(messagesData?.hasMore);
+
+  // Messages typed without signal wait here and are sent when the network returns
+  const outbox = useChatOutbox(offlineUserId, isConnected, (projectId, message) => {
+    queryClient.setQueriesData<any>({ queryKey: ['project-messages', projectId] }, (old: any) => appendMessage(old, message));
+  });
+  const pendingOutgoing = outbox.items.filter((i) => i.projectId === activeProjectId);
 
   // Strict message isolation: guarantees no previous or cross-project messages ever render
   const rawMessages = messagesData?.messages || [];
@@ -536,10 +566,33 @@ export const ProjectMessagesPage: React.FC = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
       });
     },
-    onError: (err: any) => {
+    onError: (err: any, vars: any) => {
+      const textOnly = !vars?.attachments?.length;
+      if (textOnly && vars?.clientMessageId && isNetworkError(err)) {
+        queueOffline(vars);
+        return;
+      }
       showToast(err.message || 'Failed to deliver message', 'error');
     },
   });
+
+  // Put a text message in the outbox and clear the composer as if it was sent
+  function queueOffline(payload: any) {
+    outbox.enqueue({
+      clientMessageId: payload.clientMessageId,
+      projectId: activeProjectId,
+      content: payload.content,
+      replyToMessageId: payload.replyToMessageId,
+      replyPreview: replyTarget?.content?.slice(0, 80),
+      contextType: payload.contextType,
+      contextId: payload.contextId,
+      contextSummary: payload.contextSummary,
+    });
+    setContent('');
+    setReplyTarget(null);
+    clientMessageIdRef.current = null;
+    requestAnimationFrame(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }));
+  }
 
   // Replace one message in the cache (edit / delete / reaction / pin results)
   const applyUpdatedMessage = useCallback(
@@ -951,6 +1004,22 @@ export const ProjectMessagesPage: React.FC = () => {
       clientMessageIdRef.current = `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
     }
 
+    if (isOffline || navigator.onLine === false) {
+      if (readyAttachments.length > 0) {
+        showToast('No network: photos and files can be sent once you are back online', 'info');
+        return;
+      }
+      queueOffline({
+        content: content.trim(),
+        replyToMessageId: replyTarget ? replyTarget._id || replyTarget.id : undefined,
+        clientMessageId: clientMessageIdRef.current,
+        contextType: contextType !== 'GENERAL' ? contextType : undefined,
+        contextId: contextId || undefined,
+        contextSummary: contextSummary || undefined,
+      });
+      return;
+    }
+
     sendMessageMutation.mutate({
       content: content.trim(),
       attachments: readyAttachments,
@@ -1099,7 +1168,7 @@ export const ProjectMessagesPage: React.FC = () => {
       {/* DRAG AND DROP OVERLAY */}
       {isDragging && (
         <div className="absolute inset-0 z-50 bg-navy-950/80 backdrop-blur-sm flex flex-col items-center justify-center p-8 text-center animate-in fade-in">
-          <div className="w-20 h-20 rounded-3xl bg-amber-500/20 border-2 border-dashed border-amber-400 text-amber-400 flex items-center justify-center mb-4 animate-bounce">
+          <div className="w-20 h-20 rounded-3xl bg-amber-500/20 border-2 border-dashed border-amber-400 text-brand-400 flex items-center justify-center mb-4 animate-bounce">
             <UploadCloud className="w-10 h-10" />
           </div>
           <h3 className="text-xl font-black text-white mb-2">Drop Media Files Here</h3>
@@ -1140,7 +1209,7 @@ export const ProjectMessagesPage: React.FC = () => {
         <div className="p-4 border-b border-slate-200/90 space-y-3 bg-white">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-navy-900 text-amber-500 flex items-center justify-center font-bold">
+              <div className="w-7 h-7 rounded-lg bg-navy-900 text-brand-400 flex items-center justify-center font-bold">
                 <MessageSquare className="w-4 h-4" />
               </div>
               <h2 className="text-sm font-black text-navy-950">Project Channels</h2>
@@ -1166,7 +1235,7 @@ export const ProjectMessagesPage: React.FC = () => {
               value={projectSearch}
               onChange={(e) => setProjectSearch(e.target.value)}
               placeholder="Filter project channels..."
-              className="w-full pl-8 pr-3 py-1.5 rounded-xl border border-slate-300 text-xs bg-slate-50 focus:bg-white focus:ring-2 focus:ring-amber-500 outline-none"
+              className="w-full pl-8 pr-3 py-1.5 rounded-xl border border-slate-300 text-xs bg-slate-50 focus:bg-white focus:ring-2 focus:ring-navy-500 outline-none"
             />
           </div>
         </div>
@@ -1189,14 +1258,14 @@ export const ProjectMessagesPage: React.FC = () => {
                   onClick={() => handleSelectProject(id)}
                   className={`w-full text-left p-3.5 transition-colors flex items-start gap-3 cursor-pointer ${
                     isSelected
-                      ? 'bg-amber-500/10 border-l-4 border-amber-500'
+                      ? 'bg-brand-50 border-l-4 border-brand-600'
                       : 'hover:bg-slate-100/70 border-l-4 border-transparent'
                   }`}
                 >
                   <div className="relative flex-shrink-0">
                     <div
                       className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs ${
-                        isSelected ? 'bg-navy-900 text-amber-400' : 'bg-slate-200 text-slate-700'
+                        isSelected ? 'bg-navy-900 text-brand-400' : 'bg-slate-200 text-slate-700'
                       }`}
                     >
                       {p.code?.substring(0, 3) || 'PRJ'}
@@ -1269,7 +1338,7 @@ export const ProjectMessagesPage: React.FC = () => {
               <ArrowLeft className="w-5 h-5" />
             </button>
             <div className="relative flex-shrink-0">
-              <div className="w-10 h-10 rounded-xl bg-navy-900 text-amber-500 flex items-center justify-center font-bold text-xs shadow-xs">
+              <div className="w-10 h-10 rounded-xl bg-navy-900 text-brand-400 flex items-center justify-center font-bold text-xs shadow-xs">
                 {activeProject?.code?.substring(0, 3) || 'PRJ'}
               </div>
               {/* Online Green Pulsing Indicator Dot */}
@@ -1342,6 +1411,15 @@ export const ProjectMessagesPage: React.FC = () => {
 
           {/* Right Header: search + linked accounts chips (MD and their linked In-Charges) */}
           <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => setGalleryOpen(true)}
+            className="p-2 min-w-[40px] min-h-[40px] flex items-center justify-center rounded-xl cursor-pointer transition-colors text-slate-500 hover:text-navy-950 hover:bg-slate-100"
+            aria-label="Shared photos, videos, documents and voice notes"
+            title="Shared photos, videos, documents and voice notes"
+          >
+            <Images className="w-[18px] h-[18px]" />
+          </button>
           <button
             type="button"
             onClick={() => setSearchOpen((v) => !v)}
@@ -1481,12 +1559,21 @@ export const ProjectMessagesPage: React.FC = () => {
               {(user?.role === 'MD' || user?.role === 'OWNER') && (
                 <button
                   onClick={() => navigate(`/projects/${activeProjectId}`)}
-                  className="w-full sm:w-auto px-4 py-2.5 min-h-[44px] bg-amber-500 hover:bg-amber-600 text-navy-950 font-bold text-sm rounded-xl flex-shrink-0 transition-colors shadow-2xs cursor-pointer whitespace-nowrap"
+                  className="w-full sm:w-auto px-4 py-2.5 min-h-[44px] bg-brand-600 hover:bg-brand-700 text-white font-bold text-sm rounded-xl flex-shrink-0 transition-colors shadow-2xs cursor-pointer whitespace-nowrap"
                 >
                   Assign In-Charge
                 </button>
               )}
             </div>
+          </div>
+        )}
+
+        {isOffline && (
+          <div className="bg-slate-800 text-white px-4 py-1.5 flex items-center gap-2 text-[11px] shrink-0">
+            <WifiOff className="w-3.5 h-3.5 text-amber-400" />
+            <span>
+              You're offline. Showing messages saved on this phone; new messages will send when you're back online.
+            </span>
           </div>
         )}
 
@@ -1522,7 +1609,7 @@ export const ProjectMessagesPage: React.FC = () => {
                 </Button>
               )}
             </div>
-          ) : isMessagesError ? (
+          ) : isMessagesError && messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-4 animate-in fade-in">
               <div className="w-16 h-16 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-200 shadow-xs">
                 <AlertCircle className="w-8 h-8" />
@@ -1557,7 +1644,7 @@ export const ProjectMessagesPage: React.FC = () => {
                   : `Coordinate operations between MD (${mdName}) and Site In-Charge (${assignedInChargeNames || 'Assigned In-Charge'}).`}
               </p>
               <div className="flex items-center gap-2 pt-1 text-[11px] text-slate-500 bg-slate-100/80 px-3 py-1.5 rounded-xl border border-slate-200">
-                <UploadCloud className="w-4 h-4 text-amber-500" />
+                <UploadCloud className="w-4 h-4 text-brand-600" />
                 <span className="hidden md:inline">Drag & drop photos, videos or PDFs anywhere to share</span>
                 <span className="md:hidden">Tap the clip to share photos, videos or PDFs</span>
               </div>
@@ -1710,7 +1797,7 @@ export const ProjectMessagesPage: React.FC = () => {
                       >
                         <div className="flex items-center gap-2 truncate">
                           {m.contextType === 'PAYMENT_REQUEST' && (
-                            <CreditCard className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                            <CreditCard className="w-4 h-4 text-brand-400 flex-shrink-0" />
                           )}
                           {m.contextType === 'DAILY_REPORT' && (
                             <FileText className="w-4 h-4 text-sky-400 flex-shrink-0" />
@@ -1836,7 +1923,7 @@ export const ProjectMessagesPage: React.FC = () => {
                                       }`}
                                     >
                                       <div className="flex items-center gap-1.5 truncate">
-                                        <Film className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+                                        <Film className="w-3.5 h-3.5 text-brand-400 flex-shrink-0" />
                                         <span className="truncate">{att.name}</span>
                                         {!!att.duration && (
                                           <span className="text-[10px] font-mono font-bold">
@@ -1852,7 +1939,7 @@ export const ProjectMessagesPage: React.FC = () => {
                                       <button
                                         type="button"
                                         onClick={(e) => handleDownload(e, att.url, att.name)}
-                                        className="flex items-center gap-1 text-[10px] font-bold text-amber-400 hover:text-amber-300 transition-colors ml-2 flex-shrink-0 cursor-pointer"
+                                        className="flex items-center gap-1 text-[10px] font-bold text-brand-400 hover:text-brand-300 transition-colors ml-2 flex-shrink-0 cursor-pointer"
                                       >
                                         <Download className="w-3 h-3" />
                                         <span>Download</span>
@@ -1908,7 +1995,7 @@ export const ProjectMessagesPage: React.FC = () => {
                                   <button
                                     type="button"
                                     onClick={(e) => handleDownload(e, att.url, att.name)}
-                                    className="p-1.5 rounded-lg hover:bg-white/10 text-amber-400 hover:text-amber-300 ml-2 cursor-pointer"
+                                    className="p-1.5 rounded-lg hover:bg-white/10 text-brand-400 hover:text-brand-300 ml-2 cursor-pointer"
                                     title="Download document"
                                   >
                                     <Download className="w-3.5 h-3.5" />
@@ -1983,6 +2070,40 @@ export const ProjectMessagesPage: React.FC = () => {
             </>
           )}
 
+          {/* Messages waiting for network (outbox) */}
+          {pendingOutgoing.map((item) => (
+            <div key={item.clientMessageId} className="flex flex-col items-end space-y-1">
+              <div className="max-w-[85%] sm:max-w-xl rounded-2xl rounded-tr-none p-3 bg-navy-950/80 text-white shadow-xs break-words">
+                {item.replyPreview && (
+                  <p className="mb-1.5 px-2 py-1 rounded-lg bg-white/10 text-[11px] text-slate-300 truncate">↩ {item.replyPreview}</p>
+                )}
+                <p className="text-xs sm:text-sm whitespace-pre-wrap">{item.content}</p>
+                <div className="mt-1 flex items-center justify-end gap-1 text-[10px] text-slate-300">
+                  {item.status === 'failed' ? (
+                    <span className="text-rose-300">Not sent: {item.error}</span>
+                  ) : (
+                    <>
+                      <Clock className="w-3 h-3" />
+                      <span>{item.status === 'sending' ? 'Sending…' : 'Waiting for network'}</span>
+                    </>
+                  )}
+                </div>
+              </div>
+              <div className="flex gap-2 text-[11px] font-semibold px-1">
+                {item.status === 'failed' && (
+                  <button type="button" onClick={() => outbox.retry(item.clientMessageId)} className="text-amber-700 hover:underline cursor-pointer">
+                    Retry
+                  </button>
+                )}
+                {item.status !== 'sending' && (
+                  <button type="button" onClick={() => outbox.remove(item.clientMessageId)} className="text-slate-500 hover:underline cursor-pointer">
+                    Delete
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+
           {/* Real-time "Seen by" receipt tag at bottom of thread */}
           {lastOutgoingMessage && lastOutgoingIsSeen && (
             <div className="flex items-center justify-end gap-1.5 px-2 text-[11px] text-sky-600 font-medium animate-in fade-in">
@@ -2031,7 +2152,7 @@ export const ProjectMessagesPage: React.FC = () => {
           <div className="px-6 py-3 bg-slate-100/90 border-t border-slate-200">
             <div className="flex items-center justify-between mb-2">
               <span className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
-                <Paperclip className="w-3.5 h-3.5 text-amber-500" />
+                <Paperclip className="w-3.5 h-3.5 text-brand-600" />
                 <span>
                   Attachments ({stagedAttachments.length})
                   {isAnyStagedUploading && ' • Uploading...'}
@@ -2074,7 +2195,7 @@ export const ProjectMessagesPage: React.FC = () => {
                         className="w-full h-full object-cover"
                       />
                     ) : att.type === 'video' ? (
-                      <div className="w-full h-full bg-navy-950 flex items-center justify-center text-amber-400">
+                      <div className="w-full h-full bg-navy-950 flex items-center justify-center text-brand-400">
                         <Film className="w-5 h-5" />
                       </div>
                     ) : (
@@ -2085,7 +2206,7 @@ export const ProjectMessagesPage: React.FC = () => {
 
                     {att.uploading && (
                       <div className="absolute inset-0 bg-navy-950/60 flex items-center justify-center">
-                        <Loader2 className="w-4 h-4 text-amber-400 animate-spin" />
+                        <Loader2 className="w-4 h-4 text-brand-400 animate-spin" />
                       </div>
                     )}
                   </div>
@@ -2107,7 +2228,7 @@ export const ProjectMessagesPage: React.FC = () => {
                     </p>
                     {att.uploading && (
                       <div className="mt-1 h-1 w-full max-w-[130px] rounded-full bg-slate-200 overflow-hidden">
-                        <div className="h-full bg-amber-500 transition-all" style={{ width: `${att.progress}%` }} />
+                        <div className="h-full bg-brand-600 transition-all" style={{ width: `${att.progress}%` }} />
                       </div>
                     )}
                     {/* Controls: Retry / Replace / Remove */}
@@ -2199,7 +2320,7 @@ export const ProjectMessagesPage: React.FC = () => {
               onBlur={() => typingEmitter.stop()}
               onKeyDown={handleKeyDown}
               placeholder={editTarget ? 'Edit your message…' : sendingVoice ? 'Sending voice note…' : 'Type a message'}
-              className="flex-1 min-w-0 px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm text-navy-950 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none resize-none max-h-32 min-h-[42px] leading-relaxed bg-slate-50 focus:bg-white transition-colors"
+              className="flex-1 min-w-0 px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm text-navy-950 focus:ring-2 focus:ring-navy-500 focus:border-navy-500 outline-none resize-none max-h-32 min-h-[42px] leading-relaxed bg-slate-50 focus:bg-white transition-colors"
             />
 
             {/* Send / Voice Button */}
@@ -2212,7 +2333,7 @@ export const ProjectMessagesPage: React.FC = () => {
                 title="Record a voice note"
                 aria-label="Record voice note"
               >
-                {sendingVoice ? <Loader2 className="w-4 h-4 text-amber-400 animate-spin" /> : <Mic className="w-4 h-4 text-amber-400" />}
+                {sendingVoice ? <Loader2 className="w-4 h-4 text-brand-400 animate-spin" /> : <Mic className="w-4 h-4 text-brand-400" />}
               </button>
             ) : (
             <Button
@@ -2225,7 +2346,7 @@ export const ProjectMessagesPage: React.FC = () => {
               title={editTarget ? 'Save edit' : 'Send message'}
               aria-label={editTarget ? 'Save edit' : 'Send message'}
             >
-              {editTarget ? <Check className="w-4 h-4 text-amber-400" /> : <Send className="w-4 h-4 text-amber-400" />}
+              {editTarget ? <Check className="w-4 h-4 text-brand-400" /> : <Send className="w-4 h-4 text-brand-400" />}
             </Button>
             )}
           </form>
@@ -2237,6 +2358,7 @@ export const ProjectMessagesPage: React.FC = () => {
       {lightboxMedia && (
         <div
           onClick={closeLightbox}
+          data-overlay="viewer"
           className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col items-center justify-between p-4 sm:p-6 animate-in fade-in duration-200"
         >
           {/* Lightbox Header */}
@@ -2245,7 +2367,7 @@ export const ProjectMessagesPage: React.FC = () => {
             className="w-full max-w-5xl flex items-center justify-between text-white pb-3 border-b border-white/10"
           >
             <div className="flex items-center gap-2 truncate">
-              <ImageIcon className="w-5 h-5 text-amber-400 flex-shrink-0" />
+              <ImageIcon className="w-5 h-5 text-brand-400 flex-shrink-0" />
               <span className="text-sm font-bold truncate">{lightboxMedia.name}</span>
             </div>
 
@@ -2280,7 +2402,7 @@ export const ProjectMessagesPage: React.FC = () => {
               <button
                 type="button"
                 onClick={(e) => handleDownload(e, lightboxMedia.url, lightboxMedia.name)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-navy-950 font-bold text-xs transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs transition-colors cursor-pointer"
                 title="Download full quality media"
               >
                 <Download className="w-4 h-4" />
@@ -2323,6 +2445,17 @@ export const ProjectMessagesPage: React.FC = () => {
             <span>Zoom: {Math.round(zoomLevel * 100)}% • Press Esc to exit</span>
           </div>
         </div>
+      )}
+      {galleryOpen && activeProjectId && (
+        <MediaGallery
+          projectId={activeProjectId}
+          projectName={activeProject?.name}
+          onClose={() => setGalleryOpen(false)}
+          onOpenImage={(url, name) => openLightbox(url, name, 'image')}
+          onOpenDoc={(att) => setViewerDoc(att)}
+          onDownload={handleDownload}
+          onJump={(id) => void jumpToMessage(id)}
+        />
       )}
       <DocumentViewer attachment={viewerDoc} onClose={() => setViewerDoc(null)} />
       <ShareProjectFileModal

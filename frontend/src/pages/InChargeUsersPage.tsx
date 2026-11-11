@@ -177,7 +177,7 @@ export const InChargeUsersPage: React.FC = () => {
           {users.map((user) => (
             <Card key={user.id || user._id} className="p-4 sm:p-5 space-y-4 min-w-0">
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-12 h-12 rounded-2xl bg-navy-900 text-amber-400 flex items-center justify-center font-bold text-lg shadow-sm shrink-0">
+                <div className="w-12 h-12 rounded-2xl bg-navy-900 text-brand-400 flex items-center justify-center font-bold text-lg shadow-sm shrink-0">
                   {user.name.charAt(0)}
                 </div>
                 <div className="min-w-0">

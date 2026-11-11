@@ -165,7 +165,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({
               e.stopPropagation();
               onConfigureLocation();
             }}
-            className="w-full py-2 px-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-navy-950 text-xs font-bold transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+            className="w-full py-2 px-3 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold transition-colors flex items-center justify-center gap-1.5 shadow-sm"
           >
             <Settings className="w-3.5 h-3.5" />
             Configure Site Location Now

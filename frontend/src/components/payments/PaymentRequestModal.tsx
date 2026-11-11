@@ -401,7 +401,7 @@ export const PaymentRequestModal: React.FC<PaymentRequestModalProps> = ({
               <label className="flex items-center gap-2.5 p-3 cursor-pointer">
                 <input
                   type="checkbox"
-                  className="w-4 h-4 accent-amber-500"
+                  className="w-4 h-4 accent-navy-900"
                   checked={paidAlready}
                   onChange={(e) => setPaidAlready(e.target.checked)}
                 />

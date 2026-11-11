@@ -161,20 +161,8 @@ export async function listProjectMessages(req: AuthenticatedRequest, res: Respon
     // Cursor: messages strictly older than (before, beforeId). The id breaks ties between
     // messages created in the same millisecond, so paging never skips or repeats one.
     const conditions: any[] = [{ project: resolvedProjectId }];
-    const beforeDate = before ? new Date(String(before)) : null;
-    if (beforeDate && !Number.isNaN(beforeDate.getTime())) {
-      const idValid = beforeId && mongoose.Types.ObjectId.isValid(String(beforeId));
-      conditions.push(
-        idValid
-          ? {
-              $or: [
-                { createdAt: { $lt: beforeDate } },
-                { createdAt: beforeDate, _id: { $lt: new mongoose.Types.ObjectId(String(beforeId)) } },
-              ],
-            }
-          : { createdAt: { $lt: beforeDate } }
-      );
-    }
+    const cursor = olderThanCursor(before, beforeId);
+    if (cursor) conditions.push(cursor);
 
     // untilId: load everything back to (and including) that message, e.g. to jump to an old
     // quoted / pinned / searched message in one request instead of paging step by step.
@@ -259,6 +247,75 @@ export async function listProjectMessages(req: AuthenticatedRequest, res: Respon
     });
   } catch (err: any) {
     res.status(500).json({ success: false, message: 'Failed to fetch messages', error: err.message });
+  }
+}
+
+/** Mongo condition for "older than this (createdAt, _id) cursor", or null if no valid cursor. */
+function olderThanCursor(before: unknown, beforeId: unknown): any | null {
+  const beforeDate = before ? new Date(String(before)) : null;
+  if (!beforeDate || Number.isNaN(beforeDate.getTime())) return null;
+  if (beforeId && mongoose.Types.ObjectId.isValid(String(beforeId))) {
+    return {
+      $or: [
+        { createdAt: { $lt: beforeDate } },
+        { createdAt: beforeDate, _id: { $lt: new mongoose.Types.ObjectId(String(beforeId)) } },
+      ],
+    };
+  }
+  return { createdAt: { $lt: beforeDate } };
+}
+
+const GALLERY_TYPES: Record<string, string[]> = {
+  media: ['image', 'video'],
+  docs: ['document', 'pdf'],
+  voice: ['audio'],
+};
+
+/**
+ * GET /projects/:projectId/messages/gallery?type=media|docs|voice&before=&beforeId=&limit=
+ * Every photo/video, document or voice note shared in the project chat, newest first,
+ * one entry per file, paged by message.
+ */
+export async function listProjectMediaGallery(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const access = await verifyUserProjectAccess(req.params.projectId, req.user!.userId, req.user!.role);
+    if (!access.allowed) {
+      res.status(403).json({ success: false, message: 'Forbidden. You do not have access to this project.' });
+      return;
+    }
+    const canonicalId = access.project ? access.project._id : req.params.projectId;
+    const type = typeof req.query.type === 'string' && GALLERY_TYPES[req.query.type] ? req.query.type : 'media';
+    const types = GALLERY_TYPES[type];
+    const pageSize = Math.min(Math.max(Number(req.query.limit) || 40, 1), 100);
+
+    const conditions: any[] = [{ project: canonicalId }, { deletedAt: null }, { 'attachments.type': { $in: types } }];
+    const cursor = olderThanCursor(req.query.before, req.query.beforeId);
+    if (cursor) conditions.push(cursor);
+
+    const messages = await ProjectMessage.find({ $and: conditions })
+      .select('attachments sender createdAt')
+      .populate('sender', 'name role')
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(pageSize + 1)
+      .lean();
+    const hasMore = messages.length > pageSize;
+    if (hasMore) messages.length = pageSize;
+
+    const items = messages.flatMap((m) =>
+      (m.attachments || [])
+        .filter((a) => types.includes(String(a.type)))
+        .map((attachment) => ({ messageId: m._id, createdAt: m.createdAt, sender: m.sender, attachment }))
+    );
+    const last = messages[messages.length - 1];
+    res.json({
+      success: true,
+      type,
+      items,
+      hasMore,
+      nextCursor: hasMore && last ? { before: last.createdAt, beforeId: last._id } : null,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: 'Failed to load shared files', error: err.message });
   }
 }
 

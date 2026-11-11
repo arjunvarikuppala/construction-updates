@@ -1,5 +1,5 @@
 // Bump the version whenever caching rules change: old caches are deleted on activate.
-const CACHE_NAME = 'bkr-infra-static-v5';
+const CACHE_NAME = 'bkr-infra-static-v7';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -14,8 +14,17 @@ const STATIC_ASSETS = [
 // Install: pre-cache static shell
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS);
+    caches.open(CACHE_NAME).then(async (cache) => {
+      await cache.addAll(STATIC_ASSETS);
+      // Also keep the current build's main JS/CSS (named in index.html), so the app
+      // opens with no signal even if it was only visited once
+      try {
+        const html = await (await fetch('/', { cache: 'no-store' })).text();
+        const assets = Array.from(html.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g), (m) => m[1]);
+        await cache.addAll(Array.from(new Set(assets)));
+      } catch (e) {
+        /* offline during install: they are cached on the next visit instead */
+      }
     })
   );
   self.skipWaiting();
@@ -37,8 +46,10 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Strictly skip caching for any API endpoints, uploads, or non-GET requests
+  // Strictly skip caching for any API endpoints, uploads, other sites (API server,
+  // Cloudinary), or non-GET requests
   if (
+    url.origin !== self.location.origin ||
     url.pathname.startsWith('/api') ||
     url.pathname.startsWith('/uploads') ||
     event.request.method !== 'GET'
@@ -66,7 +77,8 @@ self.addEventListener('fetch', (event) => {
 
   // Static assets (hashed file names): cache first, refresh in the background
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
+    // ignoreVary: module scripts send an Origin header that the saved copy wasn't fetched with
+    caches.match(event.request, { ignoreVary: true }).then((cachedResponse) => {
       if (cachedResponse) {
         // Fetch in background to update cache
         fetch(event.request).then((networkResponse) => {
@@ -80,6 +92,12 @@ self.addEventListener('fetch', (event) => {
       }
 
       return fetch(event.request).then((networkResponse) => {
+        // Keep the app's own files (JS, CSS, fonts, icons) so it can open with no signal.
+        // File names are content-hashed, so a cached copy is never stale.
+        if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
+          const copy = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        }
         return networkResponse;
       }).catch(() => {
         // Fallback for navigation requests

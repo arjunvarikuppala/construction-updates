@@ -35,7 +35,7 @@ export const ExpenditureTrendChart: React.FC<ExpenditureTrendChartProps> = ({ da
     if (active && payload && payload.length) {
       return (
         <div className="bg-navy-950 text-white p-3 rounded-xl shadow-xl border border-navy-800 text-xs space-y-1">
-          <p className="font-bold text-amber-400 mb-1">{label}</p>
+          <p className="font-bold text-brand-400 mb-1">{label}</p>
           {payload.map((entry: any, index: number) => (
             <div key={`trend-${index}`} className="flex items-center justify-between gap-4">
               <span className="text-slate-300">{entry.name}:</span>
@@ -60,8 +60,8 @@ export const ExpenditureTrendChart: React.FC<ExpenditureTrendChartProps> = ({ da
               <stop offset="95%" stopColor="#10B981" stopOpacity={0.0} />
             </linearGradient>
             <linearGradient id="colorPending" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="5%" stopColor="#F5A623" stopOpacity={0.4} />
-              <stop offset="95%" stopColor="#F5A623" stopOpacity={0.0} />
+              <stop offset="5%" stopColor="#D9262E" stopOpacity={0.4} />
+              <stop offset="95%" stopColor="#D9262E" stopOpacity={0.0} />
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
@@ -93,7 +93,7 @@ export const ExpenditureTrendChart: React.FC<ExpenditureTrendChartProps> = ({ da
           <Area
             type="monotone"
             dataKey="Pending (₹)"
-            stroke="#F5A623"
+            stroke="#D9262E"
             strokeWidth={2}
             fillOpacity={1}
             fill="url(#colorPending)"

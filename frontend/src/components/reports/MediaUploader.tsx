@@ -86,7 +86,7 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({ photos, onChange, 
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-wrap">
         <label className="flex items-center justify-center gap-2 px-4 min-h-[48px] rounded-xl bg-navy-900 text-white text-sm font-semibold cursor-pointer hover:bg-navy-800 active:scale-[0.98] transition sm:w-auto">
-          <Camera className="w-5 h-5 text-amber-400" />
+          <Camera className="w-5 h-5 text-brand-400" />
           <span>Take photo</span>
           <input
             type="file"
@@ -126,7 +126,7 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({ photos, onChange, 
                   <>
                     <SecureVideo src={photo.url} className="w-full h-full object-cover opacity-80" preload="metadata" muted />
                     <span className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                      <span className="w-9 h-9 rounded-full bg-navy-900/80 text-amber-400 flex items-center justify-center">
+                      <span className="w-9 h-9 rounded-full bg-navy-900/80 text-brand-400 flex items-center justify-center">
                         <Video className="w-4 h-4" />
                       </span>
                     </span>
@@ -149,7 +149,7 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({ photos, onChange, 
                 placeholder="Caption"
                 aria-label="Photo caption"
                 maxLength={200}
-                className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-navy-500/20"
               />
             </div>
           ))}
@@ -174,7 +174,7 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({ photos, onChange, 
                       <button
                         type="button"
                         onClick={() => runUpload(u)}
-                        className="flex-1 flex items-center justify-center gap-1 min-h-[32px] rounded-md bg-amber-500 text-navy-950 text-[11px] font-bold"
+                        className="flex-1 flex items-center justify-center gap-1 min-h-[32px] rounded-md bg-brand-600 text-white text-[11px] font-bold"
                       >
                         <RotateCcw className="w-3 h-3" /> Retry
                       </button>
