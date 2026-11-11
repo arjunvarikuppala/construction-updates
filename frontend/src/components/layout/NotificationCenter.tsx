@@ -145,7 +145,9 @@ export const NotificationCenter: React.FC = () => {
     setIsOpen(false);
 
     // Navigate to related entity
-    if (notification.relatedEntity === 'PAYMENT_REQUEST') {
+    if (notification.type === 'DAILY_REPORT_REMINDER') {
+      navigate('/reports/new');
+    } else if (notification.relatedEntity === 'PAYMENT_REQUEST') {
       navigate(notification.relatedId ? `/payments?id=${notification.relatedId}` : '/payments');
     } else if (notification.relatedEntity === 'PROJECT_MESSAGE') {
       const projId = notification.project?._id || notification.project?.code || notification.relatedId;

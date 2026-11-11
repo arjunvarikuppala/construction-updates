@@ -26,6 +26,7 @@ import companySettingsRoutes from './routes/companySettingsRoutes.js';
 import { fileApiRouter, serveSignedUpload } from './routes/fileRoutes.js';
 import { initSocketService } from './services/socketService.js';
 import { seedInitialData } from './scripts/seed.js';
+import { startReportReminderScheduler } from './services/reportReminderService.js';
 import { sanitizeErrorResponses, globalErrorHandler } from './middleware/errorHandling.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -168,6 +169,9 @@ export async function startServer() {
   if (process.env.SEED_DEMO === 'true' && process.env.NODE_ENV !== 'production') {
     await seedInitialData();
   }
+
+  // Daily report reminders (6 PM) and MD escalation (8 PM), India time
+  startReportReminderScheduler();
 
   // Bind explicitly to 0.0.0.0 so Render's health check can reach the process
   // on all network interfaces (not just loopback / IPv6).

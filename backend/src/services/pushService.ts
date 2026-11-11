@@ -121,6 +121,8 @@ export async function sendPushToUser(userId: string | mongoose.Types.ObjectId, p
 /** Where tapping a notification should take the user. */
 export function notificationUrl(n: { relatedEntity?: string; relatedId?: string; project?: any; type?: string }): string {
   const projectId = n.project ? String(n.project._id || n.project) : '';
+  // Reminder to write today's report: straight to the report form
+  if (n.type === 'DAILY_REPORT_REMINDER') return '/reports/new';
   switch (n.relatedEntity) {
     case 'PAYMENT_REQUEST':
       return n.relatedId ? `/payments?id=${n.relatedId}` : '/payments';

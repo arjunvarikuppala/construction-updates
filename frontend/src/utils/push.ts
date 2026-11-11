@@ -106,6 +106,7 @@ export async function sendTestPush(): Promise<string> {
 /** Same mapping as the server: where a notification should take you. */
 export function notificationLink(n: { relatedEntity?: string; relatedId?: string; project?: any; type?: string }): string {
   const projectId = n.project ? String(n.project._id || n.project.id || n.project) : '';
+  if (n.type === 'DAILY_REPORT_REMINDER') return '/reports/new';
   switch (n.relatedEntity) {
     case 'PAYMENT_REQUEST':
       return n.relatedId ? `/payments?id=${n.relatedId}` : '/payments';

@@ -9,6 +9,7 @@ import { useToast } from '../context/ToastContext.js';
 import { api, API_ORIGIN } from '../api/client.js';
 import { isValidGstin, useCompanySettings } from '../utils/gst.js';
 import { RazorpayXSetupCard } from '../components/payments/RazorpayXSetupCard.js';
+import { ReportRemindersCard } from '../components/reports/ReportRemindersCard.js';
 
 /** MD only: BKR INFRA's legal name, GSTIN and address, plus the monthly GST purchase register. */
 export const CompanySettingsPage: React.FC = () => {
@@ -135,6 +136,8 @@ export const CompanySettingsPage: React.FC = () => {
           </div>
         </CardContent>
       </Card>
+
+      <ReportRemindersCard />
 
       <RazorpayXSetupCard />
     </div>

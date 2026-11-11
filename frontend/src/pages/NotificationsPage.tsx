@@ -79,7 +79,9 @@ export const NotificationsPage: React.FC = () => {
       markReadMutation.mutate(id);
     }
 
-    if (n.relatedEntity === 'PAYMENT_REQUEST') {
+    if (n.type === 'DAILY_REPORT_REMINDER') {
+      navigate('/reports/new');
+    } else if (n.relatedEntity === 'PAYMENT_REQUEST') {
       navigate(n.relatedId ? `/payments?id=${n.relatedId}` : '/payments');
     } else if (n.relatedEntity === 'PROJECT_MESSAGE') {
       const projId = n.project?._id || n.project?.code || n.relatedId;

@@ -97,6 +97,15 @@ export interface CompanySettingsView {
   gstin: string;
   address: string;
   stateCode: string | null;
+  reportReminders?: ReportReminderSettings;
+}
+
+/** Daily report reminders: In-Charge reminder, then MD alert, India time. */
+export interface ReportReminderSettings {
+  enabled: boolean;
+  reminderTime: string; // "HH:MM"
+  escalationTime: string; // "HH:MM"
+  workDays: number[]; // 0 = Sunday … 6 = Saturday
 }
 
 /** BKR INFRA's company profile (GSTIN decides CGST+SGST vs IGST). */
