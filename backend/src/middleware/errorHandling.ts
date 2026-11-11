@@ -51,7 +51,12 @@ export function globalErrorHandler(err: any, req: Request, res: Response, _next:
     message = 'Origin not permitted.';
   }
 
-  console.error(`Unhandled error on ${req.method} ${req.originalUrl}:`, err);
+  if (status >= 500) {
+    console.error(`Unhandled error on ${req.method} ${req.originalUrl}:`, err);
+  } else {
+    // Expected client mistakes (bad file type, bad JSON…): one line, no stack trace
+    console.warn(`${status} on ${req.method} ${req.originalUrl}: ${message}`);
+  }
   if (res.headersSent) return;
   res.status(status).json({ success: false, message });
 }

@@ -1,0 +1,3 @@
+# BKR INFRA staff app: private, keep it out of search engines
+User-agent: *
+Disallow: /
