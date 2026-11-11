@@ -146,7 +146,22 @@ export const ProjectMessagesPage: React.FC = () => {
   const isNearBottomRef = useRef(true);
   const prevProjectIdRef = useRef<string>('');
 
-  const [mobileView, setMobileView] = useState<'channels' | 'chat'>('chat');
+  // Phones open on the channel list; a link to a specific project opens its chat
+  const [mobileView, setMobileView] = useState<'channels' | 'chat'>(routeProjectId ? 'chat' : 'channels');
+  const [isDesktop, setIsDesktop] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches
+  );
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 768px)');
+    const onChange = () => setIsDesktop(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  // Tapping "Messages" again (plain /messages) goes back to the list
+  useEffect(() => {
+    if (!routeProjectId) setMobileView('channels');
+  }, [routeProjectId]);
+  const chatVisible = isDesktop || mobileView === 'chat';
 
   // Form input states
   const [content, setContent] = useState('');
@@ -235,18 +250,19 @@ export const ProjectMessagesPage: React.FC = () => {
     return null;
   }, [matchedProject, activeProjectId, projects]);
 
-  // If no routeProjectId was provided in URL, redirect synchronously once projects load
+  // Computer: with no project in the URL, open the first channel once projects load.
+  // Phone: stay on the channel list until a project is tapped.
   useEffect(() => {
-    if (!routeProjectId && projects.length > 0) {
+    if (isDesktop && !routeProjectId && projects.length > 0) {
       const defaultId = projects[0]._id || projects[0].id;
       navigate(`/messages/${defaultId}`, { replace: true });
     }
-  }, [routeProjectId, projects, navigate]);
+  }, [isDesktop, routeProjectId, projects, navigate]);
 
   // Handle channel selection cleanly without state conflicts
   const handleSelectProject = useCallback(
     (targetProjectId: string) => {
-      if (targetProjectId === activeProjectId) {
+      if (targetProjectId === activeProjectId && routeProjectId) {
         setMobileView('chat');
         return;
       }
@@ -278,12 +294,13 @@ export const ProjectMessagesPage: React.FC = () => {
       setMobileView('chat');
       navigate(`/messages/${targetProjectId}`);
     },
-    [activeProjectId, contextType, linkedPaymentId, linkedReportId, navigate]
+    [activeProjectId, routeProjectId, contextType, linkedPaymentId, linkedReportId, navigate]
   );
 
   // Socket room join / leave lifecycle & mark seen
   useEffect(() => {
-    if (!activeProjectId) return;
+    // Only when the chat is actually on screen — not while a phone shows the channel list
+    if (!activeProjectId || !chatVisible) return;
 
     joinProject(activeProjectId);
 
@@ -301,7 +318,7 @@ export const ProjectMessagesPage: React.FC = () => {
     return () => {
       leaveProject(activeProjectId);
     };
-  }, [activeProjectId, joinProject, leaveProject, socket, queryClient]);
+  }, [activeProjectId, chatVisible, joinProject, leaveProject, socket, queryClient]);
 
   // Handle ESC key for Lightbox
   useEffect(() => {
@@ -1251,7 +1268,7 @@ export const ProjectMessagesPage: React.FC = () => {
           ) : (
             filteredProjects.map((p: any) => {
               const id = p._id || p.id;
-              const isSelected = id === activeProjectId;
+              const isSelected = id === activeProjectId && (isDesktop || Boolean(routeProjectId));
               return (
                 <button
                   key={id}
