@@ -16,9 +16,12 @@ import { createNotification, notifyAllMDs } from '../services/notificationServic
 
 dotenv.config();
 
-const uri =
-  process.env.MONGODB_URI ||
-  'mongodb+srv://captian16720_db_user:Kiran%4016720@cluster0.zon62u7.mongodb.net/sitetrack?retryWrites=true&w=majority&appName=Cluster0';
+// Never hardcode a connection string here: this script writes to whatever database it is pointed at
+const uri = process.env.MONGODB_URI?.trim();
+if (!uri) {
+  console.error('MONGODB_URI is required (set it in backend/.env or the environment). Use a test database, not the live one.');
+  process.exit(1);
+}
 
 async function runFullVerification() {
   console.log('\n========================================================================');

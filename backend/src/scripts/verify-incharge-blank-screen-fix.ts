@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import crypto from 'crypto';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import jwt from 'jsonwebtoken';
 import { User } from '../models/User.js';
@@ -10,7 +11,8 @@ import { verifyUserProjectAccess } from '../middleware/auth.js';
 import { rupeesToPaise } from '../utils/currency.js';
 
 let mongoServer: MongoMemoryServer;
-const JWT_SECRET = process.env.JWT_SECRET || 'sitetrack_super_secure_jwt_secret_dev_2026';
+// Self-contained check (signs and verifies its own tokens): a random secret per run is enough
+const JWT_SECRET = crypto.randomBytes(32).toString('hex');
 
 async function runVerification() {
   console.log('\n========================================================================');

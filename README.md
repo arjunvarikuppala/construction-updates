@@ -90,7 +90,8 @@ Backend `.env` file (`backend/.env`):
 ```env
 PORT=5000
 NODE_ENV=development
-JWT_SECRET=sitetrack_super_secure_jwt_secret_dev_2026_key
+# Generate your own (never reuse an example): node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+JWT_SECRET=
 
 # Optional: Provide MongoDB Atlas URI, or leave empty for embedded zero-setup memory DB:
 # MONGODB_URI=mongodb+srv://<user>:<password>@cluster0.mongodb.net/sitetrack?retryWrites=true&w=majority

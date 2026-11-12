@@ -21,7 +21,11 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 let httpServer: http.Server;
 let serverPort: number;
-const JWT_SECRET = process.env.JWT_SECRET || 'sitetrack_super_secure_jwt_secret_dev_2026_key';
+const JWT_SECRET = process.env.JWT_SECRET?.trim() || '';
+if (!JWT_SECRET) {
+  console.error('JWT_SECRET is required (the same one the server under test uses).');
+  process.exit(1);
+}
 const MONGODB_URI = process.env.MONGODB_URI;
 
 async function runVerification() {
