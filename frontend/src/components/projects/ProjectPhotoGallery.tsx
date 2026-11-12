@@ -234,15 +234,10 @@ export const ProjectPhotoGallery: React.FC<Props> = ({ projectId, projectName, o
     if (shareSupported) items.slice(0, MAX_SHARE).forEach((it, i) => void fileFor(it, i + 1));
   };
 
-  const shareText = () => {
-    const picked = selected.map((k) => items[indexOf.get(k) ?? -1]).filter(Boolean) as Item[];
-    const dates = Array.from(new Set(picked.map((p) => formatDate(p.workDate, 'dd MMM yyyy'))));
-    return `${projectName} – site photos${dates.length === 1 ? `, ${dates[0]}` : dates.length > 1 ? `, ${dates[dates.length - 1]} to ${dates[0]}` : ''}`;
-  };
-
+  // Only the photo files: no title or text, so WhatsApp doesn't add a caption under them
   const doShare = async (files: File[]) => {
     try {
-      await navigator.share({ files, title: `${projectName} site photos`, text: shareText() });
+      await navigator.share({ files });
       setReadyFiles(null);
       exitSelect();
     } catch (err: any) {
@@ -565,7 +560,7 @@ export const ProjectPhotoGallery: React.FC<Props> = ({ projectId, projectName, o
                   const f = await fileFor(current, 1);
                   if (!f) return toast.error('Could not load this photo. Check your connection and try again.');
                   try {
-                    await navigator.share({ files: [f], title: `${projectName} site photo`, text: `${projectName} – site photo, ${formatDate(current.workDate, 'dd MMM yyyy')}` });
+                    await navigator.share({ files: [f] });
                   } catch (err: any) {
                     if (err?.name === 'NotAllowedError') toast.info('Photo is ready. Tap Share again.');
                     else if (err?.name !== 'AbortError') toast.error('Could not open sharing on this device.');
