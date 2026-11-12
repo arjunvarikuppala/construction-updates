@@ -9,7 +9,8 @@ export type AuditEntityType =
   | 'BENEFICIARY'
   | 'COMMUNICATION'
   | 'REPORT_VIEW'
-  | 'COMPANY';
+  | 'COMPANY'
+  | 'SALARY';
 
 export interface IAuditLog extends Document {
   action: string;
@@ -46,6 +47,7 @@ const AuditLogSchema = new Schema<IAuditLog>(
         'COMMUNICATION',
         'REPORT_VIEW',
         'COMPANY',
+        'SALARY',
       ],
       required: true,
       index: true,

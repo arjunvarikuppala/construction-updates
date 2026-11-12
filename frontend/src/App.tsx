@@ -42,6 +42,7 @@ const AuditLogsPage = lazy(reloadOnStaleChunk(() => import('./pages/AuditLogsPag
 const PaymentsPage = lazy(reloadOnStaleChunk(() => import('./pages/PaymentsPage.js').then((m) => ({ default: m.PaymentsPage }))));
 const ProjectMessagesPage = lazy(reloadOnStaleChunk(() => import('./pages/ProjectMessagesPage.js').then((m) => ({ default: m.ProjectMessagesPage }))));
 const CompanySettingsPage = lazy(reloadOnStaleChunk(() => import('./pages/CompanySettingsPage.js').then((m) => ({ default: m.CompanySettingsPage }))));
+const MySalaryPage = lazy(reloadOnStaleChunk(() => import('./pages/MySalaryPage.js').then((m) => ({ default: m.MySalaryPage }))));
 const NotificationsPage = lazy(reloadOnStaleChunk(() => import('./pages/NotificationsPage.js').then((m) => ({ default: m.NotificationsPage }))));
 
 // Protected Route Guard
@@ -139,6 +140,9 @@ export const App: React.FC = () => {
         {/* Project Communication */}
         <Route path="messages" element={<ProjectMessagesPage />} />
         <Route path="messages/:projectId" element={<ProjectMessagesPage />} />
+
+        {/* Salary: the in-charge's own; the MD manages salaries on the team page */}
+        <Route path="salary" element={isOwner ? <Navigate to="/team" replace /> : <MySalaryPage />} />
 
         {/* Notifications History */}
         <Route path="notifications" element={<NotificationsPage />} />

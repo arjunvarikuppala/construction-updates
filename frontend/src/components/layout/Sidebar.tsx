@@ -14,6 +14,7 @@ import {
   RefreshCw,
   X,
   Settings,
+  Wallet,
 } from 'lucide-react';
 import { BrandLogo } from '../common/BrandLogo.js';
 import { useAuth } from '../../context/AuthContext.js';
@@ -101,6 +102,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { to: '/reports', label: 'Daily Reports', icon: ClipboardList },
     { to: '/expenses', label: 'My Expenses', icon: Receipt },
     { to: '/payments', label: 'Payments', icon: CreditCard },
+    { to: '/salary', label: 'My Salary', icon: Wallet },
     { to: '/messages', label: 'Project Messages', icon: MessageSquare },
   ];
 

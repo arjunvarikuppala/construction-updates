@@ -71,6 +71,28 @@ export interface SanitizedReportFields {
  * With `partial`, only keys present in the body are returned (for updates).
  */
 const round2 = (n: number) => Math.round(n * 100) / 100;
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+const cleanTime = (v: unknown) => (typeof v === 'string' && TIME_RE.test(v.trim()) ? v.trim() : undefined);
+const optNum = (v: unknown, max = 1e9) => {
+  if (v === undefined || v === null || v === '') return undefined;
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? Math.min(max, n) : undefined;
+};
+
+/** ₹ for one labour row: workers × daily wage + workers × overtime hours × overtime rate */
+export const labourRowCost = (l: { count?: number; wagePerDay?: number; otHours?: number; otRate?: number }) =>
+  round2((l.count || 0) * (l.wagePerDay || 0) + (l.count || 0) * (l.otHours || 0) * (l.otRate || 0));
+
+/** ₹ hire for one machinery row: per day = machines × rate; per hour = machines × hours × rate; per trip = trips × rate */
+export const machineRent = (m: { quantity?: number; rate?: number; rateBasis?: string; hoursUsed?: number; trips?: number }) => {
+  if (!m.rate) return 0;
+  if (m.rateBasis === 'TRIP') return round2((m.trips || 0) * m.rate);
+  return round2((m.quantity || 0) * m.rate * (m.rateBasis === 'HOUR' ? m.hoursUsed || 0 : 1));
+};
+
+/** ₹ total for one machinery row: hire + diesel + operator bata */
+export const machineRowCost = (m: Parameters<typeof machineRent>[0] & { dieselLitres?: number; dieselRate?: number; bata?: number }) =>
+  round2(machineRent(m) + (m.dieselLitres || 0) * (m.dieselRate || 0) + (m.bata || 0));
 
 export function sanitizeReportInput(
   body: any,
@@ -129,6 +151,7 @@ export function sanitizeReportInput(
                 : undefined
               : Math.min(100, nonNegativeNumber(progress)),
           remarks: cleanText(item?.remarks, 500),
+          machineUsed: cleanText(item?.machineUsed, 300),
         };
       })
       .filter(Boolean) as any[];
@@ -149,13 +172,18 @@ export function sanitizeReportInput(
           category: LABOUR_CATEGORIES.includes(item?.category) ? item.category : guessLabourCategory(role),
           hours: hoursRaw === undefined || hoursRaw === null || hoursRaw === '' ? undefined : Math.min(24, nonNegativeNumber(hoursRaw)),
           wagePerDay: wage > 0 ? wage : undefined,
+          contractor: cleanText(item?.contractor, 120),
+          inTime: cleanTime(item?.inTime),
+          outTime: cleanTime(item?.outTime),
+          otHours: optNum(item?.otHours, 16) || undefined,
+          otRate: optNum(item?.otRate) || undefined,
+          workDone: cleanText(item?.workDone, 300),
         };
       })
       .filter(Boolean) as any[];
     data.totalLabourCount = data.labourBreakdown.reduce((sum, l) => sum + l.count, 0);
-    // Labour cost = workers × daily wage, always computed on the server
-    data.totalLabourCost =
-      Math.round(data.labourBreakdown.reduce((sum, l) => sum + l.count * ((l as any).wagePerDay || 0), 0) * 100) / 100;
+    // Labour cost = workers × daily wage + overtime, always computed on the server
+    data.totalLabourCost = round2(data.labourBreakdown.reduce((sum, l) => sum + labourRowCost(l), 0));
   }
 
   if (has('materials') || !opts.partial) {
@@ -170,6 +198,11 @@ export function sanitizeReportInput(
           unit: cleanText(m?.unit, 30) || 'units',
           rate: rate > 0 ? rate : undefined,
           remarks: cleanText(m?.remarks, 300),
+          spec: cleanText(m?.spec, 150),
+          received: optNum(m?.received),
+          supplier: cleanText(m?.supplier, 150),
+          billNo: cleanText(m?.billNo, 60),
+          usedFor: cleanText(m?.usedFor, 200),
         };
       })
       .filter(Boolean) as any[];
@@ -182,25 +215,42 @@ export function sanitizeReportInput(
       .map((m: any) => {
         const name = cleanText(m?.name, 150);
         if (!name) return null;
-        const hours = m?.hoursUsed;
         const rate = nonNegativeNumber(m?.rate);
+        const meterStart = optNum(m?.meterStart);
+        const meterEnd = optNum(m?.meterEnd);
+        const meterHours = meterStart !== undefined && meterEnd !== undefined && meterEnd >= meterStart ? round2(meterEnd - meterStart) : undefined;
+        // Hours typed win; otherwise take them from the hour meter
+        const hoursUsed = optNum(m?.hoursUsed, 24) ?? (meterHours !== undefined ? Math.min(24, meterHours) : undefined);
+        const ownership = m?.ownership === 'OWN' || m?.ownership === 'HIRED' ? m.ownership : undefined;
         return {
           name,
           quantity: Math.max(1, Math.floor(nonNegativeNumber(m?.quantity, 1, 1000))),
-          hoursUsed: hours === undefined || hours === null || hours === '' ? undefined : Math.min(24, nonNegativeNumber(hours)),
+          hoursUsed,
           rate: rate > 0 ? rate : undefined,
-          rateBasis: rate > 0 ? (m?.rateBasis === 'HOUR' ? 'HOUR' : 'DAY') : undefined,
+          rateBasis: rate > 0 ? (['HOUR', 'TRIP'].includes(m?.rateBasis) ? m.rateBasis : 'DAY') : undefined,
           remarks: cleanText(m?.remarks, 300),
+          model: cleanText(m?.model, 120),
+          regNo: cleanText(m?.regNo, 40)?.toUpperCase(),
+          ownership,
+          supplier: cleanText(m?.supplier, 150),
+          operator: cleanText(m?.operator, 80),
+          startTime: cleanTime(m?.startTime),
+          endTime: cleanTime(m?.endTime),
+          meterStart,
+          meterEnd,
+          idleHours: optNum(m?.idleHours, 24) || undefined,
+          workDone: cleanText(m?.workDone, 300),
+          workQty: optNum(m?.workQty) || undefined,
+          workUnit: cleanText(m?.workUnit, 30),
+          trips: optNum(m?.trips, 1000) || undefined,
+          dieselLitres: optNum(m?.dieselLitres, 10000) || undefined,
+          dieselRate: optNum(m?.dieselRate, 1000) || undefined,
+          bata: optNum(m?.bata, 100000) || undefined,
         };
       })
       .filter(Boolean) as any[];
-    // Machinery cost: per day = machines × rate; per hour = machines × hours × rate
-    data.totalMachineryCost = round2(
-      data.machinery.reduce(
-        (s, m) => s + (m.rate ? m.quantity * m.rate * (m.rateBasis === 'HOUR' ? m.hoursUsed || 0 : 1) : 0),
-        0
-      )
-    );
+    // Machinery cost: hire (per day / hour / trip) + diesel + operator bata
+    data.totalMachineryCost = round2(data.machinery.reduce((s, m) => s + machineRowCost(m), 0));
   }
 
   if (has('photos') || !opts.partial) {

@@ -103,6 +103,8 @@ const DailyReportSchema = new Schema<IDailyReport>(
         status: { type: String, enum: ['NOT_STARTED', 'IN_PROGRESS', 'COMPLETED'] },
         progressPercent: { type: Number, min: 0, max: 100 },
         remarks: { type: String, trim: true, maxlength: 500 },
+        /** Machine(s) that did this job, e.g. "JCB 3DX (TS 08 EK 4417)" */
+        machineUsed: { type: String, trim: true, maxlength: 300 },
       },
     ],
     labourBreakdown: [
@@ -112,16 +114,29 @@ const DailyReportSchema = new Schema<IDailyReport>(
         category: { type: String, enum: ['SKILLED', 'UNSKILLED', 'SUPERVISOR', 'OTHER'] },
         hours: { type: Number, min: 0, max: 24 },
         wagePerDay: { type: Number, min: 0 }, // ₹ per worker per day
+        // Optional detail for the Labour register
+        contractor: { type: String, trim: true, maxlength: 120 }, // contractor / gang
+        inTime: { type: String, trim: true, maxlength: 5 }, // HH:MM
+        outTime: { type: String, trim: true, maxlength: 5 },
+        otHours: { type: Number, min: 0, max: 16 }, // overtime per worker
+        otRate: { type: Number, min: 0 }, // ₹ per overtime hour per worker
+        workDone: { type: String, trim: true, maxlength: 300 },
       },
     ],
     materials: {
       type: [
         {
           name: { type: String, required: true, trim: true, maxlength: 150 },
-          quantity: { type: Number, required: true, min: 0 },
+          quantity: { type: Number, required: true, min: 0 }, // used today
           unit: { type: String, required: true, trim: true, maxlength: 30 },
           rate: { type: Number, min: 0 }, // ₹ per unit
           remarks: { type: String, trim: true, maxlength: 300 },
+          // Optional detail for the Materials stock register
+          spec: { type: String, trim: true, maxlength: 150 },
+          received: { type: Number, min: 0 }, // received on site today
+          supplier: { type: String, trim: true, maxlength: 150 },
+          billNo: { type: String, trim: true, maxlength: 60 },
+          usedFor: { type: String, trim: true, maxlength: 200 },
         },
       ],
       default: [],
@@ -132,9 +147,27 @@ const DailyReportSchema = new Schema<IDailyReport>(
           name: { type: String, required: true, trim: true, maxlength: 150 },
           quantity: { type: Number, required: true, min: 0 },
           hoursUsed: { type: Number, min: 0, max: 24 },
-          rate: { type: Number, min: 0 }, // ₹ per machine per day / per hour
-          rateBasis: { type: String, enum: ['DAY', 'HOUR'] },
+          rate: { type: Number, min: 0 }, // ₹ per machine per day / per hour / per trip
+          rateBasis: { type: String, enum: ['DAY', 'HOUR', 'TRIP'] },
           remarks: { type: String, trim: true, maxlength: 300 },
+          // Optional detail for the Machinery log
+          model: { type: String, trim: true, maxlength: 120 },
+          regNo: { type: String, trim: true, maxlength: 40 },
+          ownership: { type: String, enum: ['OWN', 'HIRED'] },
+          supplier: { type: String, trim: true, maxlength: 150 },
+          operator: { type: String, trim: true, maxlength: 80 },
+          startTime: { type: String, trim: true, maxlength: 5 },
+          endTime: { type: String, trim: true, maxlength: 5 },
+          meterStart: { type: Number, min: 0 }, // hour meter (HMR)
+          meterEnd: { type: Number, min: 0 },
+          idleHours: { type: Number, min: 0, max: 24 },
+          workDone: { type: String, trim: true, maxlength: 300 },
+          workQty: { type: Number, min: 0 },
+          workUnit: { type: String, trim: true, maxlength: 30 },
+          trips: { type: Number, min: 0 },
+          dieselLitres: { type: Number, min: 0 },
+          dieselRate: { type: Number, min: 0 }, // ₹ per litre
+          bata: { type: Number, min: 0 }, // operator bata ₹
         },
       ],
       default: [],

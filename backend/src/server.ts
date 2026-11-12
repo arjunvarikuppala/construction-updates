@@ -23,6 +23,7 @@ import communicationRoutes from './routes/communicationRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import pushRoutes from './routes/pushRoutes.js';
 import companySettingsRoutes from './routes/companySettingsRoutes.js';
+import salaryRoutes from './routes/salaryRoutes.js';
 import { fileApiRouter, serveSignedUpload } from './routes/fileRoutes.js';
 import { initSocketService } from './services/socketService.js';
 import { seedInitialData } from './scripts/seed.js';
@@ -151,6 +152,7 @@ app.use('/api/v1/projects/:projectId/messages', communicationRoutes);
 app.use('/api/v1/notifications', notificationRoutes);
 app.use('/api/v1/push', pushRoutes);
 app.use('/api/v1/company-settings', companySettingsRoutes);
+app.use('/api/v1/salaries', salaryRoutes);
 app.use('/api/v1/files', fileApiRouter);
 
 // Unknown API routes

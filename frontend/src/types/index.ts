@@ -182,6 +182,8 @@ export interface WorkItem {
   status?: WorkItemStatus;
   progressPercent?: number;
   remarks?: string;
+  /** Machine(s) that did this job */
+  machineUsed?: string;
 }
 
 export type LabourCategory = 'SKILLED' | 'UNSKILLED' | 'SUPERVISOR' | 'OTHER';
@@ -192,23 +194,51 @@ export interface LabourCountItem {
   category?: LabourCategory;
   hours?: number;
   wagePerDay?: number; // ₹ per worker per day
+  contractor?: string; // contractor / gang
+  inTime?: string; // HH:MM
+  outTime?: string;
+  otHours?: number; // overtime hours per worker
+  otRate?: number; // ₹ per overtime hour per worker
+  workDone?: string;
 }
 
 export interface MaterialItem {
   name: string;
-  quantity: number;
+  quantity: number; // used today
   unit: string;
   rate?: number; // ₹ per unit
   remarks?: string;
+  spec?: string;
+  received?: number; // received on site today
+  supplier?: string;
+  billNo?: string;
+  usedFor?: string;
 }
 
 export interface MachineryItem {
   name: string;
   quantity: number;
   hoursUsed?: number;
-  rate?: number; // ₹ per machine, per day or per hour
-  rateBasis?: 'DAY' | 'HOUR';
+  rate?: number; // ₹ per machine, per day / per hour / per trip
+  rateBasis?: 'DAY' | 'HOUR' | 'TRIP';
   remarks?: string;
+  model?: string;
+  regNo?: string;
+  ownership?: 'OWN' | 'HIRED';
+  supplier?: string;
+  operator?: string;
+  startTime?: string;
+  endTime?: string;
+  meterStart?: number;
+  meterEnd?: number;
+  idleHours?: number;
+  workDone?: string;
+  workQty?: number;
+  workUnit?: string;
+  trips?: number;
+  dieselLitres?: number;
+  dieselRate?: number; // ₹ per litre
+  bata?: number; // operator bata ₹
 }
 
 export type ReportShift = 'DAY' | 'NIGHT' | 'GENERAL' | 'DOUBLE';

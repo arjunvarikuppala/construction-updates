@@ -112,6 +112,8 @@ export function notificationLink(n: { relatedEntity?: string; relatedId?: string
       return n.relatedId ? `/payments?id=${n.relatedId}` : '/payments';
     case 'PROJECT_MESSAGE':
       return projectId ? `/messages/${projectId}` : '/messages';
+    case 'SALARY':
+      return n.relatedId ? `/salary?id=${n.relatedId}` : '/salary';
     case 'DAILY_REPORT':
       return n.relatedId ? `/reports/${n.relatedId}` : '/reports';
     case 'EXPENSE':

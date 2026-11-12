@@ -35,6 +35,7 @@ import { ExpenseTable } from '../components/expenses/ExpenseTable.js';
 import { DailyReportCard } from '../components/reports/DailyReportCard.js';
 import { ProjectModal } from '../components/projects/ProjectModal.js';
 import { AssignInChargeModal } from '../components/projects/AssignInChargeModal.js';
+import { ProjectRegister } from '../components/projects/ProjectRegister.js';
 import { useAuth } from '../context/AuthContext.js';
 import { useUnreadReports } from '../hooks/useUnreadReports.js';
 import { UnreadDot } from '../components/common/UnreadDot.js';
@@ -67,6 +68,7 @@ export const ProjectDetailPage: React.FC = () => {
     | 'materials'
     | 'machinery'
     | 'issues'
+    | 'register'
     | 'exports';
 
   const [activeTab, setActiveTab] = useState<WorkspaceModule>('overview');
@@ -395,6 +397,18 @@ export const ProjectDetailPage: React.FC = () => {
         >
           Project Overview
         </button>
+
+        {isOwner && (
+          <button
+            onClick={() => setActiveTab('register')}
+            className={`py-2 px-3 text-xs font-bold rounded-xl whitespace-nowrap shrink-0 transition-colors flex items-center gap-1.5 ${
+              activeTab === 'register' ? 'bg-navy-900 text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-navy-950'
+            }`}
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+            <span>Payments &amp; Work (Excel)</span>
+          </button>
+        )}
 
         <button
           onClick={() => setActiveTab('reports')}
@@ -983,6 +997,9 @@ export const ProjectDetailPage: React.FC = () => {
         </Card>
       )}
 
+      {/* Payments & work register (view + Excel), MD only */}
+      {activeTab === 'register' && isOwner && <ProjectRegister projectId={project._id || project.id!} projectCode={project.code} />}
+
       {/* MODULE 9: Reports and Exports */}
       {activeTab === 'exports' && (
         <Card>
@@ -1012,6 +1029,19 @@ export const ProjectDetailPage: React.FC = () => {
                   Download Excel Spreadsheet
                 </Button>
               </div>
+
+              {isOwner && (
+                <div className="p-5 rounded-2xl border border-emerald-200 bg-emerald-50/40 space-y-3 sm:col-span-2">
+                  <FileSpreadsheet className="w-8 h-8 text-emerald-600" />
+                  <h4 className="font-bold text-sm text-navy-950">Payments &amp; Work Register (.xlsx)</h4>
+                  <p className="text-xs text-slate-500">
+                    Every payment (with date, UTR and who paid), every daily work report and every expense of this project, in one workbook.
+                  </p>
+                  <Button variant="outline" onClick={() => setActiveTab('register')} leftIcon={<FileSpreadsheet className="w-4 h-4 text-emerald-600" />}>
+                    View &amp; download
+                  </Button>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>

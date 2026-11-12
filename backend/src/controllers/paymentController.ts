@@ -77,6 +77,19 @@ async function loadAuthorizedPayment(
   return payment;
 }
 
+/** Optional "what is this for": quantity × rate per unit (e.g. 120 bags × ₹380). Informational; the amount stays what was asked. */
+function lineDetail(body: any): { quantity?: number; unit?: string; rate?: number } {
+  const q = Number(body?.quantity);
+  const r = Number(body?.rate);
+  const unit = typeof body?.unit === 'string' ? body.unit.trim().slice(0, 30) : '';
+  const quantity = Number.isFinite(q) && q > 0 ? Math.min(q, 1e7) : undefined;
+  return {
+    quantity,
+    unit: quantity && unit ? unit : undefined,
+    rate: quantity && Number.isFinite(r) && r > 0 ? Math.min(r, 1e9) : undefined,
+  };
+}
+
 export async function createPaymentRequest(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
     const {
@@ -282,6 +295,7 @@ export async function createPaymentRequest(req: AuthenticatedRequest, res: Respo
       invoiceUrl: typeof invoiceUrl === 'string' && invoiceUrl.trim() ? invoiceUrl.trim().split('?')[0] : undefined,
       requestedPaymentDate: requestedPaymentDate ? new Date(requestedPaymentDate) : undefined,
       inchargeRemarks: typeof inchargeRemarks === 'string' ? inchargeRemarks.trim().slice(0, 500) : undefined,
+      ...lineDetail(req.body),
       status: callerIsMD && !isHighValue ? 'AUTHORIZED' : initialStatus,
       ...(callerIsMD ? { authorizedBy: req.user!.userId, authorizedAt: new Date(), authorizationNotes: 'Raised by the MD' } : {}),
       requiresHighValueAuth: isHighValue,

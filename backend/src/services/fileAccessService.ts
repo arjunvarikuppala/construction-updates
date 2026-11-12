@@ -17,6 +17,7 @@ import { DailyReport } from '../models/DailyReport.js';
 import { Expense } from '../models/Expense.js';
 import { PaymentRequest } from '../models/PaymentRequest.js';
 import { ProjectMessage } from '../models/ProjectMessage.js';
+import { SalaryPayment } from '../models/SalaryPayment.js';
 import { getAccessibleProjectIds } from './tenantService.js';
 import { escapeRegex } from '../utils/validation.js';
 import { storageService, StorageUploadResult } from './storageService.js';
@@ -83,6 +84,13 @@ export async function canUserAccessFile(
     uploadedBy: new mongoose.Types.ObjectId(user.userId),
   });
   if (ownUpload) return true;
+
+  // Salary payment proof: only the MD who paid and the in-charge who was paid
+  const salaryProof = await SalaryPayment.exists({
+    proofUrl: new RegExp(`/${escapeRegex(filename)}$`),
+    $or: [{ company: user.userId }, { employee: user.userId }],
+  });
+  if (salaryProof) return true;
 
   const referencing = await findReferencingProjectIds(filename);
   if (referencing.length === 0) return false;

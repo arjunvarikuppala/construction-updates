@@ -244,6 +244,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     socketInstance.on('payment:status_changed', refreshPayments);
     socketInstance.on('payment:updated', refreshPayments);
     socketInstance.on('payment:new', refreshPayments);
+    socketInstance.on('salary:updated', () => queryClient.invalidateQueries({ queryKey: ['salary'] }));
 
     setSocket(socketInstance);
 

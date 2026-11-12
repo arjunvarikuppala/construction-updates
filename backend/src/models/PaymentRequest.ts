@@ -101,6 +101,10 @@ export interface IPaymentRequest extends Document {
   invoiceUrl?: string;
   requestedPaymentDate?: Date;
   inchargeRemarks?: string;
+  /** Optional line detail: quantity × rate per unit (₹) */
+  quantity?: number;
+  unit?: string;
+  rate?: number;
   mdReviewRemarks?: string;
   rejectionReason?: string;
 
@@ -315,6 +319,9 @@ const PaymentRequestSchema = new Schema<IPaymentRequest>(
       trim: true,
       maxlength: 500,
     },
+    quantity: { type: Number, min: 0 },
+    unit: { type: String, trim: true, maxlength: 30 },
+    rate: { type: Number, min: 0 },
     mdReviewRemarks: {
       type: String,
       trim: true,

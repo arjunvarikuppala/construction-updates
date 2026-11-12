@@ -14,6 +14,7 @@ import {
   Edit3,
   Trash2,
   IndianRupee,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/common/Card.js';
 import { Button } from '../components/common/Button.js';
@@ -24,6 +25,12 @@ import { User } from '../types/index.js';
 import { formatINR } from '../utils/currency.js';
 import { useToast } from '../context/ToastContext.js';
 import { api } from '../api/client.js';
+import { localMonthString } from '../utils/dates.js';
+import { inr } from '../utils/payments.js';
+import { SALARY_STATUS, addMonths, monthLabel, type SalaryEmployee, type SalarySummaryResponse } from '../utils/salary.js';
+import { PaySalaryModal, SalaryHistoryModal } from '../components/salary/SalaryModals.js';
+import { InChargePaymentsModal } from '../components/salary/InChargePaymentsModal.js';
+import { downloadFromApi } from '../utils/download.js';
 
 export const InChargeUsersPage: React.FC = () => {
   const queryClient = useQueryClient();
@@ -107,6 +114,34 @@ export const InChargeUsersPage: React.FC = () => {
 
   const users = data?.users || [];
 
+  // Monthly salaries
+  const currentMonth = localMonthString();
+  const [payMonth, setPayMonth] = useState(currentMonth);
+  const [payFor, setPayFor] = useState<SalaryEmployee | null>(null);
+  const [historyFor, setHistoryFor] = useState<SalaryEmployee | null>(null);
+  const [ledgerFor, setLedgerFor] = useState<SalaryEmployee | null>(null);
+  const [salaryDownloading, setSalaryDownloading] = useState('');
+  const downloadSalary = async (u: User) => {
+    const id = u.id || (u as any)._id;
+    setSalaryDownloading(id);
+    try {
+      await downloadFromApi(`/export/in-charges/${id}/salary.xlsx`, `Salary-${u.name.replace(/[^A-Za-z0-9]+/g, '-')}.xlsx`);
+    } catch (err: any) {
+      toastError(err.message || 'Could not download the salary file');
+    } finally {
+      setSalaryDownloading('');
+    }
+  };
+  const { data: payroll } = useQuery({
+    queryKey: ['salary', 'summary', payMonth],
+    queryFn: () => api.get<SalarySummaryResponse>(`/salaries/summary?month=${payMonth}`),
+  });
+  const salaryRow = (u: User) => payroll?.rows.find((r) => r.employee._id === (u.id || (u as any)._id));
+  const toEmployee = (u: User): SalaryEmployee => {
+    const row = salaryRow(u);
+    return { _id: u.id || (u as any)._id, name: u.name, salary: u.salary, salaryFrequency: u.salaryFrequency, vpa: row?.employee.vpa };
+  };
+
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
     if (modalMode === 'invite') {
@@ -179,6 +214,46 @@ export const InChargeUsersPage: React.FC = () => {
         </Button>
       </div>
 
+      {/* Monthly payroll */}
+      {users.length > 0 && payroll && (
+        <Card className="p-4 sm:p-5">
+          <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                <IndianRupee className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="font-bold text-navy-950 text-sm">Salaries · {monthLabel(payMonth)}</h2>
+                <p className="text-xs text-slate-500">
+                  {payroll.totals.paidCount} of {payroll.totals.count} paid in full
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Button size="sm" variant="outline" onClick={() => setPayMonth(addMonths(payMonth, -1))} aria-label="Previous month">
+                ‹
+              </Button>
+              <span className="min-w-[96px] text-center text-xs font-bold text-navy-950">{monthLabel(payMonth, true)}</span>
+              <Button size="sm" variant="outline" onClick={() => setPayMonth(addMonths(payMonth, 1))} disabled={payMonth >= addMonths(currentMonth, 1)} aria-label="Next month">
+                ›
+              </Button>
+            </div>
+            <div className="grid grid-cols-3 gap-2 lg:ml-auto text-xs">
+              {[
+                { k: 'Salaries', v: inr(payroll.totals.duePaise), c: 'text-navy-950' },
+                { k: 'Paid', v: inr(payroll.totals.paidPaise), c: 'text-emerald-700' },
+                { k: 'Still due', v: inr(payroll.totals.balancePaise), c: payroll.totals.balancePaise ? 'text-rose-700' : 'text-emerald-700' },
+              ].map((t) => (
+                <div key={t.k} className="px-3 py-2 rounded-xl bg-slate-50 border border-slate-200">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{t.k}</div>
+                  <div className={`text-sm font-black ${t.c}`}>{t.v}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Card>
+      )}
+
       {/* Users List */}
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -236,6 +311,64 @@ export const InChargeUsersPage: React.FC = () => {
                   Edit Salary
                 </Button>
               </div>
+
+              {/* This month's salary */}
+              {(() => {
+                const row = salaryRow(user);
+                const meta = SALARY_STATUS[row?.status || 'UNPAID'];
+                return (
+                  <div className="pt-2 border-t border-slate-100 space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Salary · {monthLabel(payMonth, true)}</span>
+                      <span className={`px-2 py-0.5 rounded-full border text-[11px] font-bold ${meta.tone}`}>{meta.label}</span>
+                    </div>
+                    {row && (row.paidPaise > 0 || row.duePaise > 0) && (
+                      <div className="text-xs text-slate-600 flex flex-wrap gap-x-3">
+                        <span>
+                          Paid <strong className="text-emerald-700">{inr(row.paidPaise)}</strong>
+                        </span>
+                        {row.balancePaise > 0 && (
+                          <span>
+                            Due <strong className="text-rose-700">{inr(row.balancePaise)}</strong>
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        className="flex-1 text-xs"
+                        disabled={row?.status === 'PAID'}
+                        onClick={() => setPayFor(toEmployee(user))}
+                        leftIcon={<IndianRupee className="w-3.5 h-3.5" />}
+                      >
+                        {row?.status === 'PAID' ? 'Paid' : row?.status === 'PARTIAL' ? 'Pay balance' : 'Pay salary'}
+                      </Button>
+                      <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={() => setHistoryFor(toEmployee(user))}>
+                        Salary history
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1">
+                      <button
+                        type="button"
+                        onClick={() => downloadSalary(user)}
+                        disabled={salaryDownloading === (user.id || (user as any)._id)}
+                        className="inline-flex items-center justify-center gap-1.5 min-h-[34px] rounded-lg text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-60"
+                      >
+                        <FileSpreadsheet className="w-3.5 h-3.5" />
+                        {salaryDownloading === (user.id || (user as any)._id) ? 'Preparing…' : 'Salary (Excel)'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLedgerFor(toEmployee(user))}
+                        className="inline-flex items-center justify-center gap-1.5 min-h-[34px] rounded-lg text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+                      >
+                        <FileSpreadsheet className="w-3.5 h-3.5" /> All payments
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Assigned Projects */}
               <div className="pt-2 border-t border-slate-100">
@@ -479,6 +612,17 @@ export const InChargeUsersPage: React.FC = () => {
           </form>
         )}
       </Modal>
+
+      <PaySalaryModal employee={payFor} month={payMonth} onClose={() => setPayFor(null)} />
+      <InChargePaymentsModal employee={ledgerFor} onClose={() => setLedgerFor(null)} />
+      <SalaryHistoryModal
+        employee={historyFor}
+        onClose={() => setHistoryFor(null)}
+        onPay={(e) => {
+          setHistoryFor(null);
+          setPayFor(e);
+        }}
+      />
 
       {/* Delete Account Modal */}
       <Modal

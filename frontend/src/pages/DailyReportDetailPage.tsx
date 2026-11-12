@@ -40,6 +40,7 @@ import {
   WORK_STATUS_OPTIONS,
   materialCost,
   machineCost,
+  labourCost as labourRowCost,
 } from '../utils/reportOptions.js';
 import { useAuth } from '../context/AuthContext.js';
 import { api } from '../api/client.js';
@@ -130,7 +131,7 @@ export const DailyReportDetailPage: React.FC = () => {
   const materialTotal = report.totalMaterialCost || (report.materials || []).reduce((s, m) => s + materialCost(m), 0);
   const machineryTotal = report.totalMachineryCost || (report.machinery || []).reduce((s, m) => s + machineCost(m), 0);
   const labourCost =
-    report.totalLabourCost || (report.labourBreakdown || []).reduce((s, l) => s + (l.count || 0) * (l.wagePerDay || 0), 0);
+    report.totalLabourCost || (report.labourBreakdown || []).reduce((s, l) => s + labourRowCost(l), 0);
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto pb-8 sm:pb-12 min-w-0">
@@ -376,7 +377,12 @@ export const DailyReportDetailPage: React.FC = () => {
                 </span>
                 {!!l.wagePerDay && (
                   <span className="text-[11px] text-emerald-700 font-semibold block mt-0.5">
-                    {formatRupees(l.wagePerDay)}/day · {formatRupees(l.count * l.wagePerDay)}
+                    {formatRupees(l.wagePerDay)}/day{l.otHours && l.otRate ? ` + OT ${l.otHours} h` : ''} · {formatRupees(labourRowCost(l))}
+                  </span>
+                )}
+                {(l.contractor || l.inTime || l.workDone) && (
+                  <span className="text-[10px] text-slate-500 block mt-0.5">
+                    {[l.contractor, l.inTime && l.outTime ? `${l.inTime}–${l.outTime}` : '', l.workDone].filter(Boolean).join(' · ')}
                   </span>
                 )}
               </div>
@@ -400,9 +406,19 @@ export const DailyReportDetailPage: React.FC = () => {
               <ul className="divide-y divide-slate-100 text-xs">
                 {report.materials.map((m, i) => (
                   <li key={i} className="flex items-center justify-between gap-3 px-4 py-2.5">
-                    <span className="font-semibold text-navy-950 min-w-0 break-words">{m.name}</span>
+                    <span className="min-w-0 break-words">
+                      <span className="font-semibold text-navy-950 block">
+                        {m.name}
+                        {m.spec ? ` · ${m.spec}` : ''}
+                      </span>
+                      {(m.received || m.supplier || m.usedFor) && (
+                        <span className="text-[10px] text-slate-500 block">
+                          {[m.received ? `Received ${m.received} ${m.unit}` : '', m.supplier, m.billNo ? `bill ${m.billNo}` : '', m.usedFor].filter(Boolean).join(' · ')}
+                        </span>
+                      )}
+                    </span>
                     <span className="text-right whitespace-nowrap">
-                      <span className="font-bold text-slate-700 block">{m.quantity} {m.unit}</span>
+                      <span className="font-bold text-slate-700 block">{m.quantity} {m.unit} used</span>
                       {!!m.rate && (
                         <span className="text-[11px] text-emerald-700 font-semibold block">
                           {formatRupees(m.rate)}/{m.unit} · {formatRupees(materialCost(m))}
@@ -428,12 +444,27 @@ export const DailyReportDetailPage: React.FC = () => {
               <ul className="divide-y divide-slate-100 text-xs">
                 {report.machinery.map((m, i) => (
                   <li key={i} className="flex items-center justify-between gap-3 px-4 py-2.5">
-                    <span className="font-semibold text-navy-950 min-w-0 break-words">{m.quantity}× {m.name}</span>
+                    <span className="min-w-0 break-words">
+                      <span className="font-semibold text-navy-950 block">
+                        {m.quantity}× {m.name}
+                        {m.model ? ` · ${m.model}` : ''}
+                        {m.regNo ? ` (${m.regNo})` : ''}
+                      </span>
+                      {(m.operator || m.supplier || m.workDone) && (
+                        <span className="text-[10px] text-slate-500 block">
+                          {[m.ownership === 'OWN' ? 'Own' : m.ownership === 'HIRED' ? 'Hired' : '', m.supplier, m.operator ? `operator ${m.operator}` : '', m.workDone].filter(Boolean).join(' · ')}
+                        </span>
+                      )}
+                    </span>
                     <span className="text-right whitespace-nowrap">
-                      <span className="font-bold text-slate-700 block">{m.hoursUsed ? `${m.hoursUsed} hrs` : '—'}</span>
-                      {!!m.rate && (
+                      <span className="font-bold text-slate-700 block">
+                        {m.trips ? `${m.trips} trips` : m.hoursUsed ? `${m.hoursUsed} hrs` : '—'}
+                        {m.dieselLitres ? ` · ${m.dieselLitres} L diesel` : ''}
+                      </span>
+                      {(!!m.rate || !!m.dieselLitres || !!m.bata) && (
                         <span className="text-[11px] text-emerald-700 font-semibold block">
-                          {formatRupees(m.rate)}/{m.rateBasis === 'HOUR' ? 'hr' : 'day'} · {formatRupees(machineCost(m))}
+                          {m.rate ? `${formatRupees(m.rate)}/${m.rateBasis === 'HOUR' ? 'hr' : m.rateBasis === 'TRIP' ? 'trip' : 'day'} · ` : ''}
+                          {formatRupees(machineCost(m))}
                         </span>
                       )}
                     </span>

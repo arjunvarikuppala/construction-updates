@@ -1,6 +1,6 @@
 import { Expense, Project, DailyReport, WorkItem } from '../types/index.js';
 import { formatDate } from './dates.js';
-import { materialCost, machineCost } from './reportOptions.js';
+import { materialCost, machineCost, labourCost } from './reportOptions.js';
 import { createDoc, getCompany, PdfWriter, rupees, paise, statusColour, titleCase } from './pdfKit.js';
 
 const qty = (n: number | undefined | null) => (n === undefined || n === null ? '—' : Number(n).toLocaleString('en-IN', { maximumFractionDigits: 3 }));
@@ -81,7 +81,7 @@ export async function exportDailyReportPdf(report: DailyReport) {
   const machinery = report.machinery || [];
   const expenses = report.expenses || [];
   const workTotal = report.totalWorkBudget ?? items.reduce((s, i) => s + (i.budget || 0), 0);
-  const labourTotal = labour.reduce((s, l) => s + (l.count || 0) * (l.wagePerDay || 0), 0);
+  const labourTotal = labour.reduce((s, l) => s + labourCost(l), 0);
   const materialTotal = materials.reduce((s, m) => s + materialCost(m), 0);
   const machineTotal = machinery.reduce((s, m) => s + machineCost(m), 0);
   const expenseRupees = expenses.filter((e) => e.status !== 'REJECTED').reduce((s, e) => s + (e.amount || 0), 0) / 100;
@@ -136,7 +136,7 @@ export async function exportDailyReportPdf(report: DailyReport) {
         String(l.count),
         ...(hasHours ? [l.hours !== undefined && l.hours !== null ? String(l.hours) : '—'] : []),
         l.wagePerDay ? rupees(l.wagePerDay) : '—',
-        l.wagePerDay ? rupees(l.count * l.wagePerDay) : '—',
+        l.wagePerDay ? rupees(labourCost(l)) : '—',
       ]),
       foot: [['Total labour', '', String(report.totalLabourCount || 0), ...(hasHours ? [''] : []), '', labourTotal ? rupees(labourTotal) : '—']],
       money: [costCol - 1, costCol],

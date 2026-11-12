@@ -89,6 +89,25 @@ export const MACHINERY_SUGGESTIONS = [
 /** ₹ cost of a material row: quantity × rate per unit. */
 export const materialCost = (m: { quantity?: number; rate?: number }) => (Number(m.quantity) || 0) * (Number(m.rate) || 0);
 
-/** ₹ cost of a machinery row: per day = machines × rate; per hour = machines × hours × rate. */
-export const machineCost = (m: { quantity?: number; rate?: number; rateBasis?: 'DAY' | 'HOUR'; hoursUsed?: number }) =>
-  (Number(m.quantity) || 0) * (Number(m.rate) || 0) * (m.rateBasis === 'HOUR' ? Number(m.hoursUsed) || 0 : 1);
+type MachineCostInput = {
+  quantity?: number;
+  rate?: number;
+  rateBasis?: 'DAY' | 'HOUR' | 'TRIP';
+  hoursUsed?: number;
+  trips?: number;
+  dieselLitres?: number;
+  dieselRate?: number;
+  bata?: number;
+};
+const n = (v: unknown) => Number(v) || 0;
+
+/** ₹ hire of a machinery row: per day = machines × rate; per hour = machines × hours × rate; per trip = trips × rate. */
+export const machineHire = (m: MachineCostInput) =>
+  m.rateBasis === 'TRIP' ? n(m.trips) * n(m.rate) : n(m.quantity) * n(m.rate) * (m.rateBasis === 'HOUR' ? n(m.hoursUsed) : 1);
+
+/** ₹ total of a machinery row: hire + diesel + operator bata (same rule as the server). */
+export const machineCost = (m: MachineCostInput) => machineHire(m) + n(m.dieselLitres) * n(m.dieselRate) + n(m.bata);
+
+/** ₹ cost of a labour row: workers × daily wage + workers × overtime hours × overtime rate. */
+export const labourCost = (l: { count?: number; wagePerDay?: number; otHours?: number; otRate?: number }) =>
+  n(l.count) * n(l.wagePerDay) + n(l.count) * n(l.otHours) * n(l.otRate);

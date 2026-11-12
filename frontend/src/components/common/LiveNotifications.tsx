@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Bell, BellRing, CreditCard, ClipboardList, Receipt, X, Smartphone, SendHorizontal, Check, CornerUpLeft } from 'lucide-react';
+import { Bell, BellRing, CreditCard, ClipboardList, Receipt, X, Smartphone, SendHorizontal, Check, CornerUpLeft, Wallet } from 'lucide-react';
 import { api } from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.js';
 import { enablePush, getPushState, notificationLink, playNotificationSound, PushState, refreshPushSubscription } from '../../utils/push.js';
@@ -25,6 +25,7 @@ const ICON: Record<string, React.ElementType> = {
   PAYMENT_REQUEST: CreditCard,
   DAILY_REPORT: ClipboardList,
   EXPENSE: Receipt,
+  SALARY: Wallet,
 };
 
 const SHOW_MS = 8000;

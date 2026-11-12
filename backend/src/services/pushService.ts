@@ -244,6 +244,9 @@ export function notificationUrl(n: { relatedEntity?: string; relatedId?: string;
       return n.type === 'EXPENSE_SUBMITTED' ? '/approvals' : '/expenses';
     case 'PROJECT':
       return projectId ? `/projects/${projectId}` : '/projects';
+    case 'SALARY':
+      // The in-charge opens their salary page; the MD (receipt confirmed) the team page
+      return n.type === 'SALARY_PAID' && n.relatedId ? `/salary?id=${n.relatedId}` : '/salary';
     default:
       return '/notifications';
   }

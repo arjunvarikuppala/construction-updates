@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useId } from 'react';
 import { Plus, Trash2, Copy } from 'lucide-react';
 import { WorkItem } from '../../types/index.js';
 import { Button } from '../common/Button.js';
@@ -10,6 +10,8 @@ interface WorkItemsInputProps {
   items: WorkItem[];
   onChange: (items: WorkItem[]) => void;
   defaultLocation?: string;
+  /** Machines entered on this report, offered for "Machine used" */
+  machineOptions?: string[];
 }
 
 export const emptyWorkItem = (location = ''): WorkItem => ({
@@ -21,7 +23,8 @@ export const emptyWorkItem = (location = ''): WorkItem => ({
 });
 
 /** Multiple measured work items per report (no one-item-per-day restriction). */
-export const WorkItemsInput: React.FC<WorkItemsInputProps> = ({ items, onChange, defaultLocation = '' }) => {
+export const WorkItemsInput: React.FC<WorkItemsInputProps> = ({ items, onChange, defaultLocation = '', machineOptions = [] }) => {
+  const machineListId = useId();
   const addItem = () => onChange([...items, emptyWorkItem(defaultLocation)]);
   const removeItem = (index: number) => onChange(items.filter((_, i) => i !== index));
   const duplicateItem = (index: number) => {
@@ -45,6 +48,11 @@ export const WorkItemsInput: React.FC<WorkItemsInputProps> = ({ items, onChange,
 
   return (
     <div className="space-y-3">
+      <datalist id={machineListId}>
+        {machineOptions.map((m) => (
+          <option key={m} value={m} />
+        ))}
+      </datalist>
       <div className="flex flex-wrap items-start justify-between gap-2.5">
         <div className="min-w-0">
           <h3 className="text-base font-semibold text-navy-950">Work items &amp; quantities</h3>
@@ -145,6 +153,14 @@ export const WorkItemsInput: React.FC<WorkItemsInputProps> = ({ items, onChange,
                   <span className="font-bold text-emerald-700">{formatRupees(item.budget || 0)}</span>
                 </p>
               )}
+              <Input
+                list={machineListId}
+                aria-label={`Machine used for work item ${index + 1}`}
+                placeholder={machineOptions.length ? 'Machine used (pick from today’s machines or type)' : 'Machine used (optional), e.g. JCB 3DX'}
+                maxLength={300}
+                value={item.machineUsed || ''}
+                onChange={(e) => updateItem(index, { machineUsed: e.target.value || undefined })}
+              />
             </fieldset>
           ))}
 

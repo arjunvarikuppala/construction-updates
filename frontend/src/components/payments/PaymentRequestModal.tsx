@@ -45,6 +45,13 @@ export const PaymentRequestModal: React.FC<PaymentRequestModalProps> = ({
   const [beneficiaryId, setBeneficiaryId] = useState('');
   const [amount, setAmount] = useState('');
   const [purpose, setPurpose] = useState('');
+  const [qty, setQty] = useState('');
+  const [unit, setUnit] = useState('bags');
+  const [rate, setRate] = useState('');
+  const fillAmount = (q: string, r: string) => {
+    const total = (parseFloat(q) || 0) * (parseFloat(r) || 0);
+    if (total > 0) setAmount(String(Math.round(total * 100) / 100));
+  };
   const [expenseId, setExpenseId] = useState(defaultExpenseId || '');
   const [neededBy, setNeededBy] = useState('');
   const [remarks, setRemarks] = useState('');
@@ -71,6 +78,9 @@ export const PaymentRequestModal: React.FC<PaymentRequestModalProps> = ({
     setBeneficiaryId('');
     setAmount('');
     setPurpose('');
+    setQty('');
+    setUnit('bags');
+    setRate('');
     setExpenseId(defaultExpenseId || '');
     setNeededBy('');
     setRemarks('');
@@ -184,6 +194,9 @@ export const PaymentRequestModal: React.FC<PaymentRequestModalProps> = ({
         amountRupees: amount,
         paymentMethod: effectiveVpa ? 'UPI' : 'NEFT',
         purpose: purpose.trim(),
+        quantity: parseFloat(qty) > 0 ? parseFloat(qty) : undefined,
+        unit: parseFloat(qty) > 0 ? unit : undefined,
+        rate: parseFloat(qty) > 0 && parseFloat(rate) > 0 ? parseFloat(rate) : undefined,
         expenseId: expenseId || undefined,
         requestedPaymentDate: neededBy || undefined,
         invoiceUrl: bill?.url,
@@ -357,6 +370,51 @@ export const PaymentRequestModal: React.FC<PaymentRequestModalProps> = ({
           </div>
 
           <Input label="What is it for?" maxLength={300} value={purpose} onChange={(e) => setPurpose(e.target.value)} />
+
+          {/* Optional: quantity × rate (e.g. 120 bags × ₹380). Fills the amount when both are given. */}
+          <div className="grid grid-cols-3 gap-2">
+            <Input
+              label="Qty (optional)"
+              type="number"
+              inputMode="decimal"
+              min="0"
+              step="any"
+              className={NO_SPIN}
+              value={qty}
+              onChange={(e) => {
+                setQty(e.target.value);
+                fillAmount(e.target.value, rate);
+              }}
+            />
+            <Select
+              label="Unit"
+              value={unit}
+              onChange={(e) => setUnit(e.target.value)}
+              options={['bags', 'trips', 'nos', 'kg', 'Tons', 'cu.m', 'sq.m', 'sq.ft', 'r.m', 'litres', 'hours', 'days', 'heads', 'sheets', 'units'].map((u) => ({ value: u, label: u }))}
+            />
+            <Input
+              label="Rate"
+              type="number"
+              inputMode="decimal"
+              min="0"
+              step="any"
+              className={NO_SPIN}
+              leftIcon={<span className="text-xs font-bold text-slate-500">₹</span>}
+              value={rate}
+              onChange={(e) => {
+                setRate(e.target.value);
+                fillAmount(qty, e.target.value);
+              }}
+            />
+          </div>
+          {parseFloat(qty) > 0 && parseFloat(rate) > 0 && (
+            <p className="-mt-1 text-xs text-slate-600">
+              {qty} {unit} × {inr(Math.round(parseFloat(rate) * 100))} = <strong className="text-emerald-700">{inr(Math.round(parseFloat(qty) * parseFloat(rate) * 100))}</strong>
+              {Math.round(parseFloat(qty) * parseFloat(rate) * 100) !== amountPaise && amountPaise > 0 && (
+                <span className="text-amber-700"> · differs from the amount above</span>
+              )}
+            </p>
+          )}
 
           {linkableExpenses.length > 0 && (
             <Select

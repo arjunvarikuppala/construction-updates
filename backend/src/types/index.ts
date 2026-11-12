@@ -58,6 +58,8 @@ export interface WorkItem {
   /** 0-100 completion of this item */
   progressPercent?: number;
   remarks?: string;
+  /** Machine(s) that did this job */
+  machineUsed?: string;
 }
 
 export type LabourCategory = 'SKILLED' | 'UNSKILLED' | 'SUPERVISOR' | 'OTHER';
@@ -70,6 +72,12 @@ export interface LabourCountItem {
   hours?: number;
   /** Daily wage per worker in rupees */
   wagePerDay?: number;
+  contractor?: string;
+  inTime?: string;
+  outTime?: string;
+  otHours?: number;
+  otRate?: number;
+  workDone?: string;
 }
 
 export interface MaterialItem {
@@ -79,16 +87,38 @@ export interface MaterialItem {
   /** ₹ per unit */
   rate?: number;
   remarks?: string;
+  spec?: string;
+  received?: number;
+  supplier?: string;
+  billNo?: string;
+  usedFor?: string;
 }
 
 export interface MachineryItem {
   name: string;
   quantity: number;
   hoursUsed?: number;
-  /** ₹ per machine, per day or per hour (see rateBasis) */
+  /** ₹ per machine, per day / per hour / per trip (see rateBasis) */
   rate?: number;
-  rateBasis?: 'DAY' | 'HOUR';
+  rateBasis?: 'DAY' | 'HOUR' | 'TRIP';
   remarks?: string;
+  model?: string;
+  regNo?: string;
+  ownership?: 'OWN' | 'HIRED';
+  supplier?: string;
+  operator?: string;
+  startTime?: string;
+  endTime?: string;
+  meterStart?: number;
+  meterEnd?: number;
+  idleHours?: number;
+  workDone?: string;
+  workQty?: number;
+  workUnit?: string;
+  trips?: number;
+  dieselLitres?: number;
+  dieselRate?: number;
+  bata?: number;
 }
 
 export type ReportShift = 'DAY' | 'NIGHT' | 'GENERAL' | 'DOUBLE';

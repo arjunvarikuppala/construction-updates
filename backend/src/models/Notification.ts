@@ -17,6 +17,7 @@ export type NotificationType =
   | 'EXPENSE_SUBMITTED'
   | 'EXPENSE_APPROVED'
   | 'EXPENSE_REJECTED'
+  | 'SALARY_PAID'
   | 'SYSTEM';
 
 export type NotificationRelatedEntity =
@@ -24,7 +25,8 @@ export type NotificationRelatedEntity =
   | 'PROJECT_MESSAGE'
   | 'DAILY_REPORT'
   | 'EXPENSE'
-  | 'PROJECT';
+  | 'PROJECT'
+  | 'SALARY';
 
 export interface INotification extends Document {
   recipient: mongoose.Types.ObjectId;
@@ -76,7 +78,7 @@ const NotificationSchema = new Schema<INotification>(
     },
     relatedEntity: {
       type: String,
-      enum: ['PAYMENT_REQUEST', 'PROJECT_MESSAGE', 'DAILY_REPORT', 'EXPENSE', 'PROJECT'],
+      enum: ['PAYMENT_REQUEST', 'PROJECT_MESSAGE', 'DAILY_REPORT', 'EXPENSE', 'PROJECT', 'SALARY'],
     },
     relatedId: {
       type: String,

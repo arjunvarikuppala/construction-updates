@@ -9,6 +9,103 @@ import { verifyUserProjectAccess } from '../middleware/auth.js';
 import { getAccessibleProjectIds } from '../services/tenantService.js';
 import { paiseToRupees, formatIndianCurrency } from '../utils/currency.js';
 import { CompanySettings } from '../models/CompanySettings.js';
+import { buildProjectLedger, buildInChargeLedger, inChargeWorkbook } from '../services/ledgerService.js';
+import { paymentsWorkbook, workWorkbook, expensesWorkbook, salaryWorkbook } from '../services/excelRegisters.js';
+import { isInChargeInCompany } from '../services/tenantService.js';
+
+const safeFile = (s: string) => s.replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'export';
+
+async function projectFor(req: AuthenticatedRequest, res: Response) {
+  const access = await verifyUserProjectAccess(String(req.params.id), req.user!.userId, req.user!.role);
+  if (!access.allowed || !access.project) {
+    res.status(404).json({ success: false, message: 'Project not found' });
+    return null;
+  }
+  return access.project;
+}
+
+async function inChargeFor(req: AuthenticatedRequest, res: Response) {
+  const id = String(req.params.id);
+  if (!mongoose.Types.ObjectId.isValid(id) || !(await isInChargeInCompany(req.user!.userId, id))) {
+    res.status(404).json({ success: false, message: 'In-charge not found' });
+    return null;
+  }
+  return new mongoose.Types.ObjectId(id);
+}
+
+/** GET /export/projects/:id/register — payments, work and expenses of one project (on-screen view) */
+export async function projectRegister(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const project = await projectFor(req, res);
+    if (!project) return;
+    res.json({ success: true, ...(await buildProjectLedger(project._id as mongoose.Types.ObjectId)) });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Could not load the project register', error: error.message });
+  }
+}
+
+async function sendBook(res: Response, made: { wb: ExcelJS.Workbook; file: string }) {
+  const file = made.file.replace(/[^A-Za-z0-9._-]+/g, '-');
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="${file}"`);
+  res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
+  await made.wb.xlsx.write(res);
+  res.end();
+}
+
+/**
+ * GET /export/projects/:id/{payments|work|expenses}.xlsx?from=YYYY-MM-DD&to=YYYY-MM-DD
+ * Day-by-day registers, one file per topic.
+ */
+export function projectExcel(kind: 'payments' | 'work' | 'expenses') {
+  const build = { payments: paymentsWorkbook, work: workWorkbook, expenses: expensesWorkbook }[kind];
+  return async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const project = await projectFor(req, res);
+      if (!project) return;
+      await sendBook(res, await build(project as any, req.user!.userId, req.query));
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: 'Could not create the Excel file', error: error.message });
+    }
+  };
+}
+
+/** GET /export/in-charges/:id/salary.xlsx — one in-charge's salary, day by day and month-wise */
+export async function inChargeSalaryExcel(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const id = await inChargeFor(req, res);
+    if (!id) return;
+    await sendBook(res, await salaryWorkbook(req.user!.userId, id));
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Could not create the Excel file', error: error.message });
+  }
+}
+
+/** GET /export/in-charges/:id/payments — everything paid to one in-charge, by date */
+export async function inChargePayments(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const id = await inChargeFor(req, res);
+    if (!id) return;
+    res.json({ success: true, ...(await buildInChargeLedger(req.user!.userId, id)) });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Could not load the payment history', error: error.message });
+  }
+}
+
+/** GET /export/in-charges/:id/payments.xlsx */
+export async function inChargePaymentsExcel(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const id = await inChargeFor(req, res);
+    if (!id) return;
+    const { wb, name } = await inChargeWorkbook(req.user!.userId, id);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeFile(`${name}-payment-history`)}.xlsx"`);
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Could not create the Excel file', error: error.message });
+  }
+}
 
 export async function exportExpensesExcel(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {

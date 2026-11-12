@@ -3,7 +3,8 @@ import { Plus, Trash2, Users, Minus } from 'lucide-react';
 import { LabourCountItem, LabourCategory } from '../../types/index.js';
 import { Button } from '../common/Button.js';
 import { Select } from '../common/Input.js';
-import { LABOUR_CATEGORY_OPTIONS, LABOUR_PRESETS } from '../../utils/reportOptions.js';
+import { LABOUR_CATEGORY_OPTIONS, LABOUR_PRESETS, labourCost } from '../../utils/reportOptions.js';
+import { MoreDetails, DetailField, numOrUndef, textOrUndef } from './MoreDetails.js';
 import { formatRupees } from '../../utils/currency.js';
 
 interface LabourBreakdownInputProps {
@@ -31,7 +32,7 @@ export const LabourBreakdownInput: React.FC<LabourBreakdownInputProps> = ({ labo
     },
     { all: 0 } as Record<string, number>
   );
-  const totalCost = labourList.reduce((s, l) => s + (Number(l.count) || 0) * (Number(l.wagePerDay) || 0), 0);
+  const totalCost = labourList.reduce((s, l) => s + labourCost(l), 0);
   const unused = LABOUR_PRESETS.filter((p) => p.role !== 'Other' && !labourList.some((l) => l.role === p.role)).slice(0, 6);
 
   return (
@@ -148,10 +149,23 @@ export const LabourBreakdownInput: React.FC<LabourBreakdownInputProps> = ({ labo
                 </div>
                 {!!item.wagePerDay && (Number(item.count) || 0) > 0 && (
                   <p className="text-xs text-slate-600">
-                    {item.count} × {formatRupees(item.wagePerDay)} ={' '}
-                    <span className="font-bold text-emerald-700">{formatRupees((Number(item.count) || 0) * item.wagePerDay)}</span>
+                    {item.count} × {formatRupees(item.wagePerDay)}
+                    {!!item.otHours && !!item.otRate && ` + OT ${item.count} × ${item.otHours} h × ${formatRupees(item.otRate)}`} ={' '}
+                    <span className="font-bold text-emerald-700">{formatRupees(labourCost(item))}</span>
                   </p>
                 )}
+                <MoreDetails
+                  filled={Boolean(item.contractor || item.inTime || item.otHours || item.workDone)}
+                  summary={[item.contractor, item.inTime && item.outTime ? `${item.inTime}–${item.outTime}` : '', item.otHours ? `OT ${item.otHours} h` : ''].filter(Boolean).join(' · ')}
+                >
+                  <DetailField label="Contractor / gang" value={item.contractor} maxLength={120} placeholder="e.g. Ramesh gang" onChange={(v) => update(index, { contractor: textOrUndef(v) })} />
+                  <DetailField label="In time" type="time" value={item.inTime} onChange={(v) => update(index, { inTime: textOrUndef(v) })} />
+                  <DetailField label="Out time" type="time" value={item.outTime} onChange={(v) => update(index, { outTime: textOrUndef(v) })} />
+                  <DetailField label="Hours worked" type="number" value={item.hours} onChange={(v) => update(index, { hours: numOrUndef(v) })} />
+                  <DetailField label="Overtime hours (each)" type="number" value={item.otHours} onChange={(v) => update(index, { otHours: numOrUndef(v) })} />
+                  <DetailField label="OT rate per hour" type="number" prefix="₹" value={item.otRate} onChange={(v) => update(index, { otRate: numOrUndef(v) })} />
+                  <DetailField label="Work done" wide maxLength={300} placeholder="e.g. Brick masonry 1st floor" value={item.workDone} onChange={(v) => update(index, { workDone: textOrUndef(v) })} />
+                </MoreDetails>
               </div>
             );
           })}

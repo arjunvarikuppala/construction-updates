@@ -27,7 +27,7 @@ import {
   DailyReport,
 } from '../types/index.js';
 import { api, ApiError } from '../api/client.js';
-import { SHIFT_OPTIONS, materialCost, machineCost } from '../utils/reportOptions.js';
+import { SHIFT_OPTIONS, materialCost, machineCost, labourCost } from '../utils/reportOptions.js';
 import { ReportCostSummary, ReportCostTotals } from '../components/reports/ReportCostSummary.js';
 import { gstFromSaved, gstDraftToPayload, gstDraftProblems, gstDraftTaxRupees } from '../utils/gst.js';
 import { newRequestId } from '../utils/upload.js';
@@ -373,7 +373,7 @@ export const DailyReportFormPage: React.FC = () => {
 
   const costTotals: ReportCostTotals = {
     work: form.workItems.reduce((sum, i) => sum + (Number(i.budget) || 0), 0),
-    labour: form.labourList.reduce((sum, l) => sum + (Number(l.count) || 0) * (Number(l.wagePerDay) || 0), 0),
+    labour: form.labourList.reduce((sum, l) => sum + labourCost(l), 0),
     materials: form.materials.reduce((sum, m) => sum + materialCost(m), 0),
     machinery: form.machinery.reduce((sum, m) => sum + machineCost(m), 0),
     expenses: form.expenses.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0),
@@ -511,7 +511,14 @@ export const DailyReportFormPage: React.FC = () => {
           />
         </div>
         <div id="field-workItems">
-          <WorkItemsInput items={form.workItems} onChange={(v) => set('workItems', v)} defaultLocation={form.workLocation} />
+          <WorkItemsInput
+            items={form.workItems}
+            onChange={(v) => set('workItems', v)}
+            defaultLocation={form.workLocation}
+            machineOptions={form.machinery
+              .filter((m) => m.name.trim())
+              .map((m) => `${m.model || m.name}${m.regNo ? ` (${m.regNo})` : ''}`)}
+          />
           {err('workItems') && <p className="mt-1 text-xs text-rose-600 font-semibold">{err('workItems')}</p>}
         </div>
       </SectionCard>
