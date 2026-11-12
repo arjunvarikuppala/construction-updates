@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { Suspense, lazy, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MapPin, User, Calendar, ArrowRight } from 'lucide-react';
+import { MapPin, User, Calendar, ArrowRight, Images } from 'lucide-react';
 import { Project } from '../../types/index.js';
 import { Badge } from '../common/Badge.js';
 import { UnreadDot } from '../common/UnreadDot.js';
@@ -9,12 +9,15 @@ import { useUnreadReports } from '../../hooks/useUnreadReports.js';
 import { formatCompactINR, formatINR } from '../../utils/currency.js';
 import { formatDate } from '../../utils/dates.js';
 
+const ProjectPhotoGallery = lazy(() => import('./ProjectPhotoGallery.js').then((m) => ({ default: m.ProjectPhotoGallery })));
+
 interface ProjectCardProps {
   project: Project;
 }
 
 export const ProjectCard: React.FC<ProjectCardProps> = ({ project }) => {
   const navigate = useNavigate();
+  const [galleryOpen, setGalleryOpen] = useState(false);
   const { isMD, isOwner } = useAuth();
   const isMDOrOwner = isMD || isOwner;
   const { isProjectUnread, getProjectUnreadCount } = useUnreadReports();
@@ -24,6 +27,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project }) => {
   const hasUnread = id ? isProjectUnread(id) : false;
   const showUnread = isMDOrOwner && hasUnread;
 
+  const photoCount = project.photoCount || 0;
   const burnRate = financials?.burnPercentage || 0;
   const burnColor =
     burnRate > 90 ? 'bg-rose-500' : burnRate > 70 ? 'bg-amber-500' : 'bg-emerald-500';
@@ -130,11 +134,36 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project }) => {
         </div>
       )}
 
-      {/* Footer View Link */}
-      <div className="flex items-center justify-end text-xs font-semibold text-navy-900 group-hover:text-amber-600 transition-colors pt-1">
-        <span>View Details</span>
-        <ArrowRight className="w-3.5 h-3.5 ml-1 transition-transform group-hover:translate-x-1" />
+      {/* Footer: Gallery (left) and View Details (right) */}
+      <div className="flex items-center justify-between gap-2 text-xs font-semibold pt-1">
+        {photoCount > 0 ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setGalleryOpen(true);
+            }}
+            className="inline-flex items-center gap-1.5 -ml-1.5 px-1.5 py-1 rounded-lg text-navy-900 hover:text-brand-600 hover:bg-slate-50 cursor-pointer"
+            aria-label={`Open site photo gallery (${photoCount} photos)`}
+          >
+            <Images className="w-4 h-4" />
+            <span>Gallery</span>
+            <span className="px-1.5 py-px rounded-md bg-slate-100 text-slate-600 text-[11px] font-bold">{photoCount}</span>
+          </button>
+        ) : (
+          <span />
+        )}
+        <span className="inline-flex items-center text-navy-900 group-hover:text-amber-600 transition-colors">
+          View Details
+          <ArrowRight className="w-3.5 h-3.5 ml-1 transition-transform group-hover:translate-x-1" />
+        </span>
       </div>
+
+      {galleryOpen && id && (
+        <Suspense fallback={null}>
+          <ProjectPhotoGallery projectId={id} projectName={project.name} onClose={() => setGalleryOpen(false)} />
+        </Suspense>
+      )}
     </div>
   );
 };

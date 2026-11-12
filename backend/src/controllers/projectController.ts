@@ -13,6 +13,7 @@ import { rupeesToPaise } from '../utils/currency.js';
 import { verifyUserProjectAccess } from '../middleware/auth.js';
 import { WeatherService } from '../services/weatherService.js';
 import { removeUserFromProjectRoom } from '../services/socketService.js';
+import { countPhotosByProject } from './projectPhotosController.js';
 
 export async function listProjects(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
@@ -86,6 +87,8 @@ export async function listProjects(req: AuthenticatedRequest, res: Response): Pr
       .populate('assignedInCharge', 'name email phone role')
       .sort({ updatedAt: -1, createdAt: -1 });
 
+    const photoCounts = await countPhotosByProject(projects.map((p) => p._id as mongoose.Types.ObjectId));
+
     // Aggregate summaries
     const projectSummaries = await Promise.all(
       projects.map(async (project) => {
@@ -150,6 +153,7 @@ export async function listProjects(req: AuthenticatedRequest, res: Response): Pr
             burnPercentage,
           } : undefined,
           latestReportDate: latestReport ? latestReport.workDate : null,
+          photoCount: photoCounts.get(String(project._id)) || 0,
         };
       })
     );

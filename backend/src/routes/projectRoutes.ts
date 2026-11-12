@@ -15,6 +15,7 @@ import {
   geocodeLocationQuery,
 } from '../controllers/weatherController.js';
 import { searchProject } from '../controllers/projectSearchController.js';
+import { listProjectPhotos } from '../controllers/projectPhotosController.js';
 import { authenticate, requireMD } from '../middleware/auth.js';
 
 const router = Router();
@@ -34,6 +35,9 @@ router.get('/:id/weather', getProjectWeather);
 
 // Search everything recorded on a project (work, labour, materials, machinery, payments, expenses)
 router.get('/:id/search', searchProject);
+
+// Gallery of site photos from the project's daily reports
+router.get('/:id/photos', listProjectPhotos);
 
 // Location configuration for a project (MD only)
 router.put('/:id/location', requireMD, updateProjectLocation);

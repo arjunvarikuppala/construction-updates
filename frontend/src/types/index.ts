@@ -102,6 +102,8 @@ export interface Project {
     salaryFrequency?: 'MONTHLY' | 'DAILY' | 'PER_PROJECT';
   }>;
   financials?: ProjectFinancials;
+  /** Site photos/videos on submitted daily reports (from the project list) */
+  photoCount?: number;
   createdAt: string;
   updatedAt?: string;
 }
