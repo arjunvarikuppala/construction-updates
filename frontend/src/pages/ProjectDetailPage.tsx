@@ -36,6 +36,7 @@ import { DailyReportCard } from '../components/reports/DailyReportCard.js';
 import { ProjectModal } from '../components/projects/ProjectModal.js';
 import { AssignInChargeModal } from '../components/projects/AssignInChargeModal.js';
 import { ProjectRegister } from '../components/projects/ProjectRegister.js';
+import { ProjectSearch } from '../components/projects/ProjectSearch.js';
 import { useAuth } from '../context/AuthContext.js';
 import { useUnreadReports } from '../hooks/useUnreadReports.js';
 import { UnreadDot } from '../components/common/UnreadDot.js';
@@ -384,6 +385,9 @@ export const ProjectDetailPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Search everything on this project */}
+      <ProjectSearch projectId={project._id || project.id!} />
 
       {/* Project Workspace Module Navigation Bar */}
       <div className="-mx-3 px-3 sm:mx-0 sm:px-0 flex items-center gap-1.5 overflow-x-auto pb-2 border-b border-slate-200 scrollbar-none scroll-smooth">
