@@ -200,6 +200,31 @@ export class StorageService {
   }
 
   /**
+   * Resized copy of a private Cloudinary photo, delivered from Cloudinary's CDN (fast and
+   * cached), unlike privateCloudinaryUrl which goes through Cloudinary's download API and
+   * always sends the full original.
+   *  - 'thumb': 400x400 square crop for grids (~20-40 KB)
+   *  - 'large': at most 1600 px on the long edge, for full-screen viewing
+   * Both use automatic format (WebP/AVIF where supported) and quality.
+   * Signed delivery URLs don't expire, so the signature is the long (32-char) kind and
+   * only resized copies are handed out this way; the original stays behind short-lived links.
+   */
+  public cloudinaryImageVariantUrl(key: string, variant: 'thumb' | 'large'): string {
+    const transformation =
+      variant === 'thumb'
+        ? [{ width: 400, height: 400, crop: 'fill', quality: 'auto', fetch_format: 'auto' }]
+        : [{ width: 1600, height: 1600, crop: 'limit', quality: 'auto', fetch_format: 'auto' }];
+    return cloudinary.url(key, {
+      type: 'private',
+      resource_type: 'image',
+      sign_url: true,
+      long_url_signature: true,
+      secure: true,
+      transformation,
+    });
+  }
+
+  /**
    * Generate a Presigned Direct Upload URL for client-side direct upload
    */
   public async getPresignedUploadUrl(

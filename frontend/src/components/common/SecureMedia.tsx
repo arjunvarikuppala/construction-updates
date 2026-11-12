@@ -1,13 +1,17 @@
 import React from 'react';
 import { ImageOff, Lock, FileText } from 'lucide-react';
-import { useDisplayMedia, openMedia } from '../../utils/media.js';
+import { useDisplayMedia, openMedia, type MediaVariant } from '../../utils/media.js';
 import { useToast } from '../../context/ToastContext.js';
 
-type ImgProps = Omit<React.ImgHTMLAttributes<HTMLImageElement>, 'src'> & { src?: string | null };
+type ImgProps = Omit<React.ImgHTMLAttributes<HTMLImageElement>, 'src'> & {
+  src?: string | null;
+  /** 'thumb' for grids, 'large' for full-screen; small resized copies load much faster */
+  variant?: MediaVariant;
+};
 
 /** <img> for private uploads: fetches a short-lived signed URL first. */
-export const SecureImage: React.FC<ImgProps> = ({ src, className = '', alt = '', onError, ...rest }) => {
-  const { url, loading, denied, retryWithFallback } = useDisplayMedia(src);
+export const SecureImage: React.FC<ImgProps> = ({ src, variant = 'original', className = '', alt = '', onError, ...rest }) => {
+  const { url, loading, denied, retryWithFallback } = useDisplayMedia(src, variant);
   const [failed, setFailed] = React.useState(false);
   React.useEffect(() => setFailed(false), [url]);
   if (loading) return <div className={`bg-slate-200 animate-pulse ${className}`} aria-label="Loading image" />;
@@ -25,6 +29,7 @@ export const SecureImage: React.FC<ImgProps> = ({ src, className = '', alt = '',
       alt={alt}
       className={className}
       loading="lazy"
+      decoding="async"
       onError={(e) => {
         if (retryWithFallback()) return;
         setFailed(true);

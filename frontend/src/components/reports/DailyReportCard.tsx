@@ -118,6 +118,7 @@ export const DailyReportCard: React.FC<DailyReportCardProps> = ({ report }) => {
                 className="relative w-16 h-16 rounded-xl overflow-hidden flex-shrink-0 border border-slate-200 group"
               >
                 <SecureImage
+                  variant="thumb"
                   src={p.url}
                   alt={p.caption || 'Site photo'}
                   className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-200"

@@ -618,6 +618,7 @@ export const DailyReportDetailPage: React.FC = () => {
                     ) : (
                       <SecureLink href={photo.url} className="block overflow-hidden h-48">
                         <SecureImage
+                          variant="large"
                           src={photo.url}
                           alt={photo.caption || 'Site photo'}
                           className="w-full h-full object-cover hover:scale-105 transition-transform duration-200"

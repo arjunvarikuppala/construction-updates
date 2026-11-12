@@ -28,7 +28,7 @@ import {
 } from 'lucide-react';
 import { api } from '../../api/client.js';
 import { formatDate } from '../../utils/dates.js';
-import { isVideoUrl, resolveMediaUrl } from '../../utils/media.js';
+import { isVideoUrl, preloadMedia, resolveMediaUrl } from '../../utils/media.js';
 import { SecureImage, SecureVideo } from '../common/SecureMedia.js';
 import { downloadSecureFile } from '../chat/ChatParts.js';
 import { useToast } from '../../context/ToastContext.js';
@@ -312,6 +312,12 @@ export const ProjectPhotoGallery: React.FC<Props> = ({ projectId, projectName, o
     return () => window.removeEventListener('keydown', onKey);
   }, [viewing, selecting, items.length, onClose]);
 
+  // Viewer: start loading the photos either side so prev / next appear instantly
+  useEffect(() => {
+    if (viewing === null) return;
+    [viewing + 1, viewing - 1, viewing + 2].forEach((i) => items[i] && preloadMedia(items[i].url, 'large'));
+  }, [viewing, items]);
+
   // Load the next page of reports when the viewer reaches the last loaded photo
   useEffect(() => {
     if (viewing !== null && viewing >= items.length - 2 && hasNextPage && !isFetchingNextPage) void fetchNextPage();
@@ -471,6 +477,7 @@ export const ProjectPhotoGallery: React.FC<Props> = ({ projectId, projectName, o
                           </span>
                         ) : (
                           <SecureImage
+                            variant="thumb"
                             src={p.url}
                             alt={p.caption || 'Site photo'}
                             draggable={false}
@@ -626,7 +633,7 @@ const PhotoViewer: React.FC<{
         {item.isVideo ? (
           <SecureVideo key={item.key} src={item.url} controls autoPlay playsInline className="max-h-full max-w-full bg-black rounded-xl" />
         ) : (
-          <SecureImage key={item.key} src={item.url} alt={item.caption || 'Site photo'} className="max-h-full max-w-full object-contain" />
+          <SecureImage key={item.key} variant="large" src={item.url} alt={item.caption || 'Site photo'} className="max-h-full max-w-full object-contain" />
         )}
         {hasPrev && (
           <button type="button" onClick={onPrev} className="hidden sm:flex absolute left-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white items-center justify-center cursor-pointer" aria-label="Previous photo">

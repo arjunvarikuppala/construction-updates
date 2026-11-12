@@ -132,7 +132,7 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({ photos, onChange, 
                     </span>
                   </>
                 ) : (
-                  <SecureImage src={photo.url} alt={photo.caption || 'Site photo'} className="w-full h-full object-cover" />
+                  <SecureImage variant="thumb" src={photo.url} alt={photo.caption || 'Site photo'} className="w-full h-full object-cover" />
                 )}
                 <button
                   type="button"

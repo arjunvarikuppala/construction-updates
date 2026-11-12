@@ -55,6 +55,9 @@ fileApiRouter.post('/sign', async (req: AuthenticatedRequest, res: Response) => 
   // of through this API. Access was already checked above (only signed files qualify).
   // The app falls back to the `signed` link if a direct link fails to load.
   const direct: Record<string, string> = {};
+  // Resized photo copies from Cloudinary's CDN: grid thumbnails and a viewer size
+  const thumb: Record<string, string> = {};
+  const large: Record<string, string> = {};
   if (req.body?.direct === true && storageService.isCloudinaryEnabled()) {
     const byFilename = new Map<string, string[]>();
     for (const [raw, value] of Object.entries(signed)) {
@@ -73,12 +76,21 @@ fileApiRouter.post('/sign', async (req: AuthenticatedRequest, res: Response) => 
       for (const r of records) {
         if (!r.storageKey || !r.format || !r.resourceType) continue;
         const link = storageService.privateCloudinaryUrl(r.storageKey, r.resourceType, r.format, SIGNED_URL_TTL_SECONDS);
-        byFilename.get(r.filename)?.forEach((raw) => (direct[raw] = link));
+        const isPhoto = r.resourceType === 'image' && !/^(pdf|gif|svg)$/i.test(r.format);
+        const t = isPhoto ? storageService.cloudinaryImageVariantUrl(r.storageKey, 'thumb') : null;
+        const l = isPhoto ? storageService.cloudinaryImageVariantUrl(r.storageKey, 'large') : null;
+        byFilename.get(r.filename)?.forEach((raw) => {
+          direct[raw] = link;
+          if (t && l) {
+            thumb[raw] = t;
+            large[raw] = l;
+          }
+        });
       }
     }
   }
 
-  res.json({ success: true, expiresIn: SIGNED_URL_TTL_SECONDS, signed, direct });
+  res.json({ success: true, expiresIn: SIGNED_URL_TTL_SECONDS, signed, direct, thumb, large });
 });
 
 /**

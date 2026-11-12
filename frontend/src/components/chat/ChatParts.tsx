@@ -206,7 +206,7 @@ export const DocumentViewer: React.FC<{ attachment: MessageAttachment | null; on
 
       <div className="flex-1 min-h-0 flex items-center justify-center p-0 sm:p-4">
         {!isPdf ? (
-          <SecureImage src={attachment.url} alt={attachment.name} className="max-h-full max-w-full object-contain" />
+          <SecureImage variant="large" src={attachment.url} alt={attachment.name} className="max-h-full max-w-full object-contain" />
         ) : state === 'ready' && blobUrl ? (
           <iframe title={attachment.name} src={blobUrl} className="w-full h-full bg-white sm:rounded-xl border-0" />
         ) : state === 'loading' ? (

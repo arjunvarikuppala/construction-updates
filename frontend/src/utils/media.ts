@@ -15,8 +15,15 @@ interface CacheEntry {
   url: string | null;
   /** Short-lived link straight to cloud storage (photos/videos in Cloudinary), if any. */
   direct?: string | null;
+  /** Small resized copy from Cloudinary's CDN (photos only), for grids */
+  thumb?: string | null;
+  /** Screen-sized copy from Cloudinary's CDN (photos only), for full-screen viewing */
+  large?: string | null;
   expiresAt: number;
 }
+
+/** Which copy of a photo to show: a grid thumbnail, a screen-sized copy, or the original */
+export type MediaVariant = 'thumb' | 'large' | 'original';
 
 const cache = new Map<string, CacheEntry>();
 let pending = new Map<string, Array<(entry: CacheEntry | null) => void>>();
@@ -42,6 +49,8 @@ async function flush() {
       const res = await api.post<{
         signed: Record<string, string | null>;
         direct?: Record<string, string>;
+        thumb?: Record<string, string>;
+        large?: Record<string, string>;
         expiresIn: number;
       }>('/files/sign', { urls: chunk, direct: true });
       const expiresAt = Date.now() + (res.expiresIn || 3600) * 1000 - CACHE_SAFETY_MS;
@@ -50,6 +59,8 @@ async function flush() {
         const entry: CacheEntry = {
           url: signed ? absolutize(signed) : null,
           direct: signed ? res.direct?.[u] || null : null,
+          thumb: signed ? res.thumb?.[u] || null : null,
+          large: signed ? res.large?.[u] || null : null,
           expiresAt,
         };
         cache.set(u, entry);
@@ -91,18 +102,19 @@ export type MediaState = {
   denied: boolean;
 };
 
-function stateFor(entry: CacheEntry | null): MediaState {
+function stateFor(entry: CacheEntry | null, variant: MediaVariant = 'original'): MediaState {
   const fallbackUrl = entry?.url ?? null;
-  return { url: entry?.direct || fallbackUrl, fallbackUrl, loading: false, denied: !fallbackUrl };
+  const resized = variant === 'thumb' ? entry?.thumb : variant === 'large' ? entry?.large : null;
+  return { url: resized || entry?.direct || fallbackUrl, fallbackUrl, loading: false, denied: !fallbackUrl };
 }
 
 /** React hook returning a loadable URL for a stored (possibly private) media URL. */
-export function useMediaUrl(url: string | undefined | null): MediaState {
+export function useMediaUrl(url: string | undefined | null, variant: MediaVariant = 'original'): MediaState {
   const [state, setState] = useState<MediaState>(() => {
     if (!url) return { url: null, fallbackUrl: null, loading: false, denied: false };
     if (isExternalUrl(url)) return { url, fallbackUrl: url, loading: false, denied: false };
     const hit = cache.get(url);
-    if (hit && hit.expiresAt > Date.now()) return stateFor(hit);
+    if (hit && hit.expiresAt > Date.now()) return stateFor(hit, variant);
     return { url: null, fallbackUrl: null, loading: true, denied: false };
   });
 
@@ -117,12 +129,12 @@ export function useMediaUrl(url: string | undefined | null): MediaState {
       return;
     }
     resolveEntry(url).then((entry) => {
-      if (alive) setState(stateFor(entry));
+      if (alive) setState(stateFor(entry, variant));
     });
     return () => {
       alive = false;
     };
-  }, [url]);
+  }, [url, variant]);
 
   return state;
 }
@@ -154,8 +166,8 @@ export function isPdfUrl(url: string | undefined | null): boolean {
  * useMediaUrl plus automatic fallback: if the direct cloud link fails to load,
  * `retryWithFallback()` switches to the app's own signed link (returns true when it did).
  */
-export function useDisplayMedia(src: string | undefined | null) {
-  const state = useMediaUrl(src);
+export function useDisplayMedia(src: string | undefined | null, variant: MediaVariant = 'original') {
+  const state = useMediaUrl(src, variant);
   const [onFallback, setOnFallback] = useState(false);
   useEffect(() => setOnFallback(false), [state.url]);
   const url = onFallback ? state.fallbackUrl : state.url;
@@ -167,4 +179,17 @@ export function useDisplayMedia(src: string | undefined | null) {
     return false;
   }, [onFallback, state.fallbackUrl, state.url]);
   return { ...state, url, retryWithFallback };
+}
+
+/** Start loading a photo in the background (e.g. the next one in a viewer). */
+export function preloadMedia(url: string | undefined | null, variant: MediaVariant = 'original'): void {
+  if (!url || isVideoUrl(url)) return;
+  const go = (src: string | null) => {
+    if (!src) return;
+    const img = new Image();
+    img.decoding = 'async';
+    img.src = src;
+  };
+  if (isExternalUrl(url)) return go(url);
+  void resolveEntry(url).then((e) => go(stateFor(e, variant).url));
 }

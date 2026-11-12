@@ -176,7 +176,7 @@ export const MediaGallery: React.FC<Props> = ({ projectId, projectName, onClose,
                               <Film className="w-7 h-7" />
                             </span>
                           ) : (
-                            <SecureImage src={a.thumbnailUrl || a.url} alt={a.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                            <SecureImage variant="thumb" src={a.thumbnailUrl || a.url} alt={a.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
                           )}
                           {isVideo && (
                             <span className="absolute inset-0 flex items-center justify-center">
