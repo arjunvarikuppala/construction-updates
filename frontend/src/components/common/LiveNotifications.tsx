@@ -368,6 +368,8 @@ export const LiveNotifications: React.FC = () => {
 
 const DISMISS_KEY = 'bkr-push-prompt-dismissed-at';
 
+const permissionGranted = () => typeof Notification !== 'undefined' && Notification.permission === 'granted';
+
 /**
  * Asks once (after sign-in) to turn on phone / computer notifications, so new
  * messages and requests arrive even when the website is closed.
@@ -385,11 +387,35 @@ export const EnableNotificationsPrompt: React.FC = () => {
     }
   });
 
+  const [granted, setGranted] = useState(() => permissionGranted());
+
   useEffect(() => {
     if (!user) return;
     // Keep this device linked to whoever is signed in
     refreshPushSubscription().finally(() => getPushState().then(setState));
   }, [user]);
+
+  // Allowed from the browser's own site settings / address-bar prompt: hide at once
+  useEffect(() => {
+    let status: PermissionStatus | null = null;
+    const onChange = () => {
+      const ok = permissionGranted();
+      setGranted(ok);
+      if (ok) refreshPushSubscription().finally(() => getPushState().then(setState));
+    };
+    navigator.permissions
+      ?.query({ name: 'notifications' as PermissionName })
+      .then((s) => {
+        status = s;
+        s.addEventListener('change', onChange);
+      })
+      .catch(() => undefined);
+    window.addEventListener('focus', onChange);
+    return () => {
+      status?.removeEventListener('change', onChange);
+      window.removeEventListener('focus', onChange);
+    };
+  }, []);
 
   const dismiss = () => {
     setHidden(true);
@@ -400,7 +426,9 @@ export const EnableNotificationsPrompt: React.FC = () => {
     }
   };
 
-  if (!user || hidden || !state || !['off', 'ios-needs-install'].includes(state)) return null;
+  // Once the browser allows notifications the prompt has done its job, even if
+  // linking this device to the server is still being retried in the background.
+  if (!user || hidden || granted || !state || !['off', 'ios-needs-install'].includes(state)) return null;
 
   const turnOn = async () => {
     setBusy(true);
@@ -413,6 +441,7 @@ export const EnableNotificationsPrompt: React.FC = () => {
     } catch {
       setState('off');
     } finally {
+      setGranted(permissionGranted());
       setBusy(false);
     }
   };
