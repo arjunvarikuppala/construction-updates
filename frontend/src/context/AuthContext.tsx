@@ -52,8 +52,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [token, setToken] = useState<string | null>(() => {
     return localStorage.getItem('sitetrack_token');
   });
+  // Only wait for the server when there is a token but no saved profile. With a saved
+  // profile the app opens at once and /auth/me refreshes it in the background, so a
+  // slow-to-wake API doesn't hold everything behind a full-screen spinner
+  // (a 401 from that refresh still signs the user out).
   const [isLoading, setIsLoading] = useState<boolean>(() => {
-    return Boolean(localStorage.getItem('sitetrack_token'));
+    return Boolean(localStorage.getItem('sitetrack_token')) && !localStorage.getItem('sitetrack_user');
   });
 
   const login = useCallback((newToken: string, newUser: User) => {

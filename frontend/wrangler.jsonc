@@ -4,11 +4,22 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "construction-updates",
   "compatibility_date": "2025-11-01",
+  // Serves the site and runs the keep-awake ping (see worker/index.js)
+  "main": "./worker/index.js",
   "assets": {
     // Vite build output (build command: npm run build)
     "directory": "./dist",
+    "binding": "ASSETS",
     // Single-page app: any page address (e.g. /projects/123) loads index.html,
     // so refreshing or opening a link doesn't show a 404. Real files are served first.
     "not_found_handling": "single-page-application"
+  },
+  // Every 10 minutes: keeps the API on Render's free plan from sleeping
+  "triggers": {
+    "crons": ["*/10 * * * *"]
+  },
+  "vars": {
+    // Change this when the API moves (e.g. to the client's own Render account or api.bkrinfra.com)
+    "KEEP_AWAKE_URL": "https://construction-updates-2.onrender.com/api/health"
   }
 }
