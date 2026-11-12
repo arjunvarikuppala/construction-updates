@@ -1,4 +1,4 @@
-import type { PaymentRequest } from '../types/index.js';
+import type { PaymentRequest, PaymentSettlement } from '../types/index.js';
 import { formatDate } from './dates.js';
 import { MODE_LABEL, balancePaiseOf, nameOf, paidPaiseOf, payeeKindOf } from './payments.js';
 import { createDoc, getCompany, PdfWriter, paise, titleCase } from './pdfKit.js';
@@ -31,6 +31,63 @@ export function rupeesInWords(amountPaise: number): string {
   if (n) parts.push(threeDigits(n));
   const r = parts.length ? `${parts.join(' ')} Rupees` : '';
   return `${r}${p ? `${r ? ' and ' : ''}${twoDigits(p)} Paise` : ''} Only`;
+}
+
+/** Receipt number for one payment entry: stable, because entries are never removed (only undone). */
+export const receiptNumberOf = (payment: PaymentRequest, settlement: PaymentSettlement) => {
+  const i = (payment.settlements || []).findIndex((s) => s._id === settlement._id);
+  return `${payment.paymentReference}-R${i >= 0 ? i + 1 : 1}`;
+};
+
+/**
+ * Proof-of-payment receipt for one payment entry: what the in-charge (or
+ * vendor) keeps to show the MD approved and paid this amount.
+ */
+export async function exportPaymentReceiptPdf(payment: PaymentRequest, settlement: PaymentSettlement) {
+  const [doc, company] = await Promise.all([createDoc(), getCompany()]);
+  const number = receiptNumberOf(payment, settlement);
+  const w = new PdfWriter(doc, `${company.legalName} · Payment receipt · ${number}`);
+  const project = payment.project as any;
+  const isInCharge = payeeKindOf(payment) === 'INCHARGE';
+  const approver = nameOf(payment.authorizedBy, '') || nameOf(settlement.recordedBy, 'Managing Director');
+
+  w.letterhead(company, 'Payment Receipt', [`Receipt ${number}`, `Paid on ${formatDate(settlement.paidOn, 'dd MMM yyyy')}`]);
+
+  w.tiles([
+    { label: 'Amount paid', value: paise(settlement.amountPaise), accent: true },
+    { label: 'Mode', value: MODE_LABEL[settlement.mode] },
+    { label: 'Status', value: 'Approved & paid' },
+  ]);
+
+  const payTo = [payment.vpaSnapshot && `UPI ${payment.vpaSnapshot}`, payment.accountNumberMaskedSnapshot && `A/C ${payment.accountNumberMaskedSnapshot} · ${payment.ifscSnapshot || ''}`]
+    .filter(Boolean)
+    .join('  ·  ');
+  w.infoGrid([
+    ['Paid to', payment.payeeNameSnapshot],
+    ['Payee type', isInCharge ? 'Site In-Charge' : titleCase(payment.payeeType || 'Vendor')],
+    ['Site', project ? `${project.code} – ${project.name}` : '—'],
+    ['Purpose', payment.purpose],
+    [settlement.mode === 'CHEQUE' ? 'Cheque no.' : 'UTR / reference', settlement.reference || (settlement.mode === 'CASH' ? 'Cash' : '—')],
+    ['Account / UPI', payTo || '—'],
+    ['Request', `${payment.paymentReference} · raised ${formatDate(payment.createdAt, 'dd MMM yyyy')}`],
+    ['Approved & paid by', `${approver} (Managing Director)`],
+  ]);
+
+  const paid = paidPaiseOf(payment);
+  const balance = balancePaiseOf(payment);
+  w.paragraph(`Received the sum of ${rupeesInWords(settlement.amountPaise)} (${paise(settlement.amountPaise)}) towards "${payment.purpose}".`);
+  w.paragraph(
+    balance > 0
+      ? `Request total ${paise(payment.amount)} · paid so far ${paise(paid)} · balance due ${paise(balance)}.`
+      : `Request total ${paise(payment.amount)} — fully paid.`
+  );
+  if (settlement.note) w.paragraph(`Note: ${settlement.note}`);
+  if (settlement.proofUrl) w.paragraph('The payment screenshot / proof is attached to this request in the BKR INFRA app.');
+  if (settlement.receivedConfirmedAt) {
+    w.paragraph(`Receipt of money confirmed by ${nameOf(settlement.receivedConfirmedBy, payment.payeeNameSnapshot)} on ${formatDate(settlement.receivedConfirmedAt, 'dd MMM yyyy')}.`);
+  }
+  w.signatures(['Approved by (Managing Director)', "Receiver's signature"]);
+  w.finish(`Receipt-${number}.pdf`);
 }
 
 /** Printable payment voucher with every payment entry, for the file and for signatures. */

@@ -15,6 +15,7 @@ import {
   HandCoins,
   RefreshCw,
   Zap,
+  ReceiptText,
 } from 'lucide-react';
 import { api } from '../../api/client.js';
 import { Modal } from '../common/Modal.js';
@@ -36,7 +37,7 @@ import {
   paidPaiseOf,
   payeeKindOf,
 } from '../../utils/payments.js';
-import { exportPaymentVoucherPdf } from '../../utils/paymentVoucherPdf.js';
+import { exportPaymentReceiptPdf, exportPaymentVoucherPdf } from '../../utils/paymentVoucherPdf.js';
 import { useCompanySettings } from '../../utils/gst.js';
 import { PayModal } from './PayModal.js';
 
@@ -110,6 +111,10 @@ export const PaymentReviewModal: React.FC<PaymentReviewModalProps> = ({ payment:
   const canReject = isOwner && paid === 0 && ['SUBMITTED', 'UNDER_REVIEW', 'AWAITING_AUTHORIZATION', 'AUTHORIZED'].includes(payment.status);
   const canCancel = !isOwner && isCreator && paid === 0 && ['SUBMITTED', 'UNDER_REVIEW', 'AWAITING_AUTHORIZATION', 'AUTHORIZED'].includes(payment.status);
   const pendingPayout = payment.pendingPayout;
+  const latestPaid = [...entries].reverse().find((s) => !s.voided) || null;
+  const approverName = nameOf(payment.authorizedBy, '') || (latestPaid ? nameOf(latestPaid.recordedBy, '') : '');
+  const downloadReceipt = (s: PaymentSettlement) =>
+    exportPaymentReceiptPdf(payment, s).catch(() => toastError('Could not create the receipt PDF'));
   const canCheckPayout = isOwner && (Boolean(pendingPayout) || (payoutsEnabled && entries.some((s) => s.mode === 'RAZORPAYX' && !s.voided)));
 
   return (
@@ -206,6 +211,25 @@ export const PaymentReviewModal: React.FC<PaymentReviewModalProps> = ({ payment:
               </p>
             )}
           </div>
+
+          {latestPaid && !isOwner && (
+            <div className="p-3 rounded-xl border border-emerald-200 bg-emerald-50 flex flex-wrap items-center gap-3">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+              <div className="flex-1 min-w-0 text-xs text-emerald-950">
+                <strong>
+                  Approved &amp; paid {inr(latestPaid.amountPaise)}
+                  {approverName ? ` by ${approverName}` : ''}
+                </strong>
+                <div className="text-emerald-800">
+                  {MODE_LABEL[latestPaid.mode]}
+                  {latestPaid.reference ? ` · ref ${latestPaid.reference}` : ''} · {formatDate(latestPaid.paidOn, 'dd MMM yyyy')}. Keep the receipt as proof.
+                </div>
+              </div>
+              <Button size="sm" onClick={() => downloadReceipt(latestPaid)} leftIcon={<ReceiptText className="w-3.5 h-3.5" />}>
+                Download receipt
+              </Button>
+            </div>
+          )}
 
           {pendingPayout && (
             <div className="p-3 rounded-xl border border-indigo-200 bg-indigo-50 text-xs text-indigo-950 flex items-start gap-2">
@@ -345,6 +369,15 @@ export const PaymentReviewModal: React.FC<PaymentReviewModalProps> = ({ payment:
                         )}
                       </div>
                       <div className="flex flex-wrap items-center gap-1.5">
+                        {!s.voided && (
+                          <button
+                            type="button"
+                            onClick={() => downloadReceipt(s)}
+                            className="inline-flex items-center gap-1 min-h-[32px] px-2 rounded-lg border border-emerald-300 bg-white font-semibold text-emerald-800 hover:bg-emerald-50"
+                          >
+                            <ReceiptText className="w-3.5 h-3.5" /> Receipt
+                          </button>
+                        )}
                         {s.proofUrl && (
                           <SecureLink href={s.proofUrl} className="inline-flex items-center gap-1 min-h-[32px] px-2 rounded-lg border border-slate-300 bg-white font-semibold text-navy-900">
                             <FileText className="w-3.5 h-3.5" /> Proof

@@ -868,14 +868,14 @@ async function notifyPayee(payment: any, senderId: string, amountPaise: number, 
       sender: senderId,
       project: payment.project,
       type: 'PAYMENT_REQUEST_PAID',
-      title: fullyPaid ? `Paid ${inr(amountPaise)}` : `Part payment ${inr(amountPaise)}`,
+      title: fullyPaid ? `Approved & paid ${inr(amountPaise)}` : `Approved · part payment ${inr(amountPaise)}`,
       message: `${isPayee ? 'The MD paid you' : `The MD paid ${payment.payeeNameSnapshot}`} ${inr(amountPaise)} for ${payment.purpose} (${how}).${
         fullyPaid
           ? payment.settlements.filter((s: any) => !s.voided).length > 1
             ? ` Fully paid (${inr(payment.amount)}).`
             : ''
           : ` Balance ${inr(balancePaise(payment))}.`
-      }${isPayee ? ' Please confirm when you receive it.' : ''}`,
+      } Tap to download the payment receipt.${isPayee ? ' Please confirm when you receive it.' : ''}`,
       relatedEntity: 'PAYMENT_REQUEST',
       relatedId: payment._id.toString(),
     });
