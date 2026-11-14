@@ -16,6 +16,13 @@ import {
 } from '../controllers/weatherController.js';
 import { searchProject } from '../controllers/projectSearchController.js';
 import { listProjectPhotos } from '../controllers/projectPhotosController.js';
+import {
+  listMaterials,
+  getMaterialLog,
+  addMaterialEntry,
+  deleteMaterialEntry,
+  updateMaterial,
+} from '../controllers/materialStockController.js';
 import { authenticate, requireMD } from '../middleware/auth.js';
 
 const router = Router();
@@ -38,6 +45,13 @@ router.get('/:id/search', searchProject);
 
 // Gallery of site photos from the project's daily reports
 router.get('/:id/photos', listProjectPhotos);
+
+// Material stock and log (MD and assigned in-charges)
+router.get('/:id/materials', listMaterials);
+router.get('/:id/materials/log', getMaterialLog);
+router.post('/:id/materials/entries', addMaterialEntry);
+router.delete('/:id/materials/entries/:entryId', deleteMaterialEntry);
+router.patch('/:id/materials/:materialId', requireMD, updateMaterial);
 
 // Location configuration for a project (MD only)
 router.put('/:id/location', requireMD, updateProjectLocation);

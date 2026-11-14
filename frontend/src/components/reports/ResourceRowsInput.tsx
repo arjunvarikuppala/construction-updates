@@ -6,6 +6,17 @@ import { MaterialItem, MachineryItem } from '../../types/index.js';
 import { UNIT_OPTIONS, MATERIAL_SUGGESTIONS, MACHINERY_SUGGESTIONS, materialCost, machineCost } from '../../utils/reportOptions.js';
 import { formatRupees } from '../../utils/currency.js';
 import { MoreDetails, DetailField, numOrUndef, textOrUndef } from './MoreDetails.js';
+import { MaterialStockRow, materialKey, formatQty } from '../../utils/materialStock.js';
+
+/** Site stock shown beside each material row in the daily report form. */
+export interface ReportStockInfo {
+  materials: MaterialStockRow[];
+  /** Quantities this report already took off (when editing a submitted report), added back before showing "on site" */
+  credit: Record<string, number>;
+  /** False when the work date is before stock tracking started */
+  counts: boolean;
+  startDate: string;
+}
 
 const NO_SPIN = '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none';
 const parseRate = (v: string) => {
@@ -35,16 +46,39 @@ const RowShell: React.FC<{ onRemove: () => void; label: string; children: React.
   </div>
 );
 
-export const MaterialsInput: React.FC<{ items: MaterialItem[]; onChange: (items: MaterialItem[]) => void }> = ({ items, onChange }) => {
+export const MaterialsInput: React.FC<{ items: MaterialItem[]; onChange: (items: MaterialItem[]) => void; stock?: ReportStockInfo }> = ({ items, onChange, stock }) => {
   const listId = useId();
   const update = (i: number, patch: Partial<MaterialItem>) => onChange(items.map((m, idx) => (idx === i ? { ...m, ...patch } : m)));
+  const stockRows = stock?.materials || [];
+  const suggestions = Array.from(new Set([...stockRows.map((m) => m.name), ...MATERIAL_SUGGESTIONS]));
+  const setName = (i: number, name: string) => {
+    // Picking a material that's in the site stock also picks its unit
+    const same = stockRows.filter((m) => m.name.toLowerCase() === name.trim().toLowerCase());
+    update(i, same.length === 1 ? { name, unit: same[0].unit } : { name });
+  };
+  const stockHint = (m: MaterialItem) => {
+    if (!stock || !stock.counts || !m.name.trim()) return null;
+    const key = materialKey(m.name, m.unit);
+    const row = stockRows.find((r) => materialKey(r.name, r.unit) === key);
+    const onSite = (row?.balance || 0) + (stock.credit[key] || 0);
+    const after = onSite - (m.quantity || 0) + (m.received || 0);
+    return (
+      <p className={`text-[11px] font-semibold ${after < 0 ? 'text-rose-700' : 'text-slate-500'}`}>
+        {row ? `On site ${formatQty(onSite)} ${m.unit}` : `Not in site stock yet`} → after this report {formatQty(after)} {m.unit}
+        {after < 0 ? '. More than the stock on site.' : ''}
+      </p>
+    );
+  };
   const total = items.reduce((s, m) => s + materialCost(m), 0);
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h3 className="text-base font-semibold text-navy-950">Materials used</h3>
-          <p className="text-xs text-slate-500">Quantities consumed on site today, with rate per unit.</p>
+          <p className="text-xs text-slate-500">
+            Quantities consumed on site today, with rate per unit.
+            {stock && (stock.counts ? ' These come off the site stock when you submit.' : ` Work before ${stock.startDate} doesn't change the site stock.`)}
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
         <CostChip total={total} />
@@ -54,7 +88,7 @@ export const MaterialsInput: React.FC<{ items: MaterialItem[]; onChange: (items:
         </div>
       </div>
       <datalist id={listId}>
-        {MATERIAL_SUGGESTIONS.map((m) => (
+        {suggestions.map((m) => (
           <option key={m} value={m} />
         ))}
       </datalist>
@@ -63,7 +97,7 @@ export const MaterialsInput: React.FC<{ items: MaterialItem[]; onChange: (items:
       ) : (
         items.map((m, i) => (
           <RowShell key={i} label={m.name || `material ${i + 1}`} onRemove={() => onChange(items.filter((_, idx) => idx !== i))}>
-            <Input list={listId} aria-label="Material name" placeholder="Material (e.g. Cement OPC 53)" maxLength={150} value={m.name} onChange={(e) => update(i, { name: e.target.value })} />
+            <Input list={listId} aria-label="Material name" placeholder="Material (e.g. Cement OPC 53)" maxLength={150} value={m.name} onChange={(e) => setName(i, e.target.value)} />
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               <Input type="number" inputMode="decimal" min="0" step="any" aria-label="Material quantity used" placeholder="Qty used" value={m.quantity || ''} onChange={(e) => update(i, { quantity: Math.max(0, parseFloat(e.target.value) || 0) })} />
               <Select aria-label="Material unit" value={m.unit} onChange={(e) => update(i, { unit: e.target.value })} options={(UNIT_OPTIONS.includes(m.unit) ? UNIT_OPTIONS : [m.unit, ...UNIT_OPTIONS]).map((u) => ({ value: u, label: u }))} />
@@ -88,6 +122,7 @@ export const MaterialsInput: React.FC<{ items: MaterialItem[]; onChange: (items:
                 {m.quantity} {m.unit} × {formatRupees(m.rate)} = <span className="font-bold text-emerald-700">{formatRupees(materialCost(m))}</span>
               </p>
             )}
+            {stockHint(m)}
             <MoreDetails
               filled={Boolean(m.received || m.supplier || m.spec || m.usedFor)}
               summary={[m.received ? `received ${m.received} ${m.unit}` : '', m.supplier].filter(Boolean).join(' · ')}

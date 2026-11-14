@@ -8,7 +8,8 @@ import { Button } from '../components/common/Button.js';
 import { Input, Textarea, Select } from '../components/common/Input.js';
 import { WorkItemsInput, emptyWorkItem } from '../components/reports/WorkItemsInput.js';
 import { LabourBreakdownInput } from '../components/reports/LabourBreakdownInput.js';
-import { MaterialsInput, MachineryInput } from '../components/reports/ResourceRowsInput.js';
+import { MaterialsInput, MachineryInput, ReportStockInfo } from '../components/reports/ResourceRowsInput.js';
+import { MaterialStockResponse, materialKey } from '../utils/materialStock.js';
 import { ReportExpensesInput } from '../components/reports/ReportExpensesInput.js';
 import { MediaUploader } from '../components/reports/MediaUploader.js';
 import { useAuth } from '../context/AuthContext.js';
@@ -187,6 +188,29 @@ export const DailyReportFormPage: React.FC = () => {
     if (local) setPendingRestore(local);
   }, [isEditing, draftKey]);
 
+  // Site stock for the chosen project, shown beside each material used
+  const stockQuery = useQuery({
+    queryKey: ['material-stock', form.projectId],
+    queryFn: () => api.get<MaterialStockResponse>(`/projects/${form.projectId}/materials`),
+    enabled: Boolean(form.projectId) && !isOffline,
+    staleTime: 30000,
+  });
+  const stockInfo = useMemo<ReportStockInfo | undefined>(() => {
+    const data = stockQuery.data;
+    if (!data) return undefined;
+    // Editing a submitted report: its own quantities are already off the stock, so add them back
+    const credit: Record<string, number> = {};
+    const saved = editQuery.data?.report;
+    const savedProject = saved && (saved.project?._id || (saved.project as any)?.id || saved.project);
+    if (saved && saved.status === 'SUBMITTED' && String(savedProject) === form.projectId && saved.workDate && saved.workDate.slice(0, 10) >= data.startDate) {
+      for (const m of saved.materials || []) {
+        const k = materialKey(m.name, m.unit);
+        credit[k] = (credit[k] || 0) + (m.quantity || 0) - (m.received || 0);
+      }
+    }
+    return { materials: data.materials, credit, counts: form.workDate >= data.startDate, startDate: data.startDate };
+  }, [stockQuery.data, editQuery.data, form.projectId, form.workDate]);
+
   useEffect(() => {
     if (!form.projectId && projects.length > 0 && !isEditing) {
       setForm((f) => ({ ...f, projectId: projects[0]._id || projects[0].id! }));
@@ -327,6 +351,8 @@ export const DailyReportFormPage: React.FC = () => {
       }
       clearLocalDraft(draftKey);
       queryClient.invalidateQueries({ queryKey: ['daily-reports'] });
+      queryClient.invalidateQueries({ queryKey: ['material-stock'] });
+      queryClient.invalidateQueries({ queryKey: ['material-log'] });
       queryClient.invalidateQueries({ queryKey: ['in-charge-dashboard'] });
       success(status === 'DRAFT' ? 'Draft saved. You can finish it later.' : 'Report submitted to the Managing Director.');
       if (status === 'DRAFT' && !isEditing && savedId) navigate(`/reports/new?edit=${savedId}`, { replace: true });
@@ -535,7 +561,7 @@ export const DailyReportFormPage: React.FC = () => {
 
       {/* 4. Materials & machinery */}
       <SectionCard id="sec-materials" title="">
-        <MaterialsInput items={form.materials} onChange={(v) => set('materials', v)} />
+        <MaterialsInput items={form.materials} onChange={(v) => set('materials', v)} stock={stockInfo} />
         <div className="border-t border-slate-100 pt-4">
           <MachineryInput items={form.machinery} onChange={(v) => set('machinery', v)} />
         </div>

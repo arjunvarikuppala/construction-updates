@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   Building2,
@@ -37,6 +37,7 @@ import { ProjectModal } from '../components/projects/ProjectModal.js';
 import { AssignInChargeModal } from '../components/projects/AssignInChargeModal.js';
 import { ProjectRegister } from '../components/projects/ProjectRegister.js';
 import { ProjectSearch } from '../components/projects/ProjectSearch.js';
+import { MaterialStock, MaterialStockSummary } from '../components/projects/MaterialStock.js';
 import { useAuth } from '../context/AuthContext.js';
 import { useUnreadReports } from '../hooks/useUnreadReports.js';
 import { UnreadDot } from '../components/common/UnreadDot.js';
@@ -72,7 +73,10 @@ export const ProjectDetailPage: React.FC = () => {
     | 'register'
     | 'exports';
 
-  const [activeTab, setActiveTab] = useState<WorkspaceModule>('overview');
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState<WorkspaceModule>(() =>
+    searchParams.get('tab') === 'materials' ? 'materials' : 'overview'
+  );
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
 
@@ -402,6 +406,18 @@ export const ProjectDetailPage: React.FC = () => {
           Project Overview
         </button>
 
+        <button
+          onClick={() => setActiveTab('materials')}
+          className={`py-2 px-3 text-xs font-bold rounded-xl whitespace-nowrap shrink-0 transition-colors flex items-center gap-1.5 ${
+            activeTab === 'materials'
+              ? 'bg-navy-900 text-white'
+              : 'text-slate-600 hover:bg-slate-100 hover:text-navy-950'
+          }`}
+        >
+          <Boxes className="w-3.5 h-3.5" />
+          <span>Material Stock</span>
+        </button>
+
         {isOwner && (
           <button
             onClick={() => setActiveTab('register')}
@@ -474,17 +490,6 @@ export const ProjectDetailPage: React.FC = () => {
           <span>Labour Breakdown</span>
         </button>
 
-        <button
-          onClick={() => setActiveTab('materials')}
-          className={`py-2 px-3 text-xs font-bold rounded-xl whitespace-nowrap shrink-0 transition-colors flex items-center gap-1.5 ${
-            activeTab === 'materials'
-              ? 'bg-navy-900 text-white'
-              : 'text-slate-600 hover:bg-slate-100 hover:text-navy-950'
-          }`}
-        >
-          <Boxes className="w-3.5 h-3.5" />
-          <span>Materials & Stock</span>
-        </button>
 
         <button
           onClick={() => setActiveTab('machinery')}
@@ -532,6 +537,11 @@ export const ProjectDetailPage: React.FC = () => {
       {activeTab === 'overview' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
+            <Card>
+              <CardContent>
+                <MaterialStockSummary projectId={project._id || project.id!} onViewLog={() => setActiveTab('materials')} />
+              </CardContent>
+            </Card>
             <Card>
               <CardHeader>
                 <CardTitle>Project Details & Scope of Work</CardTitle>
@@ -900,37 +910,34 @@ export const ProjectDetailPage: React.FC = () => {
 
       {/* MODULE 6: Materials and Stock */}
       {activeTab === 'materials' && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Materials & Stock Consumption Records</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-xs text-slate-500">
-              Aggregated from verified daily reports and material expenditure entries.
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {expenses
-                .filter((e) => e.category === 'CONSTRUCTION_MATERIALS')
-                .map((m) => (
-                  <div key={m._id || m.id} className="p-3 rounded-xl border border-slate-200 bg-slate-50/50 space-y-1">
-                    <div className="flex justify-between items-start">
-                      <span className="font-bold text-xs text-navy-950">{m.description}</span>
-                      <span className="font-bold text-xs text-emerald-700">{formatINR(m.amount)}</span>
-                    </div>
-                    <div className="text-[11px] text-slate-500 flex justify-between">
-                      <span>Vendor: {m.vendor}</span>
-                      <span>{formatDate(m.date)}</span>
-                    </div>
-                  </div>
-                ))}
-            </div>
-            {expenses.filter((e) => e.category === 'CONSTRUCTION_MATERIALS').length === 0 && (
-              <div className="p-8 text-center text-xs text-slate-500">
-                No material purchase records recorded for this project yet.
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <div className="space-y-4">
+          <MaterialStock projectId={project._id || project.id!} />
+          {expenses.some((e) => e.category === 'CONSTRUCTION_MATERIALS') && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Material bills (expenditure)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {expenses
+                    .filter((e) => e.category === 'CONSTRUCTION_MATERIALS')
+                    .map((m) => (
+                      <div key={m._id || m.id} className="p-3 rounded-xl border border-slate-200 bg-slate-50/50 space-y-1">
+                        <div className="flex justify-between items-start">
+                          <span className="font-bold text-xs text-navy-950">{m.description}</span>
+                          <span className="font-bold text-xs text-emerald-700">{formatINR(m.amount)}</span>
+                        </div>
+                        <div className="text-[11px] text-slate-500 flex justify-between">
+                          <span>Vendor: {m.vendor}</span>
+                          <span>{formatDate(m.date)}</span>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
       )}
 
       {/* MODULE 7: Machinery and Equipment */}

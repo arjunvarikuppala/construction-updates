@@ -22,6 +22,7 @@ import {
   EMPTY_REPORT_MESSAGE,
 } from '../services/reportService.js';
 import { escapeRegex, parseDate } from '../utils/validation.js';
+import { syncReportMaterials } from '../services/materialStockService.js';
 
 async function attachReadReceipts(reports: any[], callerRole?: string) {
   if (!reports || reports.length === 0) return [];
@@ -602,6 +603,7 @@ export async function createDailyReport(req: AuthenticatedRequest, res: Response
     });
 
     if (expenses.length) await syncReportExpenses(report, expenses, req.user!.userId);
+    await syncReportMaterials(report);
 
     await logAudit('DAILY_REPORT_CREATED', req.user!.userId, 'DAILY_REPORT', report._id, {
       titleOfWork: report.titleOfWork,
@@ -711,6 +713,7 @@ export async function updateDailyReport(req: AuthenticatedRequest, res: Response
       if (becameSubmitted) report.status = 'SUBMITTED';
     }
     if (becameSubmitted) await promoteDraftExpenses(report);
+    await syncReportMaterials(report);
 
     await logAudit('DAILY_REPORT_UPDATED', req.user!.userId, 'DAILY_REPORT', report._id, {
       status: report.status,

@@ -28,6 +28,7 @@ import { ExpenseResubmitModal } from '../components/expenses/ExpenseResubmitModa
 import { InChargeDashboardData, Expense, ProjectWeatherResponse } from '../types/index.js';
 import { WeatherCard } from '../components/weather/WeatherCard.js';
 import { ErrorBoundary } from '../components/common/ErrorBoundary.js';
+import { MaterialStockSummary } from '../components/projects/MaterialStock.js';
 import { formatCompactINR, formatINR } from '../utils/currency.js';
 import { formatDate } from '../utils/dates.js';
 import { useToast } from '../context/ToastContext.js';
@@ -278,6 +279,11 @@ export const InChargeDashboard: React.FC = () => {
               onRefresh={handleManualRefreshWeather}
               onClick={() => navigate(`/projects/${activeProjectId}`)}
             />
+          </ErrorBoundary>
+
+          {/* Site material stock: add deliveries without opening the project */}
+          <ErrorBoundary level="widget" widgetName="Site stock" title="Site stock unavailable" message="Material stock could not be loaded. Daily reports are unaffected.">
+            <MaterialStockSummary compact projectId={activeProjectId} onViewLog={() => navigate(`/projects/${activeProjectId}?tab=materials`)} />
           </ErrorBoundary>
 
           {/* 3. Recent Site Submissions */}
