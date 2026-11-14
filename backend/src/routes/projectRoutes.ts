@@ -10,7 +10,6 @@ import {
 } from '../controllers/projectController.js';
 import {
   getProjectWeather,
-  getWeatherSummary,
   updateProjectLocation,
   geocodeLocationQuery,
 } from '../controllers/weatherController.js';
@@ -30,7 +29,6 @@ const router = Router();
 router.use(authenticate);
 
 // Specific routes registered before parameterized /:id routes
-router.get('/weather-summary', getWeatherSummary);
 router.post('/geocode', geocodeLocationQuery);
 
 // Listing accessible to both MD and In-Charge (filtered per role)

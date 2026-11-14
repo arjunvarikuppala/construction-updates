@@ -155,23 +155,6 @@ export interface ProjectWeatherResponse {
   statusMessage?: string;
 }
 
-export interface ProjectWeatherSummary {
-  projectId: string;
-  projectName: string;
-  projectCode: string;
-  location: string;
-  coordinates: {
-    latitude: number | null;
-    longitude: number | null;
-  };
-  isConfigured: boolean;
-  weather?: WeatherData;
-  isStale?: boolean;
-  cached?: boolean;
-  fetchedAt?: string;
-  statusMessage?: string;
-}
-
 export type WorkItemStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED';
 
 export interface WorkItem {
