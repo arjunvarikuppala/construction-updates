@@ -101,10 +101,18 @@ export function uniq(prefix: string): string {
 
 export const STRONG_PASSWORD = 'SiteTrack2026';
 
+/** A different valid Indian mobile number on every call (accounts need a unique one). */
+const phoneBase = Math.floor(Math.random() * 400000000);
+let phoneCounter = 0;
+export function uniqPhone(): string {
+  phoneCounter += 1;
+  return `9${String(100000000 + ((phoneBase + phoneCounter) % 800000000)).padStart(9, '0')}`;
+}
+
 export async function registerMD(name: string): Promise<{ token: string; userId: string; email: string }> {
   const email = `${uniq(name.toLowerCase())}@example.test`;
   const r = await api('POST', '/api/v1/auth/register', {
-    body: { name, email, password: STRONG_PASSWORD },
+    body: { name, email, password: STRONG_PASSWORD, phone: uniqPhone() },
   });
   if (r.status !== 201) throw new Error(`registerMD failed: ${r.status} ${JSON.stringify(r.body)}`);
   return { token: r.body.token, userId: String(r.body.user.id), email };
@@ -133,14 +141,27 @@ export async function createProject(token: string, label: string, extra: Record<
   return r.body.project;
 }
 
-export async function assignNewInCharge(mdToken: string, projectId: string, name: string) {
-  const email = `${uniq(name.toLowerCase())}@example.test`;
-  const r = await api('POST', `/api/v1/projects/${projectId}/assignments`, {
+/** MD invites a new in-charge (optionally to a project); they accept with their own password and mobile. */
+export async function inviteAndAccept(
+  mdToken: string,
+  opts: { name?: string; email?: string; projectId?: string; phone?: string | null; password?: string } = {}
+) {
+  const email = opts.email || `${uniq((opts.name || 'ic').toLowerCase())}@example.test`;
+  const inv = await api('POST', '/api/v1/users/invitations', {
     token: mdToken,
-    body: { newUser: { name, email, password: STRONG_PASSWORD } },
+    body: { name: opts.name || 'In-Charge', email, projectId: opts.projectId },
   });
-  if (r.status !== 200 && r.status !== 201) {
-    throw new Error(`assignNewInCharge failed: ${r.status} ${JSON.stringify(r.body)}`);
+  if (inv.status !== 201) throw new Error(`invitation failed: ${inv.status} ${JSON.stringify(inv.body)}`);
+  const body: Record<string, any> = { token: inv.body.inviteToken, password: opts.password || STRONG_PASSWORD };
+  if (opts.phone !== null) body.phone = opts.phone ?? uniqPhone();
+  const accepted = await api('POST', '/api/v1/auth/accept-invitation', { body });
+  return { accepted, email, inviteToken: inv.body.inviteToken as string };
+}
+
+export async function assignNewInCharge(mdToken: string, projectId: string, name: string) {
+  const { accepted, email } = await inviteAndAccept(mdToken, { name, projectId });
+  if (accepted.status !== 201) {
+    throw new Error(`assignNewInCharge failed: ${accepted.status} ${JSON.stringify(accepted.body)}`);
   }
   const token = await login(email);
   const me = await api('GET', '/api/v1/auth/me', { token });

@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import {
   listInChargeUsers,
-  createInChargeUser,
   updateInChargeUser,
   deleteInChargeAccount,
   createInvitation,
@@ -15,7 +14,6 @@ const router = Router();
 router.use(authenticate, requireOwner);
 
 router.get('/in-charge', listInChargeUsers);
-router.post('/in-charge', createInChargeUser);
 router.put('/in-charge/:id', updateInChargeUser);
 router.delete('/in-charge/:id', deleteInChargeAccount);
 router.get('/invitations', listInvitations);

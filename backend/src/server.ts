@@ -27,6 +27,7 @@ import salaryRoutes from './routes/salaryRoutes.js';
 import { fileApiRouter, serveSignedUpload } from './routes/fileRoutes.js';
 import { initSocketService } from './services/socketService.js';
 import { seedInitialData } from './scripts/seed.js';
+import { normalizeStoredPhones } from './services/accountPhoneService.js';
 import { startReportReminderScheduler } from './services/reportReminderService.js';
 import { sanitizeErrorResponses, globalErrorHandler } from './middleware/errorHandling.js';
 
@@ -171,6 +172,11 @@ export async function startServer() {
   if (process.env.SEED_DEMO === 'true' && process.env.NODE_ENV !== 'production') {
     await seedInitialData();
   }
+
+  // Older mobile numbers were saved as typed: store them as +91XXXXXXXXXX
+  normalizeStoredPhones()
+    .then((n) => n && console.log(`Normalised ${n} stored mobile number(s)`))
+    .catch((err) => console.error('Could not normalise stored mobile numbers:', err.message));
 
   // Daily report reminders (6 PM) and MD escalation (8 PM), India time
   startReportReminderScheduler();

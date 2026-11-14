@@ -10,6 +10,7 @@ import { api, API_ORIGIN } from '../api/client.js';
 import { isValidGstin, useCompanySettings } from '../utils/gst.js';
 import { RazorpayXSetupCard } from '../components/payments/RazorpayXSetupCard.js';
 import { ReportRemindersCard } from '../components/reports/ReportRemindersCard.js';
+import { MyMobileCard } from '../components/users/MyMobileCard.js';
 
 /** MD only: BKR INFRA's legal name, GSTIN and address, plus the monthly GST purchase register. */
 export const CompanySettingsPage: React.FC = () => {
@@ -84,6 +85,8 @@ export const CompanySettingsPage: React.FC = () => {
           BKR INFRA&apos;s GST details decide CGST + SGST vs IGST on bills and appear on reports and the GST register.
         </p>
       </div>
+
+      <MyMobileCard />
 
       <Card>
         <CardHeader>

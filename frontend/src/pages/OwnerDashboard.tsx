@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { localDateString } from '../utils/dates.js';
+import { useAuth } from '../context/AuthContext.js';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -34,6 +35,7 @@ import { api } from '../api/client.js';
 
 export const OwnerDashboard: React.FC = () => {
   const navigate = useNavigate();
+  const { user: me } = useAuth();
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
   const { isProjectUnread, getProjectUnreadCount, isReportUnread } = useUnreadReports();
   const [selectedDateRange, setSelectedDateRange] = useState<string>('ALL');
@@ -106,6 +108,17 @@ export const OwnerDashboard: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* Every account needs a mobile number */}
+      {me && !me.phone && (
+        <button
+          type="button"
+          onClick={() => navigate('/settings')}
+          className="w-full text-left p-3 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-900"
+        >
+          <span className="font-bold">Add your mobile number.</span> Every account needs one.{' '}
+          <span className="font-bold underline">Add it now</span>
+        </button>
+      )}
       {/* Page Header with Workspace Quick Selector & Switcher */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-slate-200">
         <div>

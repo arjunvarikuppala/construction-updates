@@ -6,11 +6,11 @@ import { Invitation } from '../models/Invitation.js';
 import { PushSubscription } from '../models/PushSubscription.js';
 import { AuthenticatedRequest, isMD } from '../types/index.js';
 import { logAudit } from '../services/auditService.js';
-import { validatePasswordStrength } from '../utils/password.js';
 import { getCompanyInChargeIds, isInChargeInCompany } from '../services/tenantService.js';
 import { verifyUserProjectAccess } from '../middleware/auth.js';
 import { escapeRegex } from '../utils/validation.js';
 import { rupeesToPaise } from '../utils/currency.js';
+import { checkAccountPhone } from '../services/accountPhoneService.js';
 
 export async function listInChargeUsers(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
@@ -42,72 +42,6 @@ export async function listInChargeUsers(req: AuthenticatedRequest, res: Response
     res.json({ success: true, count: users.length, users });
   } catch (error: any) {
     res.status(500).json({ success: false, message: 'Failed to list in-charge users', error: error.message });
-  }
-}
-
-export async function createInChargeUser(req: AuthenticatedRequest, res: Response): Promise<void> {
-  try {
-    const { name, email, password, phone, salary, salaryFrequency } = req.body;
-
-    if (!name || !email || !password) {
-      res.status(400).json({ success: false, message: 'Name, email, and password are required' });
-      return;
-    }
-
-    const passwordError = validatePasswordStrength(password);
-    if (passwordError) {
-      res.status(400).json({ success: false, message: passwordError });
-      return;
-    }
-
-    const existing = await User.findOne({ email: email.toLowerCase() });
-    if (existing) {
-      res.status(409).json({ success: false, message: 'User with this email already exists' });
-      return;
-    }
-
-    // Parse salary: if user passed rupees e.g. 50000, convert to integer paise (5000000)
-    let salaryPaise = 0;
-    if (salary !== undefined && salary !== null && salary !== '') {
-      salaryPaise = rupeesToPaise(Number(salary) || 0);
-    }
-
-    const newUser = await User.create({
-      name: name.trim(),
-      email: email.toLowerCase().trim(),
-      password,
-      role: 'SITE_INCHARGE',
-      phone: phone?.trim(),
-      salary: salaryPaise,
-      salaryFrequency: salaryFrequency || 'MONTHLY',
-      assignedProjects: [],
-      createdByMD: req.user!.userId,
-      isActive: true,
-    });
-
-    await logAudit('USER_CREATED', req.user!.userId, 'USER', newUser._id, {
-      name: newUser.name,
-      email: newUser.email,
-      role: newUser.role,
-      salaryPaise,
-    });
-
-    res.status(201).json({
-      success: true,
-      message: 'Site In-Charge account created successfully',
-      user: {
-        id: newUser._id,
-        name: newUser.name,
-        email: newUser.email,
-        role: newUser.role,
-        phone: newUser.phone,
-        salary: newUser.salary,
-        salaryFrequency: newUser.salaryFrequency,
-        assignedProjects: newUser.assignedProjects,
-      },
-    });
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: 'Failed to create user', error: error.message });
   }
 }
 
@@ -171,7 +105,15 @@ export async function updateInChargeUser(req: AuthenticatedRequest, res: Respons
     }
 
     if (name) user.name = name.trim();
-    if (phone !== undefined) user.phone = phone ? phone.trim() : undefined;
+    // A mobile number can be changed but not removed (it's how the password is reset)
+    if (typeof phone === 'string' && phone.trim()) {
+      const phoneCheck = await checkAccountPhone(phone, String(user._id));
+      if (!phoneCheck.ok) {
+        res.status(phoneCheck.status).json({ success: false, message: phoneCheck.message });
+        return;
+      }
+      user.phone = phoneCheck.phone;
+    }
     if (isActive !== undefined) user.isActive = Boolean(isActive);
 
     if (salary !== undefined && salary !== null && salary !== '') {

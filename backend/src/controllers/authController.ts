@@ -7,6 +7,7 @@ import { Invitation } from '../models/Invitation.js';
 import { AuthenticatedRequest, AuthUserPayload, isMD } from '../types/index.js';
 import { logAudit } from '../services/auditService.js';
 import { validatePasswordStrength } from '../utils/password.js';
+import { checkAccountPhone } from '../services/accountPhoneService.js';
 
 import { getJwtSecret } from '../middleware/auth.js';
 import { AuditLog } from '../models/AuditLog.js';
@@ -69,12 +70,18 @@ export async function registerMD(req: AuthenticatedRequest, res: Response): Prom
       return;
     }
 
+    const phoneCheck = await checkAccountPhone(phone);
+    if (!phoneCheck.ok) {
+      res.status(phoneCheck.status).json({ success: false, message: phoneCheck.message });
+      return;
+    }
+
     const user = await User.create({
       name: name.trim(),
       email: email.toLowerCase().trim(),
       password,
       role: 'MD',
-      phone: phone?.trim(),
+      phone: phoneCheck.phone,
       isActive: true,
       assignedProjects: [],
     });
@@ -342,13 +349,19 @@ export async function acceptInvitation(req: AuthenticatedRequest, res: Response)
       return;
     }
 
+    const phoneCheck = await checkAccountPhone(phone);
+    if (!phoneCheck.ok) {
+      res.status(phoneCheck.status).json({ success: false, message: phoneCheck.message });
+      return;
+    }
+
     // Create Site In-Charge user
     const newUser = await User.create({
       name: invitation.name.trim(),
       email: invitation.email.toLowerCase().trim(),
       password,
       role: 'SITE_INCHARGE',
-      phone: phone?.trim(),
+      phone: phoneCheck.phone,
       isActive: true,
       createdByMD: invitation.invitedBy,
       assignedProjects: invitation.project ? [invitation.project] : [],

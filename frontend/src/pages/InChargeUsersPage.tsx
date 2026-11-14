@@ -31,19 +31,16 @@ import { SALARY_STATUS, addMonths, monthLabel, type SalaryEmployee, type SalaryS
 import { PaySalaryModal, SalaryHistoryModal } from '../components/salary/SalaryModals.js';
 import { InChargePaymentsModal } from '../components/salary/InChargePaymentsModal.js';
 import { downloadFromApi } from '../utils/download.js';
+import { EditMobileModal } from '../components/users/AccountAccessModals.js';
+import { formatMobile } from '../utils/phone.js';
 
 export const InChargeUsersPage: React.FC = () => {
   const queryClient = useQueryClient();
   const { success, error: toastError } = useToast();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalMode, setModalMode] = useState<'invite' | 'direct'>('invite');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
-  const [password, setPassword] = useState('');
-  const [salary, setSalary] = useState('');
-  const [salaryFrequency, setSalaryFrequency] = useState<'MONTHLY' | 'DAILY' | 'PER_PROJECT'>('MONTHLY');
   const [generatedInviteLink, setGeneratedInviteLink] = useState('');
   const [hasCopied, setHasCopied] = useState(false);
 
@@ -55,23 +52,6 @@ export const InChargeUsersPage: React.FC = () => {
   const { data, isLoading } = useQuery({
     queryKey: ['in-charge-users'],
     queryFn: () => api.get<{ count: number; users: User[] }>('/users/in-charge'),
-  });
-
-  // Direct creation mutation
-  const createMutation = useMutation({
-    mutationFn: async (userData: any) => api.post('/users/in-charge', userData),
-    onSuccess: () => {
-      success('In-charge account created successfully!');
-      setIsModalOpen(false);
-      setName('');
-      setEmail('');
-      setPhone('');
-      setPassword('');
-      setSalary('');
-      setSalaryFrequency('MONTHLY');
-      queryClient.invalidateQueries({ queryKey: ['in-charge-users'] });
-    },
-    onError: (err: any) => toastError(err.message || 'Failed to create user account'),
   });
 
   // Invitation link mutation
@@ -102,6 +82,7 @@ export const InChargeUsersPage: React.FC = () => {
 
   // Delete account (Google Play account-deletion policy)
   const [deleteUser, setDeleteUser] = useState<User | null>(null);
+  const [mobileFor, setMobileFor] = useState<User | null>(null);
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.delete<{ success: boolean; message: string }>(`/users/in-charge/${id}`),
     onSuccess: (r: any) => {
@@ -144,30 +125,11 @@ export const InChargeUsersPage: React.FC = () => {
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
-    if (modalMode === 'invite') {
-      if (!name.trim() || !email.trim()) {
-        toastError('Name and email are required for invitation');
-        return;
-      }
-      inviteMutation.mutate({ name: name.trim(), email: email.trim() });
-    } else {
-      if (!name.trim() || !email.trim() || !password) {
-        toastError('Please fill in required fields');
-        return;
-      }
-      if (password.length < 6) {
-        toastError('Password must be at least 6 characters');
-        return;
-      }
-      createMutation.mutate({
-        name: name.trim(),
-        email: email.trim(),
-        phone: phone.trim() || undefined,
-        password,
-        salary: salary ? Number(salary) : undefined,
-        salaryFrequency,
-      });
+    if (!name.trim() || !email.trim()) {
+      toastError('Name and email are required for invitation');
+      return;
     }
+    inviteMutation.mutate({ name: name.trim(), email: email.trim() });
   };
 
   const handleCopyLink = () => {
@@ -210,7 +172,7 @@ export const InChargeUsersPage: React.FC = () => {
           }}
           leftIcon={<UserPlus className="w-4 h-4" />}
         >
-          Invite or Add In-Charge
+          Invite In-Charge
         </Button>
       </div>
 
@@ -281,12 +243,22 @@ export const InChargeUsersPage: React.FC = () => {
                   <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                   <span className="truncate">{user.email}</span>
                 </div>
-                {user.phone && (
+                {user.phone ? (
                   <div className="flex items-center gap-2 text-slate-600 min-w-0">
                     <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    <span className="truncate">{user.phone}</span>
+                    <span className="truncate">{formatMobile(user.phone)}</span>
+                  </div>
+                ) : (
+                  <div className="flex items-start gap-2 text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">
+                    <Phone className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                    <span>No mobile number. Every account needs one: add it.</span>
                   </div>
                 )}
+                <div className="pt-1">
+                  <Button size="sm" variant="outline" className="text-xs w-full" onClick={() => setMobileFor(user)} leftIcon={<Phone className="w-3.5 h-3.5" />}>
+                    {user.phone ? 'Change mobile' : 'Add mobile'}
+                  </Button>
+                </div>
               </div>
 
               {/* MD-Only Salary Compensation View & Edit */}
@@ -410,37 +382,14 @@ export const InChargeUsersPage: React.FC = () => {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title="Authorize Site In-Charge Account"
-        description="Invite an engineer via secure link or specify explicit account credentials."
+        title="Invite a Site In-Charge"
+        description="In-charges join only by invitation link."
         size="md"
       >
         <div className="space-y-4">
-          <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2 [&>button]:flex-1 [&>button]:sm:flex-initial">
-            <button
-              type="button"
-              onClick={() => {
-                setModalMode('invite');
-                setGeneratedInviteLink('');
-              }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                modalMode === 'invite' ? 'bg-navy-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              Generate Invite Link (Recommended)
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setModalMode('direct');
-                setGeneratedInviteLink('');
-              }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                modalMode === 'direct' ? 'bg-navy-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              Direct Creation
-            </button>
-          </div>
+          <p className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-lg p-2.5">
+            Send them the link. They choose their own password and add their mobile number when they open it.
+          </p>
 
           <form onSubmit={handleCreate} className="space-y-3">
             <Input
@@ -460,68 +409,15 @@ export const InChargeUsersPage: React.FC = () => {
               required
             />
 
-            {modalMode === 'direct' ? (
-              <>
-                <Input
-                  label="Password (min. 6 characters)"
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
-
-                <Input
-                  label="Mobile Phone Number (Optional)"
-                  placeholder="+91 98765 43210"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                />
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-slate-100">
-                  <Input
-                    label="Salary (₹ Rupees)"
-                    type="number"
-                    placeholder="e.g. 50000"
-                    value={salary}
-                    onChange={(e) => setSalary(e.target.value)}
-                    helperText="MD view only"
-                  />
-
-                  <Select
-                    label="Salary Frequency"
-                    value={salaryFrequency}
-                    onChange={(e) => setSalaryFrequency(e.target.value as any)}
-                    options={[
-                      { value: 'MONTHLY', label: 'Monthly' },
-                      { value: 'DAILY', label: 'Daily' },
-                      { value: 'PER_PROJECT', label: 'Per Project' },
-                    ]}
-                  />
-                </div>
-
-                <Button
-                  type="submit"
-                  variant="primary"
-                  className="w-full font-bold mt-2"
-                  isLoading={createMutation.isPending}
-                >
-                  Create Account
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button
-                  type="submit"
-                  variant="amber"
-                  className="w-full font-bold mt-2"
-                  isLoading={inviteMutation.isPending}
-                  leftIcon={<Send className="w-4 h-4" />}
-                >
-                  Generate Invitation Link
-                </Button>
-              </>
-            )}
+            <Button
+              type="submit"
+              variant="amber"
+              className="w-full font-bold mt-2"
+              isLoading={inviteMutation.isPending}
+              leftIcon={<Send className="w-4 h-4" />}
+            >
+              Generate Invitation Link
+            </Button>
           </form>
 
           {generatedInviteLink && (
@@ -657,6 +553,8 @@ export const InChargeUsersPage: React.FC = () => {
           </div>
         )}
       </Modal>
+
+      {mobileFor && <EditMobileModal user={mobileFor} onClose={() => setMobileFor(null)} />}
     </div>
   );
 };

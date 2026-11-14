@@ -11,7 +11,7 @@
     "seed": "tsx src/scripts/seed.ts",
     "verify:full": "tsx src/scripts/verify-full-system.ts",
     "verify:weather": "tsx src/scripts/verify-weather-integration.ts",
-    "test": "node --import tsx --test --test-concurrency=1 tests/security.test.ts tests/reportWorkflow.test.ts tests/chatDocuments.test.ts tests/gst.test.ts tests/payments.test.ts tests/razorpayx.test.ts tests/push.test.ts tests/chatAdvanced.test.ts tests/chatHistory.test.ts tests/accountDeletion.test.ts tests/reportReminders.test.ts tests/salary.test.ts tests/registers.test.ts tests/projectSearch.test.ts tests/materialStock.test.ts",
+    "test": "node --import tsx --test --test-concurrency=1 tests/security.test.ts tests/reportWorkflow.test.ts tests/chatDocuments.test.ts tests/gst.test.ts tests/payments.test.ts tests/razorpayx.test.ts tests/push.test.ts tests/chatAdvanced.test.ts tests/chatHistory.test.ts tests/accountDeletion.test.ts tests/reportReminders.test.ts tests/salary.test.ts tests/registers.test.ts tests/projectSearch.test.ts tests/materialStock.test.ts tests/accountPhone.test.ts",
     "test:weather": "tsx src/scripts/verify-weather-integration.ts",
     "migrate:tenant": "tsx src/scripts/migrate-tenant-fields.ts"
   },

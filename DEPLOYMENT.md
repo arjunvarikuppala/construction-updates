@@ -172,6 +172,10 @@ Wait until both show as active with HTTPS. This usually takes minutes, but can t
 
 Without RazorpayX keys, the MD still records payments by hand. Everything else works.
 
+### Mobile numbers
+
+Every account needs a mobile number, and each number can be on one account only. New accounts must give one. For older accounts, the MD adds it in **In-Charge Accounts → Add mobile**, and their own under **Company & GST → Your mobile number**.
+
 ---
 
 ## 8. Handover checklist

@@ -44,7 +44,7 @@ export const AssignInChargeModal: React.FC<AssignInChargeModalProps> = ({
   const queryClient = useQueryClient();
   const { success, error: toastError } = useToast();
 
-  const [activeTab, setActiveTab] = useState<'search' | 'invite' | 'create' | 'list'>('search');
+  const [activeTab, setActiveTab] = useState<'search' | 'invite' | 'list'>('search');
   const [searchQuery, setSearchQuery] = useState('');
   const [revokeTargetId, setRevokeTargetId] = useState<string | null>(null);
 
@@ -55,10 +55,6 @@ export const AssignInChargeModal: React.FC<AssignInChargeModalProps> = ({
   const [hasCopied, setHasCopied] = useState(false);
 
   // New user form state
-  const [newName, setNewName] = useState('');
-  const [newEmail, setNewEmail] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [newPhone, setNewPhone] = useState('');
 
   // 1. Fetch current assignments for this project
   const { data: assignmentsData, refetch: refetchAssignments } = useQuery({
@@ -100,26 +96,6 @@ export const AssignInChargeModal: React.FC<AssignInChargeModalProps> = ({
     },
     onError: (err: any) => {
       toastError(err.message || 'Failed to generate invitation');
-    },
-  });
-
-  // Create new user and assign mutation
-  const createAndAssignMutation = useMutation({
-    mutationFn: (newUser: any) =>
-      api.post(`/projects/${projectId}/assignments`, { newUser }),
-    onSuccess: () => {
-      success('New Site In-Charge created and assigned successfully!');
-      setNewName('');
-      setNewEmail('');
-      setNewPassword('');
-      setNewPhone('');
-      refetchAssignments();
-      onUpdated();
-      setActiveTab('list');
-      queryClient.invalidateQueries({ queryKey: ['project', projectId] });
-    },
-    onError: (err: any) => {
-      toastError(err.message || 'Failed to create and assign in-charge');
     },
   });
 
@@ -165,25 +141,6 @@ export const AssignInChargeModal: React.FC<AssignInChargeModalProps> = ({
     }
   };
 
-  const handleCreateNewUser = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newName.trim() || !newEmail.trim() || !newPassword) {
-      toastError('Name, email, and password are required.');
-      return;
-    }
-    if (newPassword.length < 6) {
-      toastError('Password must be at least 6 characters.');
-      return;
-    }
-
-    createAndAssignMutation.mutate({
-      name: newName.trim(),
-      email: newEmail.trim(),
-      password: newPassword,
-      phone: newPhone.trim(),
-    });
-  };
-
   return (
     <Modal
       isOpen={isOpen}
@@ -218,20 +175,7 @@ export const AssignInChargeModal: React.FC<AssignInChargeModalProps> = ({
             }`}
           >
             <LinkIcon className="w-3.5 h-3.5 text-amber-600" />
-            <span>Invite via Link (Recommended)</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('create')}
-            className={`py-2 px-3 text-xs font-bold border-b-2 whitespace-nowrap transition-colors flex items-center gap-1.5 ${
-              activeTab === 'create'
-                ? 'border-navy-900 text-navy-950'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <UserPlus className="w-3.5 h-3.5" />
-            <span>Direct Create</span>
+            <span>Invite via Link</span>
           </button>
 
           <button
@@ -379,61 +323,6 @@ export const AssignInChargeModal: React.FC<AssignInChargeModalProps> = ({
         )}
 
         {/* TAB 3: Direct Account Creation */}
-        {activeTab === 'create' && (
-          <form onSubmit={handleCreateNewUser} className="space-y-3">
-            <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-900 leading-relaxed">
-              <strong>Explicit Password Provisioning:</strong> Specify a secure, custom password for the engineer. Never use default or known shared passwords.
-            </div>
-
-            <Input
-              label="Full Name"
-              placeholder="e.g. Anand Varma"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              leftIcon={<UserIcon className="w-4 h-4 text-slate-400" />}
-              required
-            />
-
-            <Input
-              label="Email Address"
-              type="email"
-              placeholder="e.g. anand.site@company.com"
-              value={newEmail}
-              onChange={(e) => setNewEmail(e.target.value)}
-              leftIcon={<Mail className="w-4 h-4 text-slate-400" />}
-              required
-            />
-
-            <Input
-              label="Password (min. 6 characters)"
-              type="password"
-              placeholder="••••••••"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              leftIcon={<Lock className="w-4 h-4 text-slate-400" />}
-              required
-            />
-
-            <Input
-              label="Phone Number (Optional)"
-              placeholder="+91 98765 12345"
-              value={newPhone}
-              onChange={(e) => setNewPhone(e.target.value)}
-              leftIcon={<Phone className="w-4 h-4 text-slate-400" />}
-            />
-
-            <Button
-              type="submit"
-              variant="primary"
-              className="w-full font-bold mt-2"
-              isLoading={createAndAssignMutation.isPending}
-            >
-              Create Account & Assign to Project
-            </Button>
-          </form>
-        )}
-
-        {/* TAB 4: Active & Past Assignments List */}
         {activeTab === 'list' && (
           <div className="space-y-3">
             {assignments.length === 0 ? (

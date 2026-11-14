@@ -7,7 +7,6 @@ import { DailyReport } from '../models/DailyReport.js';
 import { ProjectAssignment } from '../models/ProjectAssignment.js';
 import { AuthenticatedRequest, isMD, isSiteInCharge } from '../types/index.js';
 import { logAudit } from '../services/auditService.js';
-import { validatePasswordStrength } from '../utils/password.js';
 import { isInChargeInCompany } from '../services/tenantService.js';
 import { rupeesToPaise } from '../utils/currency.js';
 import { verifyUserProjectAccess } from '../middleware/auth.js';
@@ -562,44 +561,9 @@ export async function assignProjectInCharge(req: AuthenticatedRequest, res: Resp
     let targetUserId: string;
 
     if (newUser) {
-      // Secure workflow to provision new in-charge
-      const { name, email, password, phone } = newUser;
-      if (!name || !email || !password) {
-        res.status(400).json({ success: false, message: 'Name, email, and explicit password are required for new account' });
-        return;
-      }
-      const passwordError = validatePasswordStrength(password);
-      if (passwordError) {
-        res.status(400).json({ success: false, message: passwordError });
-        return;
-      }
-
-      const existingUser = await User.findOne({ email: email.toLowerCase() });
-      if (existingUser) {
-        if (!isSiteInCharge(existingUser.role)) {
-          res.status(409).json({ success: false, message: 'A user with this email already exists and is not a Site In-Charge' });
-          return;
-        }
-        targetUserId = existingUser._id.toString();
-      } else {
-        const createdUser = await User.create({
-          name: name.trim(),
-          email: email.toLowerCase().trim(),
-          password,
-          role: 'SITE_INCHARGE',
-          phone: phone?.trim(),
-          isActive: true,
-          createdByMD: req.user!.userId,
-          assignedProjects: [project._id],
-        });
-        targetUserId = createdUser._id.toString();
-
-        await logAudit('USER_CREATED', req.user!.userId, 'USER', createdUser._id, {
-          name: createdUser.name,
-          email: createdUser.email,
-          role: createdUser.role,
-        });
-      }
+      // In-charges join only by invitation, so they choose their own password
+      res.status(400).json({ success: false, message: 'New in-charges join by invitation. Send them an invitation link instead.' });
+      return;
     } else if (siteInChargeId) {
       const inChargeUser = mongoose.Types.ObjectId.isValid(String(siteInChargeId))
         ? await User.findById(siteInChargeId)

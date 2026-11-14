@@ -1,6 +1,7 @@
 import mongoose, { Schema, Document } from 'mongoose';
 import bcrypt from 'bcryptjs';
 import { UserRole } from '../types/index.js';
+import { normalizeIndianMobile } from '../utils/phone.js';
 
 export interface IUser extends Document {
   name: string;
@@ -52,6 +53,7 @@ const UserSchema = new Schema<IUser>(
     phone: {
       type: String,
       trim: true,
+      index: true,
     },
     salary: {
       type: Number,
@@ -83,6 +85,14 @@ const UserSchema = new Schema<IUser>(
     timestamps: true,
   }
 );
+
+// Store mobile numbers one way (+91XXXXXXXXXX), so each number is on one account only
+UserSchema.pre('save', function (next) {
+  if (this.isModified('phone') && this.phone) {
+    this.phone = normalizeIndianMobile(this.phone) || this.phone;
+  }
+  next();
+});
 
 // Hash password before saving
 UserSchema.pre('save', async function (next) {

@@ -10,6 +10,7 @@ import {
   acceptInvitation,
   requestAccountDeletion,
 } from '../controllers/authController.js';
+import { updateMyPhone } from '../controllers/accountPhoneController.js';
 import { authenticate } from '../middleware/auth.js';
 
 const router = Router();
@@ -46,6 +47,8 @@ router.get('/invitation/:token', registrationLimiter, getInvitationByToken);
 router.post('/accept-invitation', registrationLimiter, acceptInvitation);
 router.post('/login', loginLimiter, login);
 router.get('/me', authenticate, getMe);
+router.put('/me/phone', authenticate, updateMyPhone);
+
 // Google Play policy: users can ask for their account and data to be deleted
 router.post('/deletion-request', authenticate, registrationLimiter, requestAccountDeletion);
 

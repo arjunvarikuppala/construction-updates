@@ -18,6 +18,7 @@ import { useAuth } from '../context/AuthContext.js';
 import { useToast } from '../context/ToastContext.js';
 import { Button } from '../components/common/Button.js';
 import { Input } from '../components/common/Input.js';
+import { normalizeIndianMobile, MOBILE_ERROR, MOBILE_HELP } from '../utils/phone.js';
 import { api } from '../api/client.js';
 
 export const RegisterPage: React.FC = () => {
@@ -96,6 +97,11 @@ export const RegisterPage: React.FC = () => {
       return;
     }
 
+    if (!normalizeIndianMobile(phone)) {
+      setErrorMessage(MOBILE_ERROR);
+      return;
+    }
+
     setIsSubmitting(true);
     setErrorMessage('');
 
@@ -109,7 +115,7 @@ export const RegisterPage: React.FC = () => {
         name: fullName.trim(),
         email: email.toLowerCase().trim(),
         password,
-        phone: phone.trim() || undefined,
+        phone: normalizeIndianMobile(phone),
       });
 
       if (res.success && res.token && res.user) {
@@ -145,6 +151,11 @@ export const RegisterPage: React.FC = () => {
       return;
     }
 
+    if (!normalizeIndianMobile(phone)) {
+      setErrorMessage(MOBILE_ERROR);
+      return;
+    }
+
     setIsSubmitting(true);
     setErrorMessage('');
 
@@ -157,7 +168,7 @@ export const RegisterPage: React.FC = () => {
       }>('/auth/accept-invitation', {
         token: inviteToken,
         password,
-        phone: phone.trim() || undefined,
+        phone: normalizeIndianMobile(phone),
       });
 
       if (res.success && res.token && res.user) {
@@ -308,7 +319,10 @@ export const RegisterPage: React.FC = () => {
                 />
 
                 <Input
-                  label="Phone Number (Optional)"
+                  label="Mobile number"
+                  helperText={MOBILE_HELP}
+                  required
+                  inputMode="numeric"
                   type="tel"
                   placeholder="+91 98765 43210"
                   leftIcon={<Phone className="w-4 h-4" />}
@@ -432,7 +446,10 @@ export const RegisterPage: React.FC = () => {
               />
 
               <Input
-                label="Phone Number (Optional)"
+                label="Mobile number"
+                  helperText={MOBILE_HELP}
+                  required
+                  inputMode="numeric"
                 type="tel"
                 placeholder="+91 98765 43210"
                 leftIcon={<Phone className="w-4 h-4" />}
